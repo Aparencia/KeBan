@@ -1,0 +1,168 @@
+/**
+ * SM-2 间隔重复算法模块
+ *
+ * Rating 枚举值 0-3 对应 Again/Hard/Good/Easy
+ * FlashcardReview.rating 字段使用 1-4，调用方需做 +1 映射
+ */
+
+// ---------------------------------------------------------------------------
+// 类型定义
+// ---------------------------------------------------------------------------
+
+/** 用户评分枚举：Again(0) / Hard(1) / Good(2) / Easy(3) */
+export enum Rating {
+  Again = 0,
+  Hard = 1,
+  Good = 2,
+  Easy = 3,
+}
+
+/** SM-2 算法计算结果 */
+export interface SM2Result {
+  easeFactor: number;
+  interval: number;
+  repetitions: number;
+  dueDate: Date;
+  lapses: number;
+}
+
+/** SM-2 算法所需的卡片状态输入（Flashcard 兼容子集） */
+export interface SM2CardInput {
+  easeFactor: number;
+  interval: number;
+  repetitions: number;
+  lapses?: number;
+}
+
+// ---------------------------------------------------------------------------
+// 工具函数
+// ---------------------------------------------------------------------------
+
+/** 在当前日期基础上增加指定天数，返回新 Date */
+function addDays(date: Date, days: number): Date {
+  const result = new Date(date);
+  result.setDate(result.getDate() + days);
+  return result;
+}
+
+/** 将 Rating 枚举映射为 SM-2 原始 quality 分数 (1-5) */
+function toQuality(rating: Rating): number {
+  // Again→1, Hard→3, Good→4, Easy→5
+  const map: Record<Rating, number> = {
+    [Rating.Again]: 1,
+    [Rating.Hard]: 3,
+    [Rating.Good]: 4,
+    [Rating.Easy]: 5,
+  };
+  return map[rating];
+}
+
+// ---------------------------------------------------------------------------
+// 核心算法
+// ---------------------------------------------------------------------------
+
+/**
+ * SM-2 核心计算函数
+ *
+ * @param card  当前卡片的 SM-2 状态字段
+ * @param rating 用户评分（Rating 枚举，0-3）
+ * @returns 更新后的 SM-2 状态
+ */
+export function sm2(card: SM2CardInput, rating: Rating): SM2Result {
+  const q = toQuality(rating);
+  const lapses = card.lapses ?? 0;
+
+  // 更新难度因子（EF）
+  let newEF =
+    card.easeFactor + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02));
+  newEF = Math.max(newEF, 1.3);
+
+  let newInterval: number;
+  let newReps: number;
+  let newLapses = lapses;
+
+  if (rating === Rating.Again) {
+    // 答错：重置连续正确次数，间隔归 1 天，累计失误
+    newReps = 0;
+    newInterval = 1;
+    newLapses += 1;
+  } else if (card.repetitions === 0) {
+    // 第一次正确回答
+    newReps = 1;
+    newInterval = 1;
+  } else if (card.repetitions === 1) {
+    // 第二次正确回答
+    newReps = 2;
+    newInterval = 6;
+  } else {
+    // 后续正确回答：间隔 = 上次间隔 × EF
+    newReps = card.repetitions + 1;
+    newInterval = Math.round(card.interval * newEF);
+  }
+
+  // Hard 惩罚：间隔缩短 40%
+  if (rating === Rating.Hard) {
+    newInterval = Math.max(1, Math.round(newInterval * 0.6));
+  }
+
+  // Easy 奖励：间隔延长 30%
+  if (rating === Rating.Easy) {
+    newInterval = Math.round(newInterval * 1.3);
+  }
+
+  // 上限 5 年（1825 天）
+  newInterval = Math.min(newInterval, 1825);
+
+  return {
+    easeFactor: newEF,
+    interval: newInterval,
+    repetitions: newReps,
+    dueDate: addDays(new Date(), newInterval),
+    lapses: newLapses,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// 工厂函数
+// ---------------------------------------------------------------------------
+
+/** 创建新卡片的初始 SM-2 状态 */
+export function createNewCardState(): SM2Result {
+  return {
+    easeFactor: 2.5,
+    interval: 0,
+    repetitions: 0,
+    dueDate: new Date(),
+    lapses: 0,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// 辅助函数
+// ---------------------------------------------------------------------------
+
+/** 四个评分对应间隔天数的预览结果（用于 UI 按钮显示） */
+export interface IntervalPreview {
+  again: number;
+  hard: number;
+  good: number;
+  easy: number;
+}
+
+/**
+ * 计算四个评分各自对应的间隔天数（不修改任何状态）
+ *
+ * @param card 当前卡片的 SM-2 状态字段
+ * @returns 四个评分对应的间隔天数
+ */
+export function calculateIntervals(card: SM2CardInput): IntervalPreview {
+  const ratings = [Rating.Again, Rating.Hard, Rating.Good, Rating.Easy] as const;
+  const results = ratings.map((r) => sm2(card, r));
+
+  return {
+    again: results[0].interval,
+    hard: results[1].interval,
+    good: results[2].interval,
+    easy: results[3].interval,
+  };
+}

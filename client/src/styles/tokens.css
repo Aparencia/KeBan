@@ -1,0 +1,110 @@
+/* ============================================
+   课伴 KeBan - Design Tokens
+   前缀: --kb-
+   ============================================ */
+
+/* ---- 品牌色（全局，与主题无关） ---- */
+:root {
+  /* 品牌主色 - 蓝色系 */
+  --kb-brand-50: #EFF6FF;
+  --kb-brand-100: #DBEAFE;
+  --kb-brand-200: #BFDBFE;
+  --kb-brand-300: #93C5FD;
+  --kb-brand-400: #60A5FA;
+  --kb-brand-500: #3B82F6;
+  --kb-brand-600: #2563EB;
+  --kb-brand-700: #1D4ED8;
+  --kb-brand-800: #1E40AF;
+  --kb-brand-900: #1E3A8A;
+
+  /* 语义色 */
+  --kb-color-success: #10B981;
+  --kb-color-warning: #F59E0B;
+  --kb-color-error: #F43F5E;
+  --kb-color-info: #3B82F6;
+
+  /* 字体系统 */
+  --kb-font-sans: 'Inter', 'PingFang SC', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
+  --kb-font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --kb-font-timer: 'JetBrains Mono', monospace;
+
+  /* 字号体系 */
+  --kb-text-d1: 2.25rem;    /* 36px - 超大标题 */
+  --kb-text-d2: 1.875rem;  /* 30px - 大标题 */
+  --kb-text-h1: 1.5rem;    /* 24px - H1 */
+  --kb-text-h2: 1.25rem;   /* 20px - H2 */
+  --kb-text-h3: 1rem;      /* 16px - H3 */
+  --kb-text-b1: 1rem;      /* 16px - 正文大 */
+  --kb-text-b2: 0.875rem;  /* 14px - 正文小 */
+  --kb-text-b3: 0.75rem;   /* 12px - 辅助文字 */
+  --kb-text-c1: 0.75rem;   /* 12px - 注释 */
+  --kb-text-c2: 0.625rem;  /* 10px - 极小 */
+  --kb-text-timer: clamp(4rem, 8vw, 6rem); /* 64px~96px - 计时器数字 */
+
+  /* 间距系统 (4px 基准) */
+  --kb-space-xs: 0.25rem;   /* 4px */
+  --kb-space-sm: 0.5rem;    /* 8px */
+  --kb-space-md: 1rem;      /* 16px */
+  --kb-space-lg: 1.5rem;    /* 24px */
+  --kb-space-xl: 2rem;      /* 32px */
+  --kb-space-2xl: 3rem;     /* 48px */
+
+  /* 圆角系统（偏大，圆润风格） */
+  --kb-radius-sm: 0.5rem;      /* 8px */
+  --kb-radius-md: 0.75rem;     /* 12px */
+  --kb-radius-lg: 1rem;        /* 16px */
+  --kb-radius-xl: 1.5rem;      /* 24px */
+  --kb-radius-full: 9999px;    /* 圆形/胶囊 */
+
+  /* 动效系统 */
+  --kb-duration-fast: 150ms;
+  --kb-duration-normal: 250ms;
+  --kb-duration-slow: 400ms;
+  --kb-ease-default: cubic-bezier(0.4, 0, 0.2, 1);
+  --kb-ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --kb-ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --kb-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* 图标系统 (Lucide Icons, 线性风格) */
+  --kb-icon-default: currentColor;
+  --kb-icon-size-xs: 14px;
+  --kb-icon-size-sm: 16px;
+  --kb-icon-size-md: 20px;
+  --kb-icon-size-lg: 24px;
+  --kb-icon-size-xl: 32px;
+  --kb-icon-stroke-width: 1.5;
+}
+
+/* ---- 亮色主题 ---- */
+[data-theme="light"] {
+  --kb-bg-primary: #FFFFFF;
+  --kb-bg-secondary: #F8FAFC;
+  --kb-bg-tertiary: #F1F5F9;
+  --kb-bg-elevated: #FFFFFF;
+  --kb-text-primary: #0F172A;
+  --kb-text-secondary: #475569;
+  --kb-text-tertiary: #94A3B8;
+  --kb-text-inverse: #FFFFFF;
+  --kb-border-default: #E2E8F0;
+  --kb-border-strong: #CBD5E1;
+  --kb-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --kb-shadow-md: 0 4px 6px -1px rgba(15, 23, 42, 0.07), 0 2px 4px -2px rgba(15, 23, 42, 0.05);
+  --kb-shadow-lg: 0 10px 15px -3px rgba(15, 23, 42, 0.08), 0 4px 6px -4px rgba(15, 23, 42, 0.04);
+}
+
+/* ---- 暗色主题 ---- */
+[data-theme="dark"] {
+  --kb-bg-primary: #0F172A;
+  --kb-bg-secondary: #1E293B;
+  --kb-bg-tertiary: #334155;
+  --kb-bg-elevated: #1E293B;
+  --kb-text-primary: #F8FAFC;
+  --kb-text-secondary: #CBD5E1;
+  --kb-text-tertiary: #64748B;
+  --kb-text-inverse: #0F172A;
+  --kb-border-default: #334155;
+  --kb-border-strong: #475569;
+  --kb-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --kb-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -2px rgba(0, 0, 0, 0.2);
+  --kb-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -4px rgba(0, 0, 0, 0.2);
+}

@@ -1,0 +1,57 @@
+import { pomodoroSettingsStore, pomodoroSessionStore } from '@/lib/storage';
+import type { PomodoroSession, PomodoroSettings } from '@/types/models';
+import { playBeep } from '@/utils/sound';
+
+/**
+ * 从 IndexedDB 加载番茄钟设置
+ */
+export async function loadSettings(): Promise<PomodoroSettings | null> {
+  const existing = await pomodoroSettingsStore.getById(1);
+  if (existing) return existing;
+
+  const all = await pomodoroSettingsStore.getAll();
+  return all.length > 0 ? all[0] : null;
+}
+
+/**
+ * 保存番茄钟设置到 IndexedDB（固定 id=1，存在则更新，不存在则创建）
+ */
+export async function saveSettings(settings: PomodoroSettings): Promise<void> {
+  const existing = await pomodoroSettingsStore.getById(1);
+  if (existing) {
+    await pomodoroSettingsStore.update(1, settings);
+  } else {
+    await pomodoroSettingsStore.create({ ...settings, id: 1 } as PomodoroSettings);
+  }
+}
+
+/**
+ * 记录一次番茄钟会话
+ */
+export async function recordSession(
+  session: Omit<PomodoroSession, 'id'>,
+): Promise<void> {
+  await pomodoroSessionStore.create(session as PomodoroSession);
+}
+
+/**
+ * 播放阶段完成提示音（复用全局声音工具）
+ */
+export function playCompletionSound(): void {
+  playBeep(800, 200);
+  setTimeout(() => playBeep(1000, 200), 220);
+}
+
+/**
+ * 发送浏览器通知（Web Notification API）
+ */
+export async function sendNotification(title: string, body: string): Promise<void> {
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'default') {
+    await Notification.requestPermission();
+  }
+  if (Notification.permission === 'granted') {
+    new Notification(title, { body, icon: '/favicon.svg' });
+  }
+}
+
