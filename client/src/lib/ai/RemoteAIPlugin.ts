@@ -1,12 +1,13 @@
 import type { AIPlugin, SummarizeResult, FlashcardResult, EvaluateResult, DurationResult,
   SummarizeOptions, FlashcardOptions, EvaluateOptions, DurationOptions, DurationHistoryData } from './types';
 import { AIError } from './types';
-import { apiClient } from '../http/apiClient';
-
-const AI_GATEWAY_URL = import.meta.env.VITE_AI_GATEWAY_URL || 'http://localhost:8000';
+import { aiClient } from '../http/apiClient';
 
 /**
  * 远程 AI 插件 — 通过 HTTPS 调用 ai-gateway 服务
+ *
+ * 请求字段做 camelCase → snake_case 转换以匹配后端 Pydantic model；
+ * 响应字段从 snake_case 映射回前端 camelCase 类型。
  */
 export class RemoteAIPlugin implements AIPlugin {
   private timeout: number;
@@ -15,49 +16,143 @@ export class RemoteAIPlugin implements AIPlugin {
     this.timeout = timeout;
   }
 
+  // ── POST /api/v1/ai/summarize ──────────────────────────────
   async summarizeNote(noteContent: string, options?: SummarizeOptions): Promise<SummarizeResult> {
     try {
-      const result = await apiClient.post<SummarizeResult>(
-        `${AI_GATEWAY_URL}/api/v1/ai/summarize`,
-        { content: noteContent, ...options },
+      // 构建后端 SummarizeRequest: { text, options: { max_length, style, language } }
+      const backendOptions: Record<string, unknown> = {};
+      if (options?.maxLength != null) backendOptions.max_length = options.maxLength;
+      if (options?.style != null) backendOptions.style = options.style;
+      if (options?.language != null) backendOptions.language = options.language;
+
+      const result = await aiClient.post<{
+        summary: string; model: string; tokens_used: number; latency_ms: number;
+      }>(
+        '/api/v1/ai/summarize',
+        { text: noteContent, options: backendOptions },
       );
-      return { ...result, generatedAt: new Date(result.generatedAt || Date.now()) };
+
+      return {
+        summary: result.summary,
+        keyPoints: [],
+        generatedAt: new Date(),
+        model: result.model,
+        tokensUsed: result.tokens_used,
+        latencyMs: result.latency_ms,
+      };
     } catch (error: any) {
       throw this.handleError(error);
     }
   }
 
+  // ── POST /api/v1/ai/generate-cards ─────────────────────────
   async generateFlashcards(noteContent: string, options?: FlashcardOptions): Promise<FlashcardResult> {
     try {
-      const result = await apiClient.post<FlashcardResult>(
-        `${AI_GATEWAY_URL}/api/v1/ai/generate-cards`,
-        { content: noteContent, ...options },
+      // 构建后端 CardGenRequest: { note, options: { max_cards, difficulty, card_type } }
+      const backendOptions: Record<string, unknown> = {};
+      if (options?.count != null) backendOptions.max_cards = options.count;
+      if (options?.difficulty != null) backendOptions.difficulty = options.difficulty;
+      if (options?.cardType != null) backendOptions.card_type = options.cardType;
+
+      const result = await aiClient.post<{
+        cards: Array<{ front: string; back: string; type: string; confidence: number }>;
+        total_extracted: number; model: string; tokens_used: number;
+      }>(
+        '/api/v1/ai/generate-cards',
+        { note: noteContent, options: backendOptions },
       );
-      return { ...result, generatedAt: new Date(result.generatedAt || Date.now()) };
+
+      return {
+        cards: result.cards.map(c => ({
+          front: c.front,
+          back: c.back,
+          type: c.type,
+          confidence: c.confidence,
+        })),
+        totalExtracted: result.total_extracted,
+        generatedAt: new Date(),
+        model: result.model,
+        tokensUsed: result.tokens_used,
+      };
     } catch (error: any) {
       throw this.handleError(error);
     }
   }
 
-  async evaluateExplanation(concept: string, explanation: string, options?: EvaluateOptions): Promise<EvaluateResult> {
+  // ── POST /api/v1/ai/evaluate-explanation ───────────────────
+  async evaluateExplanation(concept: string, explanation: string, _options?: EvaluateOptions): Promise<EvaluateResult> {
     try {
-      const result = await apiClient.post<EvaluateResult>(
-        `${AI_GATEWAY_URL}/api/v1/ai/evaluate-explanation`,
-        { concept, explanation, ...options },
+      // 构建后端 EvaluateRequest: { concept, explanation }
+      const result = await aiClient.post<{
+        overall_score: number;
+        dimensions: Array<{ dimension: string; score: number; feedback: string }>;
+        strengths: string[];
+        improvements: string[];
+        encouragement: string;
+        model: string;
+        tokens_used: number;
+        latency_ms: number;
+      }>(
+        '/api/v1/ai/evaluate-explanation',
+        { concept, explanation },
       );
-      return { ...result, generatedAt: new Date(result.generatedAt || Date.now()) };
+
+      return {
+        overallScore: result.overall_score,
+        dimensions: result.dimensions.map(d => ({
+          name: d.dimension,
+          score: d.score,
+          feedback: d.feedback,
+        })),
+        suggestions: result.improvements,
+        strengths: result.strengths,
+        weaknesses: [],
+        encouragement: result.encouragement,
+        generatedAt: new Date(),
+        model: result.model,
+        tokensUsed: result.tokens_used,
+        latencyMs: result.latency_ms,
+      };
     } catch (error: any) {
       throw this.handleError(error);
     }
   }
 
-  async recommendDuration(historyData: DurationHistoryData, options?: DurationOptions): Promise<DurationResult> {
+  // ── POST /api/v1/ai/recommend-duration ─────────────────────
+  async recommendDuration(historyData: DurationHistoryData, _options?: DurationOptions): Promise<DurationResult> {
     try {
-      const result = await apiClient.post<DurationResult>(
-        `${AI_GATEWAY_URL}/api/v1/ai/recommend-duration`,
-        { history: historyData, ...options },
+      // 构建后端 RecommendRequest: { history: [{ duration_minutes, completed, subject, timestamp }] }
+      const history = (historyData.sessions || []).map(s => ({
+        duration_minutes: s.duration,
+        completed: s.completed,
+        subject: s.subject || '',
+        timestamp: s.date,
+      }));
+
+      const result = await aiClient.post<{
+        recommended_minutes: number;
+        break_minutes: number;
+        reason: string;
+        source: string;
+        model: string;
+        tokens_used: number;
+        latency_ms: number;
+      }>(
+        '/api/v1/ai/recommend-duration',
+        { history },
       );
-      return { ...result, isLocalFallback: false };
+
+      return {
+        recommendedDuration: result.recommended_minutes,
+        breakMinutes: result.break_minutes,
+        reasoning: result.reason,
+        confidence: 'medium',
+        source: result.source,
+        isLocalFallback: result.source === 'local_rule',
+        model: result.model,
+        tokensUsed: result.tokens_used,
+        latencyMs: result.latency_ms,
+      };
     } catch (error: any) {
       throw this.handleError(error);
     }

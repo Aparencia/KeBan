@@ -1,0 +1,156 @@
+/**
+ * 加密管理器 - 单例模式
+ * 管理 AES-GCM 密钥的生命周期：
+ * - 使用设备级随机密钥（无需用户输入 PIN）
+ * - salt 持久化到 localStorage，密钥仅在内存中
+ * - 应用重启后需重新初始化
+ */
+
+import { deriveKey, encrypt, decrypt, generateSalt } from './encryption';
+
+const SALT_STORAGE_KEY = 'keban_crypto_salt';
+// 设备级随机密钥材料，每个用户设备唯一，存 localStorage 仅作密钥派生输入
+const DEVICE_KEY_STORAGE_KEY = 'keban_device_key';
+
+export class CryptoManager {
+  private key: CryptoKey | null = null;
+  private static instance: CryptoManager | null = null;
+
+  private constructor() {}
+
+  /**
+   * 获取单例实例
+   */
+  static getInstance(): CryptoManager {
+    if (!CryptoManager.instance) {
+      CryptoManager.instance = new CryptoManager();
+    }
+    return CryptoManager.instance;
+  }
+
+  /**
+   * 初始化密钥（用户登录后调用）
+   * 使用设备级随机密钥 + 持久化 salt 派生 AES-256 密钥
+   * @param userId 当前用户 ID（用于隔离不同用户的密钥材料）
+   */
+  async init(userId: string): Promise<void> {
+    try {
+      // 获取或生成 salt
+      let salt = this.loadSalt();
+      if (!salt) {
+        salt = generateSalt();
+        this.saveSalt(salt);
+      }
+
+      // 获取或生成设备级随机密钥材料
+      const deviceKey = this.getOrCreateDeviceKey(userId);
+
+      // 派生 AES-GCM 密钥（PBKDF2，100,000 次迭代）
+      this.key = await deriveKey(deviceKey, salt);
+      console.log('[CryptoManager] Key initialized for user:', userId);
+    } catch (error) {
+      console.error('[CryptoManager] Failed to initialize key:', error);
+      this.key = null;
+    }
+  }
+
+  /**
+   * 检查加密管理器是否已就绪
+   */
+  isReady(): boolean {
+    return this.key !== null;
+  }
+
+  /**
+   * 加密敏感字段
+   * 返回 JSON 字符串 { ciphertext, iv }，可直接存入数据库字段
+   * 若未初始化则直接返回原文（优雅降级）
+   */
+  async encryptField(value: string): Promise<string> {
+    if (!this.key) {
+      // 未初始化时优雅降级：不加密
+      return value;
+    }
+    const { ciphertext, iv } = await encrypt(value, this.key);
+    return JSON.stringify({ ciphertext, iv });
+  }
+
+  /**
+   * 解密敏感字段
+   * 接收 JSON 字符串 { ciphertext, iv }，返回明文
+   * 若未初始化则直接返回原值（优雅降级，兼容未加密的旧数据）
+   */
+  async decryptField(encrypted: string): Promise<string> {
+    if (!this.key) {
+      // 未初始化时优雅降级：不解密
+      return encrypted;
+    }
+
+    try {
+      const parsed = JSON.parse(encrypted);
+      // 检查是否为加密格式（含 ciphertext 和 iv 字段）
+      if (parsed && typeof parsed.ciphertext === 'string' && typeof parsed.iv === 'string') {
+        return await decrypt(parsed.ciphertext, parsed.iv, this.key);
+      }
+      // 非加密格式（旧数据），直接返回
+      return encrypted;
+    } catch {
+      // JSON 解析失败说明是未加密的旧数据，直接返回
+      return encrypted;
+    }
+  }
+
+  /**
+   * 清除密钥（用户登出时调用）
+   */
+  clear(): void {
+    this.key = null;
+    console.log('[CryptoManager] Key cleared');
+  }
+
+  // ─── 私有辅助方法 ────────────────────────────────────────────────────────
+
+  /**
+   * 从 localStorage 加载 salt
+   */
+  private loadSalt(): Uint8Array | null {
+    try {
+      const stored = localStorage.getItem(SALT_STORAGE_KEY);
+      if (!stored) return null;
+      const bytes = new Uint8Array(JSON.parse(stored));
+      return bytes.length > 0 ? bytes : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * 将 salt 保存到 localStorage
+   */
+  private saveSalt(salt: Uint8Array): void {
+    localStorage.setItem(SALT_STORAGE_KEY, JSON.stringify(Array.from(salt)));
+  }
+
+  /**
+   * 获取或创建设备级随机密钥材料
+   * 每个 userId 隔离存储，确保不同用户的密钥材料独立
+   */
+  private getOrCreateDeviceKey(userId: string): string {
+    const storageKey = `${DEVICE_KEY_STORAGE_KEY}_${userId}`;
+    let deviceKey = localStorage.getItem(storageKey);
+    if (!deviceKey) {
+      // 生成 32 字节随机密钥材料，转 hex 字符串存储
+      const bytes = crypto.getRandomValues(new Uint8Array(32));
+      deviceKey = Array.from(bytes)
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('');
+      localStorage.setItem(storageKey, deviceKey);
+    }
+    return deviceKey;
+  }
+}
+
+/**
+ * 导出单例实例
+ */
+export const cryptoManager = CryptoManager.getInstance();

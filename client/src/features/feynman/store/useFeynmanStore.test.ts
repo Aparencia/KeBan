@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { FeynmanNote, FeynmanSummary, FeynmanWeakPoint } from '@/types/models';
 
+// Mock uuid to return predictable values
+vi.mock('@/lib/utils/uuid', () => ({
+  generateId: () => 'mock-uuid-1',
+}));
+
 // Mock storage to isolate pure business logic
 vi.mock('@/lib/storage', () => ({
   feynmanNoteStore: {

@@ -3,9 +3,13 @@
 
 从 Authorization 头提取 Bearer token 并验证。
 验证通过后将 user_id 注入 request.state。
+
+支持 Supabase Auth 签发的 RS256 JWT，使用 RSA 公钥（PEM 格式）验证。
 """
 
+import base64
 import logging
+import warnings
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -17,6 +21,61 @@ logger = logging.getLogger(__name__)
 
 # 不需要认证的路径白名单
 PUBLIC_PATHS = {"/health", "/docs", "/openapi.json", "/redoc"}
+
+# 启动时检查密钥配置
+if not APP_CONFIG["jwt_secret"]:
+    warnings.warn(
+        "SUPABASE_JWT_SECRET 未配置，JWT 验证将使用占位密钥，仅适用于本地开发。"
+        "生产环境请务必从 Supabase Dashboard > Settings > API > JWT Settings 获取公钥。",
+        RuntimeWarning,
+        stacklevel=2,
+    )
+
+
+def _normalize_pem_key(raw: str) -> str:
+    """
+    将密钥规范化为 PEM 格式。
+
+    支持三种输入形式：
+    1. 标准 PEM 字符串（以 -----BEGIN 开头）
+    2. Base64 编码的 DER 公钥
+    3. 其他（直接返回，交由 jose 处理）
+    """
+    if not raw:
+        return raw
+
+    stripped = raw.strip()
+
+    # 已经是 PEM 格式
+    if stripped.startswith("-----BEGIN"):
+        return stripped
+
+    # 尝试 Base64 解码为 DER，再包装为 PEM
+    try:
+        der_bytes = base64.b64decode(stripped)
+        # 简单校验：DER 编码的 RSA 公钥通常以 0x30 (SEQUENCE) 开头
+        if der_bytes and der_bytes[0] == 0x30:
+            b64 = base64.b64encode(der_bytes).decode("ascii")
+            lines = [b64[i : i + 64] for i in range(0, len(b64), 64)]
+            return (
+                "-----BEGIN PUBLIC KEY-----\n"
+                + "\n".join(lines)
+                + "\n-----END PUBLIC KEY-----"
+            )
+    except Exception:
+        pass
+
+    # 兜底：原样返回
+    return stripped
+
+
+def _get_public_key() -> str:
+    """获取用于 JWT 验证的 RSA 公钥（PEM 格式）"""
+    raw = APP_CONFIG["jwt_secret"]
+    if not raw:
+        # 未配置时返回占位符，jose 会在验证时报错（优雅降级）
+        return "not-configured"
+    return _normalize_pem_key(raw)
 
 
 class JWTAuthMiddleware(BaseHTTPMiddleware):
@@ -45,10 +104,10 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
 
     async def _verify_token(self, request: Request) -> str:
         """
-        从请求头提取并验证 JWT token
+        从请求头提取并验证 JWT token（RS256 / Supabase JWT）
 
         Returns:
-            str: 验证通过的用户 ID
+            str: 验证通过的用户 ID（sub claim）
 
         Raises:
             AuthenticationError: token 缺失或验证失败
@@ -64,14 +123,26 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
 
         token = parts[1]
 
-        # 使用 python-jose 解码并验证 JWT token
+        # 使用 python-jose 解码并验证 JWT token（RS256）
         from jose import jwt, JWTError, ExpiredSignatureError
+
+        public_key = _get_public_key()
+
+        # 构建解码参数
+        decode_kwargs: dict = {
+            "algorithms": [APP_CONFIG["jwt_algorithm"]],
+        }
+        # 当配置了 supabase_url 时，验证 iss claim
+        supabase_url = APP_CONFIG.get("supabase_url", "")
+        if supabase_url:
+            # Supabase 的 iss 格式为 "https://<project-ref>.supabase.co/auth/v1"
+            decode_kwargs["issuer"] = f"{supabase_url.rstrip('/')}/auth/v1"
 
         try:
             payload = jwt.decode(
                 token,
-                APP_CONFIG["jwt_secret"],
-                algorithms=[APP_CONFIG["jwt_algorithm"]],
+                public_key,
+                **decode_kwargs,
             )
         except ExpiredSignatureError as e:
             raise AuthenticationError("token 已过期，请重新登录") from e

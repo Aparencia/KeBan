@@ -362,11 +362,11 @@ export default function NoteEditPage() {
                   <p className="text-b3 font-medium text-text-tertiary uppercase tracking-wide mb-1">摘要</p>
                   <p className="text-b2 text-text-secondary leading-relaxed">{aiData.summary}</p>
                 </div>
-                {aiData.keyPoints.length > 0 && (
+                {aiData.keyPoints?.length > 0 && (
                   <div>
                     <p className="text-b3 font-medium text-text-tertiary uppercase tracking-wide mb-1">关键要点</p>
                     <ul className="flex flex-col gap-1.5">
-                      {aiData.keyPoints.map((kp, i) => (
+                      {aiData.keyPoints?.map((kp, i) => (
                         <li key={i} className="flex items-start gap-2 text-b2 text-text-secondary">
                           <span className="mt-1 w-1.5 h-1.5 rounded-kb-full bg-brand-500 flex-shrink-0" />
                           {kp}

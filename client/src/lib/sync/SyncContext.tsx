@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback, typ
 import { syncEngine, type SyncResult, type SyncEvent } from './SyncEngine';
 import { useAuth } from '../auth/AuthContext';
 import { networkManager } from './NetworkManager';
+import { modeManager } from '../mode/ModeManager';
 
 interface SyncState {
   isSyncing: boolean;
@@ -36,11 +37,9 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     return unsubNetwork;
   }, []);
 
+  // 订阅同步引擎事件
   useEffect(() => {
     if (!isAuthenticated) return;
-
-    // Start auto-sync when authenticated
-    syncEngine.startAutoSync(60000);
 
     const unsubscribe = syncEngine.subscribe((event: SyncEvent) => {
       switch (event.type) {
@@ -59,6 +58,27 @@ export function SyncProvider({ children }: { children: ReactNode }) {
         case 'sync-error':
           setState(prev => ({ ...prev, isSyncing: false }));
           break;
+      }
+    });
+
+    return unsubscribe;
+  }, [isAuthenticated]);
+
+  // 模式感知：根据当前模式决定是否启动自动同步
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const modeConfig = modeManager.getConfig();
+    if (modeConfig.syncEnabled) {
+      syncEngine.startAutoSync(60000);
+    }
+
+    const unsubscribe = modeManager.subscribe((_mode, config) => {
+      if (config.syncEnabled) {
+        syncEngine.sync();      // 模式切换后立即触发一次
+        syncEngine.startAutoSync(60000); // 重启定时同步
+      } else {
+        syncEngine.stopAutoSync();
       }
     });
 

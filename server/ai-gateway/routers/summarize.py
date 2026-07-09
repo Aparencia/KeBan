@@ -10,27 +10,13 @@ import logging
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, Request
 
-from config import MODEL_ROUTING, AI_PROVIDERS
-from providers.qwen_provider import QwenProvider
-from providers.fallback_provider import FallbackProvider
+from config import call_with_fallback
 from chains.summarize_chain import SummarizeChain
-from errors import ProviderUnavailableError
+
+from fastapi import HTTPException
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/ai", tags=["笔记摘要"])
-
-# 初始化 Provider（延迟初始化/单例模式）
-_qwen_provider: QwenProvider | None = None
-_fallback_provider = FallbackProvider()
-
-
-def _get_qwen_provider() -> QwenProvider:
-    """获取 QwenProvider 单例"""
-    global _qwen_provider
-    if _qwen_provider is None:
-        cfg = AI_PROVIDERS["qwen"]
-        _qwen_provider = QwenProvider(base_url=cfg["base_url"], api_key=cfg["api_key"])
-    return _qwen_provider
 
 
 # ============================================================
@@ -77,26 +63,25 @@ async def summarize(request: Request, body: SummarizeRequest) -> SummarizeRespon
     user_id = getattr(request.state, "user_id", "anonymous")
     logger.info("摘要请求: user=%s, text_length=%d", user_id, len(body.text))
 
-    # 获取模型路由配置
-    provider_key, model_slot = MODEL_ROUTING["summarize"]
-    model_name = AI_PROVIDERS[provider_key]["models"][model_slot]
-
-    try:
-        provider = _get_qwen_provider()
+    # 通过 fallback 链自动选择 Provider 并在失败时重试/降级
+    async def _run_chain(provider, model_name):
         chain = SummarizeChain(provider=provider, model=model_name)
-        result = await chain.run(
+        return await chain.run(
             text=body.text,
             options=body.options.model_dump(),
         )
-    except ProviderUnavailableError as e:
-        # 降级到 FallbackProvider
-        logger.warning("Qwen 不可用，使用降级响应: %s", e.message)
-        result = await _fallback_provider.generate(
-            prompt=body.text,
-            system_prompt="你是一个专业的学习笔记摘要助手。",
+
+    try:
+        result, used_provider = await call_with_fallback(
+            request.app, "summarize", _run_chain
         )
+    except RuntimeError as e:
+        logger.error("摘要服务全部不可用: %s", str(e))
+        raise HTTPException(status_code=503, detail="所有 AI 服务暂时不可用，请稍后重试")
 
     latency_ms = result.get("latency_ms", int((time.monotonic() - start_time) * 1000))
+
+    logger.info("摘要完成: provider=%s, model=%s", used_provider, result.get("model", "unknown"))
 
     return SummarizeResponse(
         summary=result["content"],

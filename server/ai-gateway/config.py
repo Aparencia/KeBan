@@ -5,10 +5,15 @@
 Provider: 通义千问(Qwen) / 深度求索(DeepSeek) / 智谱(GLM)
 """
 
+import logging
 import os
+from typing import Any, Callable, Awaitable
+
 from dotenv import load_dotenv
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 # ============================================================
 # Provider 配置
@@ -52,6 +57,98 @@ MODEL_ROUTING: dict[str, tuple[str, str]] = {
 }
 
 # ============================================================
+# 模型路由辅助函数
+# ============================================================
+
+
+def get_provider_for_feature(app, feature: str):
+    """
+    根据 MODEL_ROUTING 表获取对应 Provider 实例和模型名称。
+
+    如果目标 Provider 未初始化（API Key 缺失），自动回退到 fallback。
+
+    Args:
+        app: FastAPI 应用实例（通过 app.state.providers 获取 Provider）
+        feature: 功能标识，对应 MODEL_ROUTING 的 key
+
+    Returns:
+        tuple: (provider_instance, model_name)
+    """
+    provider_key, model_slot = MODEL_ROUTING.get(feature, ("fallback", "free"))
+    provider = app.state.providers.get(provider_key)
+    if not provider:
+        provider = app.state.providers.get("fallback")
+    model_name = AI_PROVIDERS.get(provider_key, {}).get("models", {}).get(model_slot, "fallback")
+    return provider, model_name
+
+
+# ============================================================
+# Provider Fallback 链：主 Provider 失败时依次尝试的备选
+# ============================================================
+
+PROVIDER_FALLBACK_CHAIN: dict[str, list[str]] = {
+    "summarize":      ["qwen", "glm", "fallback"],       # Qwen 为主，GLM 备选
+    "generate_cards": ["qwen", "glm", "fallback"],       # Qwen 为主，GLM 备选
+    "evaluate":       ["deepseek", "glm", "fallback"],   # DeepSeek 为主，GLM 备选
+    "recommend":      ["deepseek", "glm", "fallback"],   # DeepSeek 为主，GLM 备选
+}
+
+
+async def call_with_fallback(
+    app,
+    feature: str,
+    fn: Callable[..., Awaitable[dict[str, Any]]],
+) -> tuple[dict[str, Any], str]:
+    """
+    使用 Provider fallback 链执行 AI 调用。
+
+    依次尝试 PROVIDER_FALLBACK_CHAIN 中为该 feature 配置的 Provider 列表，
+    每个 Provider 最多重试 2 次（由 @with_retry_and_timeout 装饰器控制）。
+    所有 Provider 均失败时抛出 RuntimeError(503)。
+
+    Args:
+        app:     FastAPI 应用实例（通过 app.state.providers 获取 Provider）
+        feature: 功能标识，对应 PROVIDER_FALLBACK_CHAIN 的 key
+        fn:      异步可调用对象，签名为 async fn(provider, model_name) -> dict
+
+    Returns:
+        tuple: (result_dict, provider_key)
+
+    Raises:
+        RuntimeError: 所有 Provider 均不可用（status_code=503）
+    """
+    chain = PROVIDER_FALLBACK_CHAIN.get(feature, ["fallback"])
+
+    for provider_key in chain:
+        provider = app.state.providers.get(provider_key)
+        if not provider:
+            logger.warning("Provider [%s] 未初始化，跳过", provider_key)
+            continue
+
+        # 从 MODEL_ROUTING 解析模型名；fallback / 未知 feature 时使用 "fallback"
+        routing = MODEL_ROUTING.get(feature)
+        if routing and routing[0] == provider_key:
+            model_slot = routing[1]
+            model_name = AI_PROVIDERS.get(provider_key, {}).get("models", {}).get(model_slot, "fallback")
+        elif provider_key == "glm":
+            model_name = AI_PROVIDERS.get("glm", {}).get("models", {}).get("free", "glm-4-flash")
+        else:
+            model_name = "fallback"
+
+        try:
+            result = await fn(provider, model_name)
+            return result, provider_key
+        except Exception as e:
+            logger.warning(
+                "Provider [%s] failed for feature=%s: %s, trying next...",
+                provider_key, feature, str(e),
+            )
+
+    # 所有 Provider 都失败
+    raise RuntimeError("所有 AI 服务暂时不可用")
+
+
+# ============================================================
 # 超时配置（单位：秒）
 # ============================================================
 
@@ -82,8 +179,16 @@ APP_CONFIG = {
     "title": "课伴 AI 网关",
     "version": "0.1.0-alpha",
     "description": "课伴(KeBan) AI 增强服务网关 — MVP-2 Alpha",
-    "cors_origins": ["*"],  # 开发阶段允许所有来源
-    "jwt_secret": os.getenv("JWT_SECRET", "dev-secret-change-me"),
-    "jwt_algorithm": "HS256",
+    "cors_origins": [
+        origin.strip()
+        for origin in os.getenv(
+            "CORS_ORIGINS",
+            "http://localhost:5173,http://localhost:1420,tauri://localhost",
+        ).split(",")
+        if origin.strip()
+    ],
+    "jwt_secret": os.getenv("SUPABASE_JWT_SECRET", ""),
+    "jwt_algorithm": "RS256",
+    "supabase_url": os.getenv("SUPABASE_URL", ""),
     "redis_url": os.getenv("REDIS_URL", "redis://localhost:6379/0"),
 }

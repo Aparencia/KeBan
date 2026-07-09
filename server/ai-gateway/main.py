@@ -9,12 +9,15 @@ MVP-2 Alpha 阶段的 AI 增强服务网关。
 - 全局异常处理器
 """
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+
+from starlette.responses import Response
 
 from config import APP_CONFIG
 from errors import AIError
@@ -61,6 +64,7 @@ async def lifespan(app: FastAPI):
     from config import AI_PROVIDERS
     from providers.qwen_provider import QwenProvider
     from providers.deepseek_provider import DeepSeekProvider
+    from providers.glm_provider import GLMProvider
     from providers.fallback_provider import FallbackProvider
 
     # 将 Provider 实例存储到 app.state，供路由层使用
@@ -86,6 +90,16 @@ async def lifespan(app: FastAPI):
     else:
         logger.warning("Provider [deepseek]: API Key 未配置，跳过初始化")
 
+    glm_cfg = AI_PROVIDERS.get("glm", {})
+    if glm_cfg.get("api_key"):
+        app.state.providers["glm"] = GLMProvider(
+            base_url=glm_cfg["base_url"],
+            api_key=glm_cfg["api_key"],
+        )
+        logger.info("Provider [glm]: 已初始化")
+    else:
+        logger.warning("Provider [glm]: API Key 未配置，跳过初始化")
+    
     # FallbackProvider 始终可用
     app.state.providers["fallback"] = FallbackProvider()
     logger.info("Provider [fallback]: 已初始化（降级兜底）")
@@ -120,6 +134,16 @@ app = FastAPI(
 # ============================================================
 # 中间件注册（注意：中间件执行顺序与注册顺序相反）
 # ============================================================
+
+# 安全头中间件（注册在最前，因此在 CORS 之后执行，为每个响应添加安全头）
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response: Response = await call_next(request)
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
 
 # CORS 中间件（最外层）
 app.add_middleware(
@@ -168,16 +192,17 @@ async def health_check():
     """
     健康检查端点
 
-    返回服务状态、各 Provider 可用性、Redis 连接状态。
+    对每个 Provider 发送 ping 测试，记录响应时间和可用性。
     """
-    from config import AI_PROVIDERS
-
     providers_status = {}
-    for name, cfg in AI_PROVIDERS.items():
-        providers_status[name] = {
-            "configured": bool(cfg["api_key"]),
-            "base_url": cfg["base_url"],
-        }
+
+    for name, provider in app.state.providers.items():
+        try:
+            # 实际 ping 测试（带 5 秒超时）
+            result = await asyncio.wait_for(provider.health_check(), timeout=5.0)
+            providers_status[name] = result
+        except asyncio.TimeoutError:
+            providers_status[name] = {"status": "unhealthy", "latency_ms": 5000, "error": "health check timeout"}
 
     # Redis 连接状态检查
     redis_status = "not_connected"
@@ -189,12 +214,24 @@ async def health_check():
     except Exception as e:
         redis_status = f"error: {str(e)}"
 
+    # 整体健康状态
+    healthy_providers = sum(1 for p in providers_status.values() if p.get("status") == "healthy")
+    overall = "healthy" if healthy_providers > 0 else "degraded"
+
     return {
-        "status": "healthy",
+        "status": overall,
         "version": APP_CONFIG["version"],
         "providers": providers_status,
         "redis": redis_status,
+        "healthy_count": healthy_providers,
+        "total_count": len(providers_status),
     }
+
+
+@app.get("/health/live", tags=["系统"])
+async def liveness():
+    """K8s liveness probe — 仅检查进程存活"""
+    return {"status": "alive"}
 
 
 # ============================================================

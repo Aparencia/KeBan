@@ -11,30 +11,40 @@ export interface AIPlugin {
 // === Summarize ===
 export interface SummarizeOptions {
   maxLength?: number;
+  style?: 'bullet' | 'paragraph' | 'outline';
   language?: string;
 }
 
 export interface SummarizeResult {
   summary: string;
-  keyPoints: string[];
+  keyPoints?: string[];
   generatedAt: Date;
+  model?: string;
+  tokensUsed?: number;
+  latencyMs?: number;
 }
 
 // === Flashcards ===
 export interface FlashcardOptions {
   count?: number;
   difficulty?: 'easy' | 'medium' | 'hard';
+  cardType?: 'question_answer' | 'fill_blank' | 'true_false' | 'mixed';
 }
 
 export interface Flashcard {
   front: string;
   back: string;
   hint?: string;
+  type?: string;
+  confidence?: number;
 }
 
 export interface FlashcardResult {
   cards: Flashcard[];
+  totalExtracted?: number;
   generatedAt: Date;
+  model?: string;
+  tokensUsed?: number;
 }
 
 // === Evaluate (Feynman) ===
@@ -44,7 +54,7 @@ export interface EvaluateOptions {
 
 export interface EvaluateDimension {
   name: string;
-  score: number;    // 0-100
+  score: number;    // 0-10
   feedback: string;
 }
 
@@ -54,7 +64,11 @@ export interface EvaluateResult {
   suggestions: string[];
   strengths: string[];
   weaknesses: string[];
+  encouragement?: string;
   generatedAt: Date;
+  model?: string;
+  tokensUsed?: number;
+  latencyMs?: number;
 }
 
 // === Duration Recommendation ===
@@ -76,9 +90,14 @@ export interface DurationOptions {
 
 export interface DurationResult {
   recommendedDuration: number; // minutes
+  breakMinutes?: number;
   reasoning: string;
   confidence: 'high' | 'medium' | 'low';
+  source?: 'ai' | 'local_rule' | string;
   isLocalFallback: boolean;
+  model?: string;
+  tokensUsed?: number;
+  latencyMs?: number;
 }
 
 // === Error types ===

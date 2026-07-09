@@ -5,8 +5,66 @@
 统一返回格式：{"content": str, "tokens_used": int, "model": str, "latency_ms": int}
 """
 
+import asyncio
+import logging
 from abc import ABC, abstractmethod
+from functools import wraps
 from typing import Any
+
+from config import TIMEOUT_CONFIG
+
+logger = logging.getLogger(__name__)
+
+
+def with_retry_and_timeout(max_retries: int = 2):
+    """装饰器：为 Provider 方法添加超时控制和重试逻辑
+
+    使用 TIMEOUT_CONFIG 中按 feature 配置的超时时间。
+    失败时最多重试 max_retries 次，每次重试间隔指数退避。
+
+    用法：在 Provider 子类的 generate 方法上添加 @with_retry_and_timeout()
+    若调用方传入了 _feature 关键字参数，则使用该 feature 对应的超时时间；
+    否则取 TIMEOUT_CONFIG 中的最大值作为安全上限。
+    """
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(self, *args, **kwargs):
+            # 从 kwargs 推断 feature 名称（由 chain 层传入）
+            feature = kwargs.get('_feature', '')
+            if feature and feature in TIMEOUT_CONFIG:
+                timeout = TIMEOUT_CONFIG[feature]
+            else:
+                # 未指定 feature 时取配置最大值，确保不会误杀慢请求
+                timeout = max(TIMEOUT_CONFIG.values()) if TIMEOUT_CONFIG else 30
+
+            last_error: Exception | None = None
+            for attempt in range(max_retries + 1):
+                try:
+                    result = await asyncio.wait_for(
+                        func(self, *args, **kwargs),
+                        timeout=timeout
+                    )
+                    return result
+                except asyncio.TimeoutError as e:
+                    last_error = e
+                    logger.warning(
+                        "Provider %s timeout (attempt %d/%d, feature=%s, timeout=%ds)",
+                        self.__class__.__name__, attempt + 1, max_retries + 1,
+                        feature or "unknown", timeout
+                    )
+                except Exception as e:
+                    last_error = e
+                    logger.warning(
+                        "Provider %s error (attempt %d/%d): %s",
+                        self.__class__.__name__, attempt + 1, max_retries + 1, str(e)
+                    )
+
+                if attempt < max_retries:
+                    await asyncio.sleep(2 ** attempt)  # 指数退避: 1s, 2s
+
+            raise last_error  # type: ignore[misc]
+        return wrapper
+    return decorator
 
 
 class AIProvider(ABC):
@@ -48,6 +106,19 @@ class AIProvider(ABC):
         """
         ...
 
-    async def health_check(self) -> bool:
-        """检查 Provider 是否可用，子类可覆盖"""
-        return True
+    async def health_check(self) -> dict:
+        """
+        检查 Provider 实际可用性
+
+        发送一个最小请求（如 "ping"）并测量响应时间。
+        返回: {"status": "healthy"|"unhealthy", "latency_ms": float, "error": str|None}
+        """
+        import time
+        start = time.monotonic()
+        try:
+            await self.generate("ping", max_tokens=5)
+            latency = (time.monotonic() - start) * 1000
+            return {"status": "healthy", "latency_ms": round(latency, 1), "error": None}
+        except Exception as e:
+            latency = (time.monotonic() - start) * 1000
+            return {"status": "unhealthy", "latency_ms": round(latency, 1), "error": str(e)}

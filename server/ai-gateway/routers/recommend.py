@@ -10,29 +10,12 @@ import logging
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, Request
 
-from config import MODEL_ROUTING, AI_PROVIDERS
-from providers.deepseek_provider import DeepSeekProvider
+from config import call_with_fallback
 from providers.fallback_provider import FallbackProvider
 from chains.recommend_chain import RecommendChain
-from errors import ProviderUnavailableError
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/ai", tags=["番茄钟推荐"])
-
-# 初始化 Provider
-_deepseek_provider: DeepSeekProvider | None = None
-_fallback_provider = FallbackProvider()
-
-
-def _get_deepseek_provider() -> DeepSeekProvider:
-    """获取 DeepSeekProvider 单例"""
-    global _deepseek_provider
-    if _deepseek_provider is None:
-        cfg = AI_PROVIDERS["deepseek"]
-        _deepseek_provider = DeepSeekProvider(
-            base_url=cfg["base_url"], api_key=cfg["api_key"]
-        )
-    return _deepseek_provider
 
 
 # ============================================================
@@ -94,31 +77,34 @@ async def recommend_duration(
         user_id, len(body.history),
     )
 
-    # 获取模型路由配置
-    provider_key, model_slot = MODEL_ROUTING["recommend"]
-    model_name = AI_PROVIDERS[provider_key]["models"][model_slot]
-
     # 将历史记录转为 dict 列表供 chain 使用
     history_dicts = [h.model_dump() for h in body.history]
 
-    try:
-        provider = _get_deepseek_provider()
+    # 通过 fallback 链自动选择 Provider 并在失败时重试/降级
+    async def _run_chain(provider, model_name):
         chain = RecommendChain(provider=provider, model=model_name)
-        result = await chain.run(history=history_dicts)
+        return await chain.run(history=history_dicts)
+
+    try:
+        result, used_provider = await call_with_fallback(
+            request.app, "recommend", _run_chain
+        )
+
+        logger.info("番茄钟推荐完成: provider=%s", used_provider)
 
         return DurationConfig(
             recommended_minutes=result.get("recommended_minutes", 25),
             break_minutes=result.get("break_minutes", 5),
             reason=result.get("reason", "基于您的专注历史分析"),
             source=result.get("source", "ai"),
-            model=result.get("model", model_name),
+            model=result.get("model", "unknown"),
             tokens_used=result.get("tokens_used", 0),
             latency_ms=result.get("latency_ms", 0),
         )
 
-    except Exception as e:
-        # 降级：使用本地规则引擎（RecommendChain 内部也会降级，这里是双重保障）
-        logger.warning("番茄钟推荐失败，使用本地规则引擎: %s", str(e))
+    except RuntimeError as e:
+        # 所有 Provider 均不可用，降级为本地规则引擎
+        logger.warning("番茄钟推荐服务全部不可用，使用本地规则引擎: %s", str(e))
         fallback_result = FallbackProvider.recommend_duration_fallback(history_dicts)
         return DurationConfig(
             recommended_minutes=fallback_result["recommended_minutes"],

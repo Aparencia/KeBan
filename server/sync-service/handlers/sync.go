@@ -1,30 +1,20 @@
 package handlers
 
 import (
+	"context"
+	"encoding/json"
 	"net/http"
 	"strconv"
-	"sync"
 	"time"
 
+	"keban/sync-service/cache"
+	"keban/sync-service/models"
+
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
-// ---------- Domain types ----------
-
-// Operation represents a single client or server operation log entry.
-type Operation struct {
-	ID          string      `json:"id"`
-	DeviceID    string      `json:"deviceId"`
-	EntityType  string      `json:"entityType"`
-	EntityID    string      `json:"entityId"`
-	Operation   string      `json:"operation"` // create | update | delete
-	Version     int64       `json:"version"`
-	Patch       string      `json:"patch,omitempty"`
-	Payload     interface{} `json:"payload,omitempty"`
-	Data        interface{} `json:"data,omitempty"`
-	CreatedAt   string      `json:"createdAt"`
-	ServerSeqNo int64       `json:"serverSeqNo"` // server-assigned monotonic sequence
-}
+// ---------- Domain types (JSON request/response only) ----------
 
 // ConflictInfo is returned to the client when a version conflict is detected.
 type ConflictInfo struct {
@@ -34,34 +24,44 @@ type ConflictInfo struct {
 	ServerData    interface{} `json:"serverData"`
 }
 
-// ---------- In-memory store ----------
+// ---------- helpers ----------
 
-// Store holds all server-side sync state.
-// MVP: everything lives in memory; restart loses history.
-type Store struct {
-	mu sync.RWMutex
-
-	// entityVersions maps "entityType:entityId" -> latest known version on server
-	entityVersions map[string]int64
-
-	// entityData maps "entityType:entityId" -> latest payload/data
-	entityData map[string]interface{}
-
-	// operations is an append-only log, ordered by ServerSeqNo
-	operations []Operation
-
-	// globalSeqNo is the monotonically increasing server sequence counter
-	globalSeqNo int64
+// toJSON serialises v to a JSON string. Returns "" when v is nil.
+func toJSON(v interface{}) string {
+	if v == nil {
+		return ""
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		return ""
+	}
+	return string(b)
 }
 
-var store = &Store{
-	entityVersions: make(map[string]int64),
-	entityData:     make(map[string]interface{}),
-	operations:     make([]Operation, 0, 1024),
+// fromJSON deserialises a JSON string back to interface{}.
+// Returns nil when the string is empty.
+func fromJSON(s string) interface{} {
+	if s == "" {
+		return nil
+	}
+	var v interface{}
+	if err := json.Unmarshal([]byte(s), &v); err != nil {
+		return s // fall back to raw string
+	}
+	return v
 }
 
-func entityKey(entityType, entityID string) string {
-	return entityType + ":" + entityID
+// nextSeqNo atomically increments and returns the new GlobalSeqNo inside tx.
+func nextSeqNo(tx *gorm.DB) (int64, error) {
+	var g models.GlobalSeqNo
+	if err := tx.Set("gorm:query_option", "FOR UPDATE").First(&g).Error; err != nil {
+		return 0, err
+	}
+	g.SeqNo++
+	if err := tx.Save(&g).Error; err != nil {
+		return 0, err
+	}
+	return g.SeqNo, nil
 }
 
 // ---------- Push handler ----------
@@ -81,8 +81,8 @@ type pushRequest struct {
 }
 
 // Push accepts a batch of client operations and applies them server-side.
-// - client version >= server version → accept
-// - client version <  server version → conflict
+//   - client version >= server version → accept
+//   - client version <  server version → conflict
 func Push(c *gin.Context) {
 	var req pushRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -90,47 +90,118 @@ func Push(c *gin.Context) {
 		return
 	}
 
-	store.mu.Lock()
-	defer store.mu.Unlock()
-
 	accepted := make([]string, 0)
 	conflicts := make([]ConflictInfo, 0)
-	var pushErrors []string
+	pushErrors := make([]string, 0)
+	var latestSeqNo int64 // track highest seqNo assigned in this push batch
 
 	for _, op := range req.Operations {
-		key := entityKey(op.EntityType, op.EntityID)
-		serverVersion, exists := store.entityVersions[key]
+		// Look up current server version for this entity.
+		var ev models.EntityVersion
+		result := models.DB.Where("entity_type = ? AND entity_id = ?", op.EntityType, op.EntityID).First(&ev)
 
-		if exists && op.Version < serverVersion {
-			// Conflict: client is behind server
+		if result.RowsAffected == 0 && result.Error != nil && result.Error != gorm.ErrRecordNotFound {
+			pushErrors = append(pushErrors, "db error: "+result.Error.Error())
+			continue
+		}
+		entityExists := result.RowsAffected > 0
+
+		if entityExists && op.Version < ev.Version {
+			// Conflict: client is behind server.
 			conflicts = append(conflicts, ConflictInfo{
 				EntityType:    op.EntityType,
 				EntityID:      op.EntityID,
-				ServerVersion: serverVersion,
-				ServerData:    store.entityData[key],
+				ServerVersion: ev.Version,
+				ServerData:    fromJSON(ev.Data),
 			})
 			continue
 		}
 
-		// Accept: update server state
-		store.globalSeqNo++
-		store.entityVersions[key] = op.Version
-		store.entityData[key] = op.Payload
+		// Accept: run inside a transaction for atomicity.
+		var opSeqNo int64
+		txErr := models.DB.Transaction(func(tx *gorm.DB) error {
+			seqNo, err := nextSeqNo(tx)
+			if err != nil {
+				return err
+			}
+			opSeqNo = seqNo
 
-		storedOp := Operation{
-			ID:          op.ID,
-			DeviceID:    req.DeviceID,
-			EntityType:  op.EntityType,
-			EntityID:    op.EntityID,
-			Operation:   op.Operation,
-			Version:     op.Version,
-			Patch:       op.Patch,
-			Payload:     op.Payload,
-			CreatedAt:   op.CreatedAt,
-			ServerSeqNo: store.globalSeqNo,
+			payloadJSON := toJSON(op.Payload)
+
+			// Upsert EntityVersion.
+			if entityExists {
+				if err := tx.Model(&ev).Updates(map[string]interface{}{
+					"version": op.Version,
+					"data":    payloadJSON,
+				}).Error; err != nil {
+					return err
+				}
+			} else {
+				newEV := models.EntityVersion{
+					EntityType: op.EntityType,
+					EntityID:   op.EntityID,
+					Version:    op.Version,
+					Data:       payloadJSON,
+				}
+				if err := tx.Create(&newEV).Error; err != nil {
+					return err
+				}
+			}
+
+			// Append Operation log.
+			dbOp := models.Operation{
+				ServerSeqNo: seqNo,
+				DeviceID:    req.DeviceID,
+				EntityType:  op.EntityType,
+				EntityID:    op.EntityID,
+				Operation:   op.Operation,
+				Version:     op.Version,
+				Patch:       op.Patch,
+				Payload:     payloadJSON,
+				CreatedAt:   op.CreatedAt,
+			}
+			return tx.Create(&dbOp).Error
+		})
+
+		if txErr != nil {
+			pushErrors = append(pushErrors, "tx error: "+txErr.Error())
+			continue
 		}
-		store.operations = append(store.operations, storedOp)
 		accepted = append(accepted, op.ID)
+		if opSeqNo > latestSeqNo {
+			latestSeqNo = opSeqNo
+		}
+	}
+
+	// Update Redis cache after successful push.
+	userID := c.GetString("user_id")
+	ctx := context.Background()
+	if req.DeviceID != "" {
+		_ = cache.SetDeviceOnline(ctx, userID, req.DeviceID)
+	}
+	if latestSeqNo > 0 {
+		_ = cache.SetLastSyncVersion(ctx, userID, latestSeqNo)
+	}
+
+	// Broadcast accepted operations to the user's other online devices via WebSocket.
+	if len(accepted) > 0 {
+		wsOps := make([]WSOperationPayload, 0, len(accepted))
+		for _, op := range req.Operations {
+			for _, aid := range accepted {
+				if op.ID == aid {
+					wsOps = append(wsOps, WSOperationPayload{
+						EntityType: op.EntityType,
+						EntityID:   op.EntityID,
+						Operation:  op.Operation,
+						Data:       op.Payload,
+						Version:    op.Version,
+						DeviceID:   req.DeviceID,
+					})
+					break
+				}
+			}
+		}
+		BroadcastOperation(userID, req.DeviceID, wsOps)
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -153,29 +224,26 @@ func Pull(c *gin.Context) {
 		return
 	}
 
-	store.mu.RLock()
-	defer store.mu.RUnlock()
+	var ops []models.Operation
+	if err := models.DB.
+		Where("server_seq_no > ? AND device_id != ?", sinceVersion, deviceID).
+		Order("server_seq_no ASC").
+		Find(&ops).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 
-	result := make([]gin.H, 0)
+	result := make([]gin.H, 0, len(ops))
 	var latestVersion int64 = sinceVersion
 
-	for _, op := range store.operations {
-		if op.ServerSeqNo <= sinceVersion {
-			continue
-		}
-		// Don't echo operations back to the originating device
-		if op.DeviceID == deviceID {
-			continue
-		}
-
+	for _, op := range ops {
 		result = append(result, gin.H{
 			"entityType": op.EntityType,
 			"entityId":   op.EntityID,
 			"operation":  op.Operation,
-			"data":       op.Payload,
+			"data":       fromJSON(op.Payload),
 			"version":    op.ServerSeqNo,
 		})
-
 		if op.ServerSeqNo > latestVersion {
 			latestVersion = op.ServerSeqNo
 		}
@@ -206,48 +274,62 @@ func Resolve(c *gin.Context) {
 		return
 	}
 
-	store.mu.Lock()
-	defer store.mu.Unlock()
-
-	key := entityKey(req.EntityType, req.EntityID)
-
 	switch req.Strategy {
-	case "local":
-		// Client wins: overwrite server with client data
-		store.globalSeqNo++
-		store.entityVersions[key] = req.Version
-		store.entityData[key] = req.Data
-		store.operations = append(store.operations, Operation{
-			DeviceID:    req.DeviceID,
-			EntityType:  req.EntityType,
-			EntityID:    req.EntityID,
-			Operation:   "update",
-			Version:     req.Version,
-			Payload:     req.Data,
-			CreatedAt:   time.Now().UTC().Format(time.RFC3339),
-			ServerSeqNo: store.globalSeqNo,
-		})
+	case "local", "manual":
+		// Client wins / manual merge: overwrite server with supplied data.
+		if req.Data == nil && req.Strategy == "manual" {
+			break // nothing to write
+		}
 
-	case "remote":
-		// Server wins: no changes needed, client will pull latest
+		txErr := models.DB.Transaction(func(tx *gorm.DB) error {
+			seqNo, err := nextSeqNo(tx)
+			if err != nil {
+				return err
+			}
 
-	case "manual":
-		// Manual merge: client sends merged data
-		if req.Data != nil {
-			store.globalSeqNo++
-			store.entityVersions[key] = req.Version
-			store.entityData[key] = req.Data
-			store.operations = append(store.operations, Operation{
+			payloadJSON := toJSON(req.Data)
+
+			// Upsert EntityVersion.
+			var ev models.EntityVersion
+			res := tx.Where("entity_type = ? AND entity_id = ?", req.EntityType, req.EntityID).First(&ev)
+			if res.RowsAffected > 0 {
+				if err := tx.Model(&ev).Updates(map[string]interface{}{
+					"version": req.Version,
+					"data":    payloadJSON,
+				}).Error; err != nil {
+					return err
+				}
+			} else {
+				if err := tx.Create(&models.EntityVersion{
+					EntityType: req.EntityType,
+					EntityID:   req.EntityID,
+					Version:    req.Version,
+					Data:       payloadJSON,
+				}).Error; err != nil {
+					return err
+				}
+			}
+
+			// Append Operation log.
+			return tx.Create(&models.Operation{
+				ServerSeqNo: seqNo,
 				DeviceID:    req.DeviceID,
 				EntityType:  req.EntityType,
 				EntityID:    req.EntityID,
 				Operation:   "update",
 				Version:     req.Version,
-				Payload:     req.Data,
+				Payload:     payloadJSON,
 				CreatedAt:   time.Now().UTC().Format(time.RFC3339),
-				ServerSeqNo: store.globalSeqNo,
-			})
+			}).Error
+		})
+
+		if txErr != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": txErr.Error()})
+			return
 		}
+
+	case "remote":
+		// Server wins: no changes needed; client will pull latest.
 
 	default:
 		c.JSON(http.StatusBadRequest, gin.H{"error": "unknown strategy: " + req.Strategy})
@@ -264,12 +346,17 @@ func Resolve(c *gin.Context) {
 
 // Status returns a lightweight summary of the sync store.
 func Status(c *gin.Context) {
-	store.mu.RLock()
-	defer store.mu.RUnlock()
+	var opCount, evCount int64
+	models.DB.Model(&models.Operation{}).Count(&opCount)
+	models.DB.Model(&models.EntityVersion{}).Count(&evCount)
+
+	var g models.GlobalSeqNo
+	models.DB.First(&g)
 
 	c.JSON(http.StatusOK, gin.H{
-		"totalOperations": len(store.operations),
-		"trackedEntities": len(store.entityVersions),
-		"latestSeqNo":     store.globalSeqNo,
+		"totalOperations":   opCount,
+		"trackedEntities":   evCount,
+		"latestSeqNo":       g.SeqNo,
+		"redisConnected":    cache.RDB != nil,
 	})
 }

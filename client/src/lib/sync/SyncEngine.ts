@@ -119,7 +119,9 @@ export class SyncEngine {
           operation: log.operation,
           version: log.version,
           patch: log.patch,
-          payload: log.payload,
+          // payload is stored as JSON string in IndexedDB; parse back to object
+          // to avoid double-encoding when the request body is JSON-serialized
+          payload: log.payload ? safeJsonParse(log.payload) : undefined,
           createdAt: log.createdAt.toISOString(),
         })),
       });
@@ -212,7 +214,8 @@ export class SyncEngine {
               entityId: item.entityId,
               operation: item.operation,
               version: item.version,
-              payload: item.payload,
+              // payload is stored as JSON string; parse back to object
+              payload: item.payload ? safeJsonParse(item.payload) : undefined,
               createdAt: item.createdAt.toISOString(),
             }],
           });
@@ -228,6 +231,67 @@ export class SyncEngine {
       await offlineQueue.cleanupExpired(5);
     } finally {
       offlineQueue.setProcessing(false);
+    }
+  }
+
+  /**
+   * Resolve: 提交冲突解决结果到服务端
+   */
+  async resolve(conflict: SyncConflict, strategy: 'local' | 'remote' | 'manual', mergedData?: unknown): Promise<{ resolved: boolean; errors: string[] }> {
+    const deviceId = getDeviceId();
+    const errors: string[] = [];
+
+    try {
+      // Determine the payload to send:
+      // - 'local': use the local data as the resolved version
+      // - 'remote': no data needed, server wins
+      // - 'manual': use the caller-supplied mergedData
+      let data: unknown;
+      if (strategy === 'local') {
+        data = safeJsonParse(conflict.localData);
+      } else if (strategy === 'manual') {
+        data = mergedData;
+      }
+      // 'remote' sends no data
+
+      const response = await apiClient.post<{
+        resolved: boolean;
+        strategy: string;
+      }>(`${this.syncBasePath}/resolve`, {
+        deviceId,
+        entityType: conflict.entityType,
+        entityId: conflict.entityId,
+        strategy,
+        data,
+        version: strategy === 'remote' ? conflict.remoteVersion : Math.max(conflict.localVersion, conflict.remoteVersion) + 1,
+      });
+
+      return { resolved: response.resolved, errors };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      errors.push(`Resolve failed: ${message}`);
+      return { resolved: false, errors };
+    }
+  }
+
+  /**
+   * Status: 获取服务端同步状态摘要
+   */
+  async status(): Promise<{
+    totalOperations: number;
+    trackedEntities: number;
+    latestSeqNo: number;
+    redisConnected: boolean;
+  } | null> {
+    try {
+      return await apiClient.get<{
+        totalOperations: number;
+        trackedEntities: number;
+        latestSeqNo: number;
+        redisConnected: boolean;
+      }>(`${this.syncBasePath}/status`);
+    } catch {
+      return null;
     }
   }
 
@@ -304,6 +368,15 @@ export type SyncEvent =
   | { type: 'sync-start' }
   | { type: 'sync-complete'; result: SyncResult }
   | { type: 'sync-error'; error: string };
+
+// Utility: safely parse a JSON string; return the original string on failure
+function safeJsonParse(value: string): unknown {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
 
 // Singleton
 export const syncEngine = new SyncEngine();

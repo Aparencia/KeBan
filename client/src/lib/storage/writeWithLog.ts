@@ -2,11 +2,48 @@ import type { IRepository } from './interfaces';
 import { logOperation } from './operationLog';
 import { generateId } from '../utils/uuid';
 import { offlineQueue } from '../sync/OfflineQueue';
+import { cryptoManager } from '../crypto';
 
 /**
  * 带操作日志的统一写操作
  * 每次写操作自动记录日志到 operationLog，支持后续同步
+ * 写入前对敏感字段进行 AES-GCM 加密（CryptoManager 未初始化时优雅降级）
  */
+
+/**
+ * 敏感字段映射：entityType -> 需要加密的字段名列表
+ * 非敏感表（pomodoroSessions, pomodoroSettings, operationLog 等）不在此映射中
+ */
+const SENSITIVE_FIELDS: Record<string, string[]> = {
+  notes: ['content'],
+  flashcards: ['front', 'back'],
+  feynmanNotes: ['content'],
+  feynmanSummaries: ['content'],
+  feynmanWeakPoints: ['content'],
+};
+
+/**
+ * 对数据中的敏感字段进行加密
+ * 若 CryptoManager 未就绪，直接返回原数据（优雅降级）
+ */
+async function encryptSensitiveFields<T>(
+  entityType: string,
+  data: T
+): Promise<T> {
+  if (!cryptoManager.isReady()) return data;
+
+  const fields = SENSITIVE_FIELDS[entityType];
+  if (!fields || fields.length === 0) return data;
+
+  const result = { ...data } as Record<string, unknown>;
+  for (const field of fields) {
+    const value = result[field];
+    if (typeof value === 'string' && value.length > 0) {
+      result[field] = await cryptoManager.encryptField(value);
+    }
+  }
+  return result as T;
+}
 
 export async function createWithLog<T extends { id: string }>(
   repo: IRepository<T>,
@@ -16,8 +53,11 @@ export async function createWithLog<T extends { id: string }>(
   const id = generateId();
   const item = { ...data, id } as T;
 
-  await repo.create(item);
-  await logOperation(entityType, id, 'create', item);
+  // 写入前加密敏感字段
+  const encryptedItem = await encryptSensitiveFields(entityType, item);
+
+  await repo.create(encryptedItem);
+  await logOperation(entityType, id, 'create', encryptedItem);
 
   return id;
 }
@@ -28,11 +68,14 @@ export async function updateWithLog<T extends { id: string }>(
   id: string,
   changes: Partial<T>
 ): Promise<void> {
-  await repo.update(id, changes);
+  // 更新前加密变更中的敏感字段
+  const encryptedChanges = await encryptSensitiveFields(entityType, changes);
+
+  await repo.update(id, encryptedChanges);
 
   // 生成 JSON Patch（简化版）
-  const patch = JSON.stringify(changes);
-  await logOperation(entityType, id, 'update', changes, patch);
+  const patch = JSON.stringify(encryptedChanges);
+  await logOperation(entityType, id, 'update', encryptedChanges, patch);
 }
 
 export async function deleteWithLog<T extends { id: string }>(

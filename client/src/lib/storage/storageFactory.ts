@@ -27,11 +27,11 @@ export function createStorage<T extends { id: string }>(tableName: string): IRep
       // TODO: 实现 SqliteStorageProvider
       // Alpha 阶段暂时仍使用 Dexie
       console.warn(`[StorageFactory] Tauri SQLite not yet implemented, falling back to Dexie for ${tableName}`);
-      return new StorageAdapter<T>(db.table(tableName) as any);
+      return new StorageAdapter<T>(db.table(tableName) as any, tableName);
 
     case 'pwa':
     default:
-      return new StorageAdapter<T>(db.table(tableName) as any);
+      return new StorageAdapter<T>(db.table(tableName) as any, tableName);
   }
 }
 

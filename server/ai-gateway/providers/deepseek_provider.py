@@ -14,7 +14,7 @@ from typing import Any
 import openai
 from openai import AsyncOpenAI
 
-from providers.base_provider import AIProvider
+from providers.base_provider import AIProvider, with_retry_and_timeout
 from errors import ProviderUnavailableError, ModelResponseError, RateLimitExceededError
 
 logger = logging.getLogger(__name__)
@@ -31,6 +31,7 @@ class DeepSeekProvider(AIProvider):
             api_key=api_key,
         )
 
+    @with_retry_and_timeout()
     async def generate(
         self,
         prompt: str,

@@ -141,6 +141,6 @@ class FallbackProvider(AIProvider):
             "source": "local_rule",
         }
 
-    async def health_check(self) -> bool:
-        """Fallback 始终可用"""
-        return True
+    async def health_check(self) -> dict:
+        """Fallback 始终可用，无需实际请求"""
+        return {"status": "healthy", "latency_ms": 0, "error": None}

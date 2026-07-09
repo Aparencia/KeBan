@@ -10,29 +10,11 @@ import logging
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, Request
 
-from config import MODEL_ROUTING, AI_PROVIDERS
-from providers.deepseek_provider import DeepSeekProvider
-from providers.fallback_provider import FallbackProvider
+from config import call_with_fallback
 from chains.evaluation_chain import EvaluationChain
-from errors import ProviderUnavailableError
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/ai", tags=["费曼评估"])
-
-# 初始化 Provider
-_deepseek_provider: DeepSeekProvider | None = None
-_fallback_provider = FallbackProvider()
-
-
-def _get_deepseek_provider() -> DeepSeekProvider:
-    """获取 DeepSeekProvider 单例"""
-    global _deepseek_provider
-    if _deepseek_provider is None:
-        cfg = AI_PROVIDERS["deepseek"]
-        _deepseek_provider = DeepSeekProvider(
-            base_url=cfg["base_url"], api_key=cfg["api_key"]
-        )
-    return _deepseek_provider
 
 
 # ============================================================
@@ -91,16 +73,17 @@ async def evaluate_explanation(
         user_id, body.concept, len(body.explanation),
     )
 
-    # 获取模型路由配置
-    provider_key, model_slot = MODEL_ROUTING["evaluate"]
-    model_name = AI_PROVIDERS[provider_key]["models"][model_slot]
-
-    try:
-        provider = _get_deepseek_provider()
+    # 通过 fallback 链自动选择 Provider 并在失败时重试/降级
+    async def _run_chain(provider, model_name):
         chain = EvaluationChain(provider=provider, model=model_name)
-        result = await chain.run(
+        return await chain.run(
             concept=body.concept,
             explanation=body.explanation,
+        )
+
+    try:
+        result, used_provider = await call_with_fallback(
+            request.app, "evaluate", _run_chain
         )
 
         # 从 chain 结果构建 EvaluationResult
@@ -119,14 +102,16 @@ async def evaluate_explanation(
             strengths=result.get("strengths", []),
             improvements=result.get("improvements", []),
             encouragement=result.get("encouragement", ""),
-            model=result.get("model", model_name),
+            model=result.get("model", "unknown"),
             tokens_used=result.get("tokens_used", 0),
             latency_ms=result.get("latency_ms", 0),
         )
 
-    except ProviderUnavailableError as e:
-        logger.warning("DeepSeek 不可用，使用降级评估: %s", e.message)
-        # 降级：返回通用鼓励性反馈
+        logger.info("费曼评估完成: provider=%s", used_provider)
+
+    except RuntimeError as e:
+        # 所有 Provider 均不可用，返回通用鼓励性降级评估
+        logger.warning("费曼评估服务全部不可用，使用降级响应: %s", str(e))
         evaluation = EvaluationResult(
             overall_score=5.0,
             dimensions=[

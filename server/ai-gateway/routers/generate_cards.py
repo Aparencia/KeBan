@@ -10,27 +10,12 @@ import logging
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, Request
 
-from config import MODEL_ROUTING, AI_PROVIDERS
-from providers.qwen_provider import QwenProvider
-from providers.fallback_provider import FallbackProvider
+from config import call_with_fallback
 from chains.card_gen_chain import CardGenChain
-from errors import ProviderUnavailableError, ModelResponseError
+from fastapi import HTTPException
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/ai", tags=["闪卡生成"])
-
-# 初始化 Provider
-_qwen_provider: QwenProvider | None = None
-_fallback_provider = FallbackProvider()
-
-
-def _get_qwen_provider() -> QwenProvider:
-    """获取 QwenProvider 单例"""
-    global _qwen_provider
-    if _qwen_provider is None:
-        cfg = AI_PROVIDERS["qwen"]
-        _qwen_provider = QwenProvider(base_url=cfg["base_url"], api_key=cfg["api_key"])
-    return _qwen_provider
 
 
 # ============================================================
@@ -87,29 +72,29 @@ async def generate_cards(request: Request, body: CardGenRequest) -> CardGenRespo
     user_id = getattr(request.state, "user_id", "anonymous")
     logger.info("闪卡生成请求: user=%s, note_length=%d", user_id, len(body.note))
 
-    # 获取模型路由配置
-    provider_key, model_slot = MODEL_ROUTING["generate_cards"]
-    model_name = AI_PROVIDERS[provider_key]["models"][model_slot]
-
-    try:
-        provider = _get_qwen_provider()
+    # 通过 fallback 链自动选择 Provider 并在失败时重试/降级
+    async def _run_chain(provider, model_name):
         chain = CardGenChain(provider=provider, model=model_name)
-        chain_result = await chain.run(
+        return await chain.run(
             note=body.note,
             options=body.options.model_dump(),
         )
 
+    try:
+        chain_result, used_provider = await call_with_fallback(
+            request.app, "generate_cards", _run_chain
+        )
+
         cards_data = chain_result.get("cards", [])
         total_extracted = chain_result.get("total_extracted", len(cards_data))
-        model_used = chain_result.get("model", model_name)
+        model_used = chain_result.get("model", "unknown")
         tokens_used = chain_result.get("tokens_used", 0)
 
-    except (ProviderUnavailableError, ModelResponseError) as e:
-        logger.warning("闪卡生成失败，使用降级响应: %s", e.message)
-        cards_data = []
-        total_extracted = 0
-        model_used = "fallback"
-        tokens_used = 0
+        logger.info("闪卡生成完成: provider=%s, cards=%d", used_provider, len(cards_data))
+
+    except RuntimeError as e:
+        logger.error("闪卡生成服务全部不可用: %s", str(e))
+        raise HTTPException(status_code=503, detail="所有 AI 服务暂时不可用，请稍后重试")
 
     cards = [FlashCard(**card) for card in cards_data]
 
