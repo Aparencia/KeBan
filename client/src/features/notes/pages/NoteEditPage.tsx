@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useRef, useMemo } from 'react';
+import { useEffect, useCallback, useRef, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
@@ -8,10 +8,12 @@ import Placeholder from '@tiptap/extension-placeholder';
 import {
   ArrowLeft, Bold, Italic, Underline as UnderlineIcon, Strikethrough,
   Highlighter, Heading1, Heading2, Heading3, List, ListOrdered,
-  Code, Quote, Undo2, Redo2, Save,
+  Code, Quote, Undo2, Redo2, Save, Sparkles, X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useNoteStore } from '../store/useNoteStore';
+import { useAISummarize } from '@/lib/ai/useAI';
+import { useToast } from '@/components/ui';
 
 interface ToolbarButtonProps {
   icon: React.FC<React.SVGProps<SVGSVGElement> & { strokeWidth?: number | string }>;
@@ -46,13 +48,18 @@ function ToolbarDivider() {
 export default function NoteEditPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const noteId = id ? Number(id) : null;
+  const noteId = id ?? null;
 
   const { notes, updateNote, selectNote, loadNotes } = useNoteStore();
   const note = notes.find((n) => n.id === noteId) || null;
 
   const titleRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // AI Summary state
+  const [summaryModalOpen, setSummaryModalOpen] = useState(false);
+  const { loading: aiLoading, data: aiData, error: aiError, summarize } = useAISummarize();
+  const { toast } = useToast();
 
   // 解析初始内容
   const initialContent = useMemo(() => {
@@ -188,6 +195,38 @@ export default function NoteEditPage() {
           <Save className="w-icon-sm h-icon-sm" strokeWidth={1.5} />
           保存
         </button>
+
+        <button
+          onClick={() => {
+            if (!editor) return;
+            const text = editor.getText();
+            if (!text.trim()) {
+              toast({ type: 'warning', message: '请先写一些笔记内容再生成摘要' });
+              return;
+            }
+            summarize(text)
+              .then(() => setSummaryModalOpen(true))
+              .catch(() => toast({ type: 'error', message: 'AI 摘要生成失败，请稍后重试' }));
+          }}
+          disabled={aiLoading}
+          title={aiLoading ? '正在生成摘要…' : 'AI 摘要'}
+          className={cn(
+            'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-kb-md text-b2 font-medium',
+            'bg-brand-600 text-white',
+            'hover:bg-brand-700 active:scale-95 transition-all duration-kb-fast',
+            aiLoading && 'opacity-60 cursor-not-allowed',
+          )}
+        >
+          {aiLoading ? (
+            <svg className="w-icon-sm h-icon-sm animate-spin" viewBox="0 0 24 24" fill="none">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+          ) : (
+            <Sparkles className="w-icon-sm h-icon-sm" strokeWidth={1.5} />
+          )}
+          AI 摘要
+        </button>
       </div>
 
       {/* 工具栏 */}
@@ -277,6 +316,70 @@ export default function NoteEditPage() {
           <EditorContent editor={editor} />
         </div>
       </div>
+
+      {/* AI 摘要结果弹窗 */}
+      {summaryModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-kb-md">
+          <div
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            onClick={() => setSummaryModalOpen(false)}
+            aria-hidden
+          />
+          <div className={cn(
+            'relative w-full max-w-md bg-bg-elevated rounded-kb-xl shadow-kb-lg',
+            'border border-border/40 p-kb-lg',
+          )}>
+            <button
+              onClick={() => setSummaryModalOpen(false)}
+              className="absolute top-4 right-4 p-1.5 rounded-kb-full text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-kb-fast"
+            >
+              <X className="w-icon-md h-icon-md" />
+            </button>
+            <h2 className="text-h2 font-semibold text-text-primary flex items-center gap-2 pr-8">
+              <Sparkles className="w-icon-md h-icon-md text-brand-500" strokeWidth={1.5} />
+              AI 摘要
+            </h2>
+
+            {aiLoading && (
+              <div className="mt-kb-md flex items-center gap-2 text-b2 text-text-secondary">
+                <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                正在生成摘要…
+              </div>
+            )}
+
+            {aiError && !aiLoading && (
+              <div className="mt-kb-md p-3 rounded-kb-md bg-rose-500/10 border border-rose-500/20 text-b2 text-rose-500">
+                {aiError}
+              </div>
+            )}
+
+            {aiData && !aiLoading && (
+              <div className="mt-kb-md flex flex-col gap-kb-md">
+                <div>
+                  <p className="text-b3 font-medium text-text-tertiary uppercase tracking-wide mb-1">摘要</p>
+                  <p className="text-b2 text-text-secondary leading-relaxed">{aiData.summary}</p>
+                </div>
+                {aiData.keyPoints.length > 0 && (
+                  <div>
+                    <p className="text-b3 font-medium text-text-tertiary uppercase tracking-wide mb-1">关键要点</p>
+                    <ul className="flex flex-col gap-1.5">
+                      {aiData.keyPoints.map((kp, i) => (
+                        <li key={i} className="flex items-start gap-2 text-b2 text-text-secondary">
+                          <span className="mt-1 w-1.5 h-1.5 rounded-kb-full bg-brand-500 flex-shrink-0" />
+                          {kp}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

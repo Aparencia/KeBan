@@ -1,5 +1,6 @@
 export { db, KeBanDatabase } from './database';
 export { StorageAdapter } from './StorageAdapter';
+export type { IRepository, SyncConflict, SyncResult } from './interfaces';
 export { logOperation, getUnsyncedLogs, markLogsSynced } from './operationLog';
 
 // 预创建的存储适配器实例
@@ -18,6 +19,8 @@ export const feynmanSummaryStore = new StorageAdapter(db.feynmanSummaries);
 export const feynmanWeakPointStore = new StorageAdapter(db.feynmanWeakPoints);
 export const operationLogStore = new StorageAdapter(db.operationLog);
 export const appSettingsStore = new StorageAdapter(db.appSettings);
+export const syncConflictsStore = new StorageAdapter(db.syncConflicts);
+export const offlineQueueStore = new StorageAdapter(db.offlineQueue);
 
 // 导入导出与存储管理
 export { exportAllData, downloadExport, importData, readFileAsText } from './exportImport';

@@ -25,7 +25,6 @@ const ratingStyles = [
 export default function StudySessionPage() {
   const { deckId } = useParams<{ deckId: string }>();
   const navigate = useNavigate();
-  const numericDeckId = Number(deckId);
 
   const {
     sessionCards,
@@ -43,16 +42,16 @@ export default function StudySessionPage() {
 
   // Initialize session on mount
   useEffect(() => {
-    if (!isNaN(numericDeckId)) {
-      selectDeck(numericDeckId);
-      loadCards(numericDeckId).then(() => {
-        startSession(numericDeckId);
+    if (deckId) {
+      selectDeck(deckId);
+      loadCards(deckId).then(() => {
+        startSession(deckId);
       });
     }
     return () => {
       // Cleanup: end session on unmount
     };
-  }, [numericDeckId, selectDeck, loadCards, startSession]);
+  }, [deckId, selectDeck, loadCards, startSession]);
 
   const total = sessionCards.length;
   const current = sessionCards[currentIndex];
@@ -79,8 +78,8 @@ export default function StudySessionPage() {
 
   const handleRestart = () => {
     endSession();
-    if (!isNaN(numericDeckId)) {
-      startSession(numericDeckId);
+    if (deckId) {
+      startSession(deckId);
     }
   };
 

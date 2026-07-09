@@ -1,21 +1,22 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Button, Skeleton, EmptyState } from '@/components/ui';
+import { Button, Skeleton, EmptyState, useToast } from '@/components/ui';
 import { StepIndicator } from '../components/StepIndicator';
 import { useFeynmanStore } from '../store/useFeynmanStore';
 import type { FeynmanWeakPoint } from '@/types/models';
 import {
   ArrowLeft, ArrowRight, Check, Highlighter, X,
-  Star, Trash2, CheckCircle2, Circle,
+  Star, Trash2, CheckCircle2, Circle, Sparkles, Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useAIEvaluate } from '@/lib/ai/useAI';
 
 export default function FeynmanSessionPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const navigate = useNavigate();
 
   const {
-    notes, summaries, weakPoints, currentNoteId, isLoading,
+    notes: _notes, summaries: _summaries, weakPoints: _weakPoints, currentNoteId, isLoading,
     loadNote,
     setExplanation,
     updateNote,
@@ -36,19 +37,29 @@ export default function FeynmanSessionPage() {
   const [selectionPopup, setSelectionPopup] = useState<{ text: string; start: number; end: number } | null>(null);
   const [rating, setRating] = useState(0);
   const [hoverRating, setHoverRating] = useState(0);
+  const [showAIEval, setShowAIEval] = useState(false);
+
+  // AI Evaluate
+  const {
+    loading: aiEvalLoading,
+    data: aiEvalData,
+    error: aiEvalError,
+    evaluate: aiEvaluate,
+  } = useAIEvaluate();
+  const { toast } = useToast();
 
   const explanationRef = useRef<HTMLDivElement>(null);
-  const numericId = sessionId && sessionId !== 'new' ? Number(sessionId) : null;
+  const noteId = sessionId && sessionId !== 'new' ? sessionId : null;
 
   // Load note on mount
   useEffect(() => {
-    if (numericId) {
-      loadNote(numericId);
+    if (noteId) {
+      loadNote(noteId);
     }
-  }, [numericId, loadNote]);
+  }, [noteId, loadNote]);
 
   // Derive current view from store
-  const view = numericId && currentNoteId === numericId ? getCurrentView() : null;
+  const view = noteId && currentNoteId === noteId ? getCurrentView() : null;
   const note = view?.note ?? null;
   const summary = view?.summary ?? null;
   const noteWeakPoints = view?.weakPoints ?? [];
@@ -75,54 +86,54 @@ export default function FeynmanSessionPage() {
   // ── Handlers ──
 
   const handleStep2Blur = useCallback(async () => {
-    if (!numericId || !note) return;
+    if (!noteId || !note) return;
     if (localExplanation !== note.explanation) {
-      await updateNote(numericId, { explanation: localExplanation });
+      await updateNote(noteId, { explanation: localExplanation });
     }
-  }, [numericId, note, localExplanation, updateNote]);
+  }, [noteId, note, localExplanation, updateNote]);
 
   const handleSummaryBlur = useCallback(async () => {
-    if (!numericId) return;
+    if (!noteId) return;
     const currentSummary = summary?.summary ?? '';
     if (localSummary !== currentSummary) {
-      await setSimplifiedSummary(numericId, localSummary);
+      await setSimplifiedSummary(noteId, localSummary);
     }
-  }, [numericId, summary, localSummary, setSimplifiedSummary]);
+  }, [noteId, summary, localSummary, setSimplifiedSummary]);
 
   const handleNext = useCallback(async () => {
-    if (!numericId) return;
+    if (!noteId) return;
     // Save current content before advancing
     if (currentStep === 1 && localExplanation.trim()) {
-      await setExplanation(numericId, localExplanation);
+      await setExplanation(noteId, localExplanation);
     } else if (currentStep === 2) {
       if (localExplanation !== note?.explanation) {
-        await updateNote(numericId, { explanation: localExplanation });
+        await updateNote(noteId, { explanation: localExplanation });
       }
     } else if (currentStep === 4 && localSummary.trim()) {
-      await setSimplifiedSummary(numericId, localSummary);
+      await setSimplifiedSummary(noteId, localSummary);
     }
-    await advanceStep(numericId);
-  }, [numericId, currentStep, localExplanation, localSummary, note, setExplanation, updateNote, setSimplifiedSummary, advanceStep]);
+    await advanceStep(noteId);
+  }, [noteId, currentStep, localExplanation, localSummary, note, setExplanation, updateNote, setSimplifiedSummary, advanceStep]);
 
   const handlePrev = useCallback(() => {
-    if (!numericId || !note || currentStep <= 1) return;
-    updateNote(numericId, { currentStep: (currentStep - 1) as 1 | 2 | 3 | 4 });
-  }, [numericId, note, currentStep, updateNote]);
+    if (!noteId || !note || currentStep <= 1) return;
+    updateNote(noteId, { currentStep: (currentStep - 1) as 1 | 2 | 3 | 4 });
+  }, [noteId, note, currentStep, updateNote]);
 
   const handleComplete = useCallback(async () => {
-    if (!numericId) return;
+    if (!noteId) return;
     const currentSummary = summary?.summary ?? '';
     if (localSummary.trim() && localSummary !== currentSummary) {
-      await setSimplifiedSummary(numericId, localSummary);
+      await setSimplifiedSummary(noteId, localSummary);
     }
-    await completeNote(numericId);
-  }, [numericId, localSummary, summary, setSimplifiedSummary, completeNote]);
+    await completeNote(noteId);
+  }, [noteId, localSummary, summary, setSimplifiedSummary, completeNote]);
 
   const handleRating = useCallback(async (r: number) => {
-    if (!numericId) return;
+    if (!noteId) return;
     setRating(r);
-    await setSelfRating(numericId, r);
-  }, [numericId, setSelfRating]);
+    await setSelfRating(noteId, r);
+  }, [noteId, setSelfRating]);
 
   // ── Step 3: Text selection for weak points ──
 
@@ -148,15 +159,15 @@ export default function FeynmanSessionPage() {
   }, [note]);
 
   const handleAddWeakPoint = useCallback(async () => {
-    if (!numericId || !selectionPopup) return;
-    await addWeakPoint(numericId, {
+    if (!noteId || !selectionPopup) return;
+    await addWeakPoint(noteId, {
       text: selectionPopup.text,
       position: { start: selectionPopup.start, end: selectionPopup.end },
       mastered: false,
     });
     setSelectionPopup(null);
     window.getSelection()?.removeAllRanges();
-  }, [numericId, selectionPopup, addWeakPoint]);
+  }, [noteId, selectionPopup, addWeakPoint]);
 
   // ── Loading / Empty states ──
 
@@ -177,7 +188,7 @@ export default function FeynmanSessionPage() {
     );
   }
 
-  if (!note && numericId) {
+  if (!note && noteId) {
     return (
       <div className="flex flex-col h-[calc(100vh-4rem)] items-center justify-center">
         <EmptyState
@@ -256,6 +267,34 @@ export default function FeynmanSessionPage() {
         <h1 className="text-b1 font-semibold text-text-primary flex-1 truncate">
           {note?.concept || '费曼学习'}
         </h1>
+        {note?.explanation && (
+          <button
+            onClick={() => {
+              if (!note?.concept || !note?.explanation) {
+                toast({ type: 'warning', message: '请先完成讲解内容' });
+                return;
+              }
+              setShowAIEval(true);
+              aiEvaluate(note.concept, note.explanation)
+                .catch(() => toast({ type: 'error', message: 'AI 评估失败，请稍后重试' }));
+            }}
+            disabled={aiEvalLoading}
+            title={aiEvalLoading ? 'AI 评估中…' : 'AI 评估讲解质量'}
+            className={cn(
+              'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-kb-md text-b2 font-medium',
+              'bg-brand-600 text-white',
+              'hover:bg-brand-700 active:scale-95 transition-all duration-kb-fast',
+              aiEvalLoading && 'opacity-60 cursor-not-allowed',
+            )}
+          >
+            {aiEvalLoading ? (
+              <Loader2 className="w-icon-sm h-icon-sm animate-spin" />
+            ) : (
+              <Sparkles className="w-icon-sm h-icon-sm" strokeWidth={1.5} />
+            )}
+            AI 评估
+          </button>
+        )}
         {isCompleted && (
           <span className="text-c1 font-medium text-semantic-success flex items-center gap-1">
             <CheckCircle2 className="w-3.5 h-3.5" strokeWidth={2} />
@@ -498,6 +537,126 @@ export default function FeynmanSessionPage() {
                     )}
                   </div>
                 )}
+
+                {/* AI 评估结果 */}
+                {showAIEval && (
+                  <div className={cn(
+                    'p-kb-md rounded-kb-lg',
+                    'bg-brand-600/5 border border-brand-500/20',
+                  )}>
+                    <div className="flex items-center justify-between mb-kb-md">
+                      <h3 className="text-b1 font-semibold text-text-primary flex items-center gap-2">
+                        <Sparkles className="w-icon-sm h-icon-sm text-brand-500" strokeWidth={1.5} />
+                        AI 评估结果
+                      </h3>
+                      <button
+                        onClick={() => setShowAIEval(false)}
+                        className="p-1 rounded-kb-full text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-kb-fast"
+                      >
+                        <X className="w-4 h-4" strokeWidth={1.5} />
+                      </button>
+                    </div>
+
+                    {aiEvalLoading && (
+                      <div className="flex items-center gap-2 text-b2 text-text-secondary py-4">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        正在评估你的讲解…
+                      </div>
+                    )}
+
+                    {aiEvalError && !aiEvalLoading && (
+                      <div className="p-3 rounded-kb-md bg-rose-500/10 border border-rose-500/20 text-b2 text-rose-500">
+                        {aiEvalError}
+                      </div>
+                    )}
+
+                    {aiEvalData && !aiEvalLoading && (
+                      <div className="flex flex-col gap-kb-md">
+                        {/* Overall score */}
+                        <div className="flex items-center gap-3">
+                          <div className={cn(
+                            'w-16 h-16 rounded-kb-full flex items-center justify-center flex-shrink-0',
+                            'bg-brand-600/10 text-brand-600 text-h2 font-bold',
+                          )}>
+                            {aiEvalData.overallScore}
+                          </div>
+                          <div>
+                            <p className="text-b1 font-semibold text-text-primary">综合评分</p>
+                            <p className="text-b2 text-text-tertiary">
+                              {aiEvalData.overallScore >= 80 ? '讲得非常出色！' : aiEvalData.overallScore >= 60 ? '掌握较好，还有提升空间' : '建议继续深化理解'}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Dimensions */}
+                        {aiEvalData.dimensions.length > 0 && (
+                          <div>
+                            <p className="text-b3 font-medium text-text-tertiary uppercase tracking-wide mb-2">维度评分</p>
+                            <div className="flex flex-col gap-2">
+                              {aiEvalData.dimensions.map((dim, i) => (
+                                <div key={i} className="flex items-center gap-2">
+                                  <span className="text-b2 text-text-secondary w-20 flex-shrink-0">{dim.name}</span>
+                                  <div className="flex-1 h-2 bg-bg-tertiary rounded-kb-full overflow-hidden">
+                                    <div
+                                      className="h-full bg-brand-500 rounded-kb-full transition-all duration-500"
+                                      style={{ width: `${dim.score}%` }}
+                                    />
+                                  </div>
+                                  <span className="text-b3 text-text-tertiary w-8 text-right">{dim.score}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Strengths */}
+                        {aiEvalData.strengths.length > 0 && (
+                          <div>
+                            <p className="text-b3 font-medium text-semantic-success uppercase tracking-wide mb-1">优势</p>
+                            <ul className="flex flex-col gap-1">
+                              {aiEvalData.strengths.map((s, i) => (
+                                <li key={i} className="flex items-start gap-2 text-b2 text-text-secondary">
+                                  <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 text-semantic-success flex-shrink-0" />
+                                  {s}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {/* Weaknesses */}
+                        {aiEvalData.weaknesses.length > 0 && (
+                          <div>
+                            <p className="text-b3 font-medium text-rose-500 uppercase tracking-wide mb-1">待改进</p>
+                            <ul className="flex flex-col gap-1">
+                              {aiEvalData.weaknesses.map((w, i) => (
+                                <li key={i} className="flex items-start gap-2 text-b2 text-text-secondary">
+                                  <Circle className="w-3.5 h-3.5 mt-0.5 text-rose-400 flex-shrink-0" />
+                                  {w}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {/* Suggestions */}
+                        {aiEvalData.suggestions.length > 0 && (
+                          <div>
+                            <p className="text-b3 font-medium text-text-tertiary uppercase tracking-wide mb-1">建议</p>
+                            <ul className="flex flex-col gap-1">
+                              {aiEvalData.suggestions.map((s, i) => (
+                                <li key={i} className="flex items-start gap-2 text-b2 text-text-secondary">
+                                  <span className="mt-1 w-1.5 h-1.5 rounded-kb-full bg-brand-500 flex-shrink-0" />
+                                  {s}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -536,7 +695,7 @@ export default function FeynmanSessionPage() {
                       )}
                     >
                       <button
-                        onClick={() => numericId && wp.id && toggleWeakPointMastered(numericId, wp.id)}
+                        onClick={() => noteId && wp.id && toggleWeakPointMastered(noteId, wp.id)}
                         className="flex-shrink-0 mt-0.5"
                         title={wp.mastered ? '标记为未掌握' : '标记为已掌握'}
                       >
@@ -553,7 +712,7 @@ export default function FeynmanSessionPage() {
                         {wp.text}
                       </p>
                       <button
-                        onClick={() => numericId && wp.id && removeWeakPoint(numericId, wp.id)}
+                        onClick={() => noteId && wp.id && removeWeakPoint(noteId, wp.id)}
                         className="flex-shrink-0 opacity-0 group-hover:opacity-100 p-0.5 text-text-tertiary hover:text-semantic-error transition-all duration-kb-fast"
                         title="删除"
                       >

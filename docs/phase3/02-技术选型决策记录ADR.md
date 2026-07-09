@@ -1,6 +1,6 @@
 # 课伴技术选型决策记录（ADR）
 
-> 版本：v1.1 | 最后更新：2026-07-08
+> 版本：v1.2 | 最后更新：2026-07-09
 
 本文档记录课伴项目所有关键技术选型决策，采用 ADR（Architecture Decision Record）标准格式。
 
@@ -78,6 +78,13 @@
 - 负面：两个库需要在组件层协调，有一定心智负担
 - 迁移成本：若需更换，Zustand可替换为任意轻量状态库，TanStack Query替换成本较高
 
+> **状态更新 (v1.2, MVP-2 Alpha 实施)**：桌面端方案已 Superseded。
+> 实际采用 **Tauri 2.0** 替代 Electron。
+> - 安装包体积从 100-300MB 降至 5-15MB
+> - 运行时内存从 200-500MB 降至 30-100MB
+> - 前端代码 95-99% 复用
+> - 决策依据：更轻量、更好的系统集成、SQLite 原生支持
+
 ---
 
 ## ADR-003：本地存储 — Supabase本地客户端 (PostgreSQL) + localStorage
@@ -122,6 +129,12 @@
 - 正面：RLS策略复用，安全模型一致；实时订阅开箱即用
 - 负面：本地PostgreSQL运行依赖WASM或Electron环境，PWA纯浏览器场景受限
 - 缓解：Electron桌面端优先落地；PWA场景可保留IndexedDB降级方案
+
+> **状态更新 (v1.2, MVP-2 Alpha 实施)**：已 Superseded。
+> MVP-2 Alpha 阶段**保留 Dexie.js (IndexedDB)**，未执行 Supabase 本地客户端迁移。
+> - 原因：Supabase 本地 PostgreSQL 强依赖 Docker（13+ 容器），无法嵌入桌面应用安装包
+> - 通过 `IRepository<T>` 存储抽象接口隔离实现，后续迁移仅需替换底层适配器
+> - 计划：Tauri 桌面端阶段迁移至 `tauri-plugin-sql` (SQLite)
 
 ---
 
@@ -242,6 +255,12 @@ Supabase客户端推送操作到云端
 - 正面：实时订阅开箱即用，无需自建WebSocket服务
 - 负面：冲突时需用户手动选择，不如CRDT自动合并
 - 升级路径：V2.0可引入Yjs替换核心同步引擎，操作日志格式向下兼容
+
+> **状态更新 (v1.2, MVP-2 Alpha 实施)**：已 Superseded。
+> 同步策略从 Supabase 客户端操作 Replay 改为 **HTTP Push/Pull + 操作日志**。
+> - 原因：Replay 模式要求本地与云端共享 PostgreSQL schema，Dexie.js 环境下不可行
+> - 实现：增强版操作日志（含 version/deviceId/patch）+ Go sync-service HTTP API
+> - LWW 冲突检测在 HTTP 模式下完全可实现
 
 ---
 
@@ -420,6 +439,13 @@ Response Cache (Redis)
 - 负面：LangChain抽象层较重，简单场景可能过度封装
 - 缓解：简单场景可直接调用OpenAI SDK，复杂场景使用LangChain
 
+> **状态更新 (v1.2, MVP-2 Alpha 实施)**：已 Superseded。
+> AI 模型从 OpenAI/本地模型改为接入**国产大模型双供应商方案**。
+> - 主力：通义千问 Qwen3.5-Plus（笔记摘要、闪卡生成）
+> - 辅助：DeepSeek V4/Chat（费曼评估、番茄钟推荐）
+> - 备选：智谱 GLM-4-Flash（永久免费，Alpha 验证用）
+> - 两者均兼容 OpenAI SDK 格式，仅需切换 base_url + api_key
+
 ---
 
 ## ADR-011：容器化与CI/CD — Docker + K8s + GitHub Actions + ArgoCD
@@ -549,13 +575,13 @@ ArgoCD检测到Manifests变更
 |-----|------|------|------|------|
 | ADR-001 | 前端框架 | React 18 + TS + Vite | MVP-1 | v1.0 |
 | ADR-002 | 状态管理 | Zustand + TanStack Query | MVP-1 | v1.0 |
-| ADR-003 | 本地存储 | Supabase本地客户端 + localStorage | MVP-1 | ~~v1.0 Dexie.js~~ → v1.1 Supabase |
+| ADR-003 | 本地存储 | ~~Supabase本地客户端~~ → **Dexie.js (保留)** | MVP-1 | ~~v1.1 Supabase~~ → v1.2 Superseded |
 | ADR-004 | 离线缓存 | Workbox (Service Worker) | MVP-1 | v1.0 |
 | ADR-005 | 富文本 | TipTap (ProseMirror) | MVP-1 | v1.0 |
-| ADR-006 | 数据同步 | Supabase客户端操作 + LWW | MVP-2 | ~~v1.0 自定义引擎~~ → v1.1 Supabase |
+| ADR-006 | 数据同步 | ~~Supabase客户端操作~~ → **HTTP Push/Pull + 操作日志** | MVP-2 | ~~v1.1 Supabase~~ → v1.2 Superseded |
 | ADR-007 | 后端语言 | Go + Python | MVP-2 | v1.0 |
 | ADR-008 | 主数据库 | PostgreSQL 16 (Supabase) | MVP-2 | ~~v1.0 独立PG~~ → v1.1 Supabase |
 | ADR-009 | 缓存 | Redis 7 | MVP-2 | v1.0 |
-| ADR-010 | AI框架 | FastAPI + LangChain | MVP-2 | v1.0 |
+| ADR-010 | AI框架 | FastAPI + LangChain（**国产模型**） | MVP-2 | v1.0 → v1.2 Superseded |
 | ADR-011 | CI/CD | Docker + K8s + GH Actions + ArgoCD | MVP-2 | v1.0 |
 | ADR-012 | 通信协议 | gRPC + Protobuf | MVP-2 | v1.1 新增 |

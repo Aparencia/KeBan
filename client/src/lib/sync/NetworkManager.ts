@@ -1,0 +1,163 @@
+/**
+ * 网络状态管理器
+ * 监听浏览器 online/offline 事件 + 心跳检测判断网络质量
+ */
+
+export type NetworkStatus = 'online' | 'offline' | 'weak';
+
+export interface NetworkState {
+  status: NetworkStatus;
+  lastOnlineAt: Date | null;
+  lastOfflineAt: Date | null;
+  latency: number | null; // ms, null when offline
+}
+
+type NetworkListener = (state: NetworkState) => void;
+
+export class NetworkManager {
+  private state: NetworkState;
+  private listeners: Set<NetworkListener> = new Set();
+  private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
+  private heartbeatUrl: string;
+  private heartbeatIntervalMs: number;
+  private weakThresholdMs: number;
+
+  constructor(options?: {
+    heartbeatUrl?: string;
+    heartbeatIntervalMs?: number;
+    weakThresholdMs?: number;
+  }) {
+    this.heartbeatUrl = options?.heartbeatUrl || '/api/health';
+    this.heartbeatIntervalMs = options?.heartbeatIntervalMs || 30000; // 30秒
+    this.weakThresholdMs = options?.weakThresholdMs || 5000; // 5秒超时视为弱网
+
+    this.state = {
+      status: navigator.onLine ? 'online' : 'offline',
+      lastOnlineAt: navigator.onLine ? new Date() : null,
+      lastOfflineAt: navigator.onLine ? null : new Date(),
+      latency: null,
+    };
+
+    this.handleOnline = this.handleOnline.bind(this);
+    this.handleOffline = this.handleOffline.bind(this);
+  }
+
+  /**
+   * 启动网络状态监听
+   */
+  start(): void {
+    window.addEventListener('online', this.handleOnline);
+    window.addEventListener('offline', this.handleOffline);
+
+    // 启动心跳检测
+    this.startHeartbeat();
+  }
+
+  /**
+   * 停止网络状态监听
+   */
+  stop(): void {
+    window.removeEventListener('online', this.handleOnline);
+    window.removeEventListener('offline', this.handleOffline);
+    this.stopHeartbeat();
+  }
+
+  /**
+   * 获取当前网络状态
+   */
+  getState(): NetworkState {
+    return { ...this.state };
+  }
+
+  /**
+   * 订阅网络状态变化
+   */
+  subscribe(listener: NetworkListener): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  private handleOnline(): void {
+    this.updateState({
+      status: 'online',
+      lastOnlineAt: new Date(),
+    });
+    // 恢复心跳
+    this.startHeartbeat();
+  }
+
+  private handleOffline(): void {
+    this.updateState({
+      status: 'offline',
+      lastOfflineAt: new Date(),
+      latency: null,
+    });
+    this.stopHeartbeat();
+  }
+
+  private startHeartbeat(): void {
+    this.stopHeartbeat();
+    this.heartbeatInterval = setInterval(() => this.ping(), this.heartbeatIntervalMs);
+    // 立即执行一次
+    this.ping();
+  }
+
+  private stopHeartbeat(): void {
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+      this.heartbeatInterval = null;
+    }
+  }
+
+  private async ping(): Promise<void> {
+    const start = performance.now();
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), this.weakThresholdMs);
+
+      await fetch(this.heartbeatUrl, {
+        method: 'GET',
+        signal: controller.signal,
+        cache: 'no-cache',
+      });
+
+      clearTimeout(timeout);
+      const latency = Math.round(performance.now() - start);
+
+      // 根据延迟判断网络质量
+      const isWeak = latency > this.weakThresholdMs / 2;
+      this.updateState({
+        status: isWeak ? 'weak' : 'online',
+        latency,
+        lastOnlineAt: new Date(),
+      });
+    } catch {
+      // 请求失败但浏览器显示在线 → 弱网或服务器不可用
+      if (navigator.onLine) {
+        this.updateState({
+          status: 'weak',
+          latency: null,
+        });
+      }
+    }
+  }
+
+  private updateState(partial: Partial<NetworkState>): void {
+    const prev = this.state;
+    this.state = { ...this.state, ...partial };
+
+    // 只在状态实际变化时通知
+    if (prev.status !== this.state.status) {
+      this.listeners.forEach((listener) => listener(this.getState()));
+    }
+  }
+}
+
+// 单例导出
+export const networkManager = new NetworkManager({
+  heartbeatUrl: import.meta.env.VITE_API_HEALTH_URL || '/api/health',
+  heartbeatIntervalMs: 30000,
+  weakThresholdMs: 5000,
+});

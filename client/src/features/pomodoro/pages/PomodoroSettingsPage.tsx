@@ -1,8 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Timer, Zap, Bell, Save, RotateCcw, GraduationCap } from 'lucide-react';
-import { Button, Card, Input } from '@/components/ui';
+import { Timer, Zap, Bell, Save, RotateCcw, GraduationCap, Sparkles, Loader2, CheckCircle2 } from 'lucide-react';
+import { Button, Card, Input, useToast } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { usePomodoroStore } from '../store/usePomodoroStore';
+import { useAIDuration } from '@/lib/ai/useAI';
+import { pomodoroSessionStore } from '@/lib/storage';
+import type { PomodoroSession } from '@/types/models';
 
 const DEFAULT_SETTINGS = {
   workDuration: 25,
@@ -72,12 +75,23 @@ function SettingRow({
 }
 
 export default function PomodoroSettingsPage() {
-  const { settings, updateSettings, initialize, mode } = usePomodoroStore();
+  const { settings, updateSettings, initialize, mode: _mode } = usePomodoroStore();
 
   // Local form state (mirrors store settings)
   const [localSettings, setLocalSettings] = useState({ ...settings });
   const [saved, setSaved] = useState(false);
   const [resetDone, setResetDone] = useState(false);
+
+  // AI recommend
+  const {
+    loading: aiRecLoading,
+    data: aiRecData,
+    error: aiRecError,
+    isFallback: aiRecFallback,
+    recommend: aiRecommend,
+  } = useAIDuration();
+  const [aiRecApplied, setAIRecApplied] = useState(false);
+  const { toast } = useToast();
 
   // Load persisted settings on mount
   useEffect(() => {
@@ -235,6 +249,104 @@ export default function PomodoroSettingsPage() {
             />
           </SettingRow>
         </div>
+      </Card>
+
+      {/* AI 智能推荐 */}
+      <Card variant="default" padding="lg" className="mb-kb-xl">
+        <div className="flex items-center gap-2 mb-kb-md">
+          <Sparkles className="w-icon-sm h-icon-sm text-brand-500" strokeWidth={1.5} />
+          <h2 className="text-h3 font-medium text-text-primary">智能推荐</h2>
+        </div>
+        <p className="text-b2 text-text-tertiary mb-kb-md">
+          AI 分析你的历史专注数据，为你推荐最适合的工作时长。
+          {aiRecFallback && aiRecData && (
+            <span className="ml-1 text-amber-500 text-c1">（基于本地分析）</span>
+          )}
+        </p>
+
+        <Button
+          variant="secondary"
+          size="md"
+          icon={aiRecLoading ? <Loader2 className="w-icon-sm h-icon-sm animate-spin" /> : <Sparkles className="w-icon-sm h-icon-sm" />}
+          disabled={aiRecLoading}
+          onClick={async () => {
+            try {
+              const sessions: PomodoroSession[] = await pomodoroSessionStore.getAll();
+              const historySessions = sessions.map((s) => ({
+                duration: Math.round(s.duration / 60),
+                completed: !s.interrupted,
+                date: s.completedAt instanceof Date ? s.completedAt.toISOString() : String(s.completedAt),
+                subject: s.subject,
+              }));
+              const avgFocus = sessions.length > 0
+                ? sessions.reduce((sum, s) => sum + Math.round(s.actualDuration / 60), 0) / sessions.length
+                : undefined;
+              await aiRecommend({
+                sessions: historySessions,
+                averageFocusTime: avgFocus ? Math.round(avgFocus) : undefined,
+                preferredDuration: localSettings.workDuration,
+              });
+              setAIRecApplied(false);
+            } catch {
+              toast({ type: 'error', message: '获取推荐失败，请稍后重试' });
+            }
+          }}
+          className="w-full"
+        >
+          {aiRecLoading ? '分析中…' : '获取智能推荐'}
+        </Button>
+
+        {aiRecError && (
+          <div className="mt-kb-sm p-3 rounded-kb-md bg-rose-500/10 border border-rose-500/20 text-b2 text-rose-500">
+            {aiRecError}
+          </div>
+        )}
+
+        {aiRecData && !aiRecLoading && (
+          <div className={cn(
+            'mt-kb-md p-kb-md rounded-kb-lg',
+            'bg-brand-600/5 border border-brand-500/20',
+            'flex flex-col gap-2',
+          )}>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-b1 font-semibold text-text-primary">
+                  推荐时长：{aiRecData.recommendedDuration} 分钟
+                </p>
+                <p className="text-b2 text-text-secondary mt-0.5">{aiRecData.reasoning}</p>
+              </div>
+              <span className={cn(
+                'text-c1 font-medium px-2 py-0.5 rounded-kb-sm',
+                aiRecData.confidence === 'high'
+                  ? 'bg-semantic-success/10 text-semantic-success'
+                  : aiRecData.confidence === 'medium'
+                    ? 'bg-amber-500/10 text-amber-500'
+                    : 'bg-text-tertiary/10 text-text-tertiary',
+              )}>
+                {aiRecData.confidence === 'high' ? '高置信度' : aiRecData.confidence === 'medium' ? '中等' : '低'}
+              </span>
+            </div>
+            {aiRecFallback && (
+              <p className="text-c1 text-amber-500 flex items-center gap-1">
+                <span>⚠</span> 当前基于本地规则引擎分析（无网络）
+              </p>
+            )}
+            <Button
+              size="sm"
+              icon={aiRecApplied ? <CheckCircle2 className="w-icon-sm h-icon-sm" /> : undefined}
+              disabled={aiRecApplied}
+              onClick={() => {
+                setLocalSettings((prev) => ({ ...prev, workDuration: aiRecData.recommendedDuration }));
+                updateSettings({ workDuration: aiRecData.recommendedDuration });
+                setAIRecApplied(true);
+                toast({ type: 'success', message: `已应用推荐时长：${aiRecData.recommendedDuration} 分钟` });
+              }}
+              className="self-start"
+            >
+              {aiRecApplied ? '已应用推荐' : '应用推荐时长'}
+            </Button>
+          </div>
+        )}
       </Card>
 
       {/* Action buttons */}

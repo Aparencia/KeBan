@@ -6,14 +6,14 @@ vi.mock('@/lib/storage', () => ({
   noteStore: {
     getAll: vi.fn().mockResolvedValue([]),
     getById: vi.fn().mockResolvedValue(null),
-    create: vi.fn().mockResolvedValue(1),
+    create: vi.fn().mockResolvedValue('mock-uuid-1'),
     update: vi.fn().mockResolvedValue(undefined),
     delete: vi.fn().mockResolvedValue(undefined),
     where: vi.fn().mockResolvedValue([]),
   },
   noteFolderStore: {
     getAll: vi.fn().mockResolvedValue([]),
-    create: vi.fn().mockResolvedValue(1),
+    create: vi.fn().mockResolvedValue('mock-folder-1'),
     update: vi.fn().mockResolvedValue(undefined),
     delete: vi.fn().mockResolvedValue(undefined),
   },
@@ -24,6 +24,7 @@ import { useNoteStore } from './useNoteStore';
 // Helper to create a Note with sensible defaults
 function makeNote(overrides: Partial<Note> = {}): Note {
   return {
+    id: 'test-id',
     title: 'Test Note',
     content: 'test content',
     template: 'blank',
@@ -37,10 +38,10 @@ function makeNote(overrides: Partial<Note> = {}): Note {
 }
 
 const SAMPLE_NOTES: Note[] = [
-  makeNote({ id: 1, title: 'Alpha', content: 'hello world', updatedAt: new Date('2025-01-03'), folderId: 1 }),
-  makeNote({ id: 2, title: 'Beta', content: 'foo bar', updatedAt: new Date('2025-01-02'), folderId: 2, pinned: true }),
-  makeNote({ id: 3, title: 'Gamma', content: 'hello foo', updatedAt: new Date('2025-01-01'), folderId: 1 }),
-  makeNote({ id: 4, title: 'Delta', content: 'nothing here', updatedAt: new Date('2025-01-04') }),
+  makeNote({ id: 'n1', title: 'Alpha', content: 'hello world', updatedAt: new Date('2025-01-03'), folderId: 'f1' }),
+  makeNote({ id: 'n2', title: 'Beta', content: 'foo bar', updatedAt: new Date('2025-01-02'), folderId: 'f2', pinned: true }),
+  makeNote({ id: 'n3', title: 'Gamma', content: 'hello foo', updatedAt: new Date('2025-01-01'), folderId: 'f1' }),
+  makeNote({ id: 'n4', title: 'Delta', content: 'nothing here', updatedAt: new Date('2025-01-04') }),
 ];
 
 beforeEach(() => {
@@ -59,19 +60,19 @@ describe('Note Store - Pure Business Logic', () => {
 
   describe('simple setters', () => {
     it('should select a note by id', () => {
-      useNoteStore.getState().selectNote(2);
-      expect(useNoteStore.getState().selectedNoteId).toBe(2);
+      useNoteStore.getState().selectNote('n2');
+      expect(useNoteStore.getState().selectedNoteId).toBe('n2');
     });
 
     it('should clear selected note with null', () => {
-      useNoteStore.setState({ selectedNoteId: 3 });
+      useNoteStore.setState({ selectedNoteId: 'n3' });
       useNoteStore.getState().selectNote(null);
       expect(useNoteStore.getState().selectedNoteId).toBeNull();
     });
 
     it('should select a folder by id', () => {
-      useNoteStore.getState().selectFolder(1);
-      expect(useNoteStore.getState().selectedFolderId).toBe(1);
+      useNoteStore.getState().selectFolder('f1');
+      expect(useNoteStore.getState().selectedFolderId).toBe('f1');
     });
 
     it('should set search query', () => {
@@ -85,15 +86,15 @@ describe('Note Store - Pure Business Logic', () => {
   describe('getFilteredNotes - sort order', () => {
     it('should return pinned notes first', () => {
       const result = useNoteStore.getState().getFilteredNotes();
-      expect(result[0].id).toBe(2); // Beta is pinned
+      expect(result[0].id).toBe('n2'); // Beta is pinned
     });
 
     it('should sort non-pinned notes by updatedAt descending', () => {
       const result = useNoteStore.getState().getFilteredNotes();
       // After pinned Beta (id=2): Delta(Jan4) > Alpha(Jan3) > Gamma(Jan1)
-      expect(result[1].id).toBe(4);
-      expect(result[2].id).toBe(1);
-      expect(result[3].id).toBe(3);
+      expect(result[1].id).toBe('n4');
+      expect(result[2].id).toBe('n1');
+      expect(result[3].id).toBe('n3');
     });
   });
 
@@ -101,10 +102,10 @@ describe('Note Store - Pure Business Logic', () => {
 
   describe('getFilteredNotes - folder filter', () => {
     it('should filter notes by selectedFolderId', () => {
-      useNoteStore.setState({ selectedFolderId: 1 });
+      useNoteStore.setState({ selectedFolderId: 'f1' });
       const result = useNoteStore.getState().getFilteredNotes();
       expect(result).toHaveLength(2);
-      expect(result.map((n) => n.id)).toEqual([1, 3]); // Alpha, Gamma in folder 1
+      expect(result.map((n) => n.id)).toEqual(['n1', 'n3']); // Alpha, Gamma in folder 1
     });
 
     it('should return all notes when no folder selected', () => {
@@ -130,7 +131,7 @@ describe('Note Store - Pure Business Logic', () => {
     });
 
     it('should combine folder filter and search', () => {
-      useNoteStore.setState({ selectedFolderId: 1, searchQuery: 'hello' });
+      useNoteStore.setState({ selectedFolderId: 'f1', searchQuery: 'hello' });
       const result = useNoteStore.getState().getFilteredNotes();
       expect(result).toHaveLength(2); // Alpha and Gamma both in folder 1 and contain "hello"
     });

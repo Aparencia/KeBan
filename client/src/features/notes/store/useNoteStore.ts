@@ -1,14 +1,15 @@
 import { create } from 'zustand';
 import { noteStore, noteFolderStore } from '@/lib/storage';
 import type { Note, NoteFolder } from '@/types/models';
+import { generateId } from '@/lib/utils/uuid';
 
 interface NoteState {
   // 数据
   notes: Note[];
   folders: NoteFolder[];
   isLoading: boolean;
-  selectedNoteId: number | null;
-  selectedFolderId: number | null;
+  selectedNoteId: string | null;
+  selectedFolderId: string | null;
   searchQuery: string;
   selectedTags: string[];
 
@@ -18,20 +19,20 @@ interface NoteState {
     title: string;
     content?: string;
     template?: Note['template'];
-    folderId?: number;
+    folderId?: string;
     tags?: string[];
-  }) => Promise<number>;
-  updateNote: (id: number, changes: Partial<Note>) => Promise<void>;
-  deleteNote: (id: number) => Promise<void>;
-  togglePin: (id: number) => Promise<void>;
-  selectNote: (id: number | null) => void;
+  }) => Promise<string>;
+  updateNote: (id: string, changes: Partial<Note>) => Promise<void>;
+  deleteNote: (id: string) => Promise<void>;
+  togglePin: (id: string) => Promise<void>;
+  selectNote: (id: string | null) => void;
 
   // 文件夹操作
   loadFolders: () => Promise<void>;
-  createFolder: (name: string, parentId?: number, color?: string) => Promise<number>;
-  updateFolder: (id: number, changes: Partial<NoteFolder>) => Promise<void>;
-  deleteFolder: (id: number) => Promise<void>;
-  selectFolder: (id: number | null) => void;
+  createFolder: (name: string, parentId?: string, color?: string) => Promise<string>;
+  updateFolder: (id: string, changes: Partial<NoteFolder>) => Promise<void>;
+  deleteFolder: (id: string) => Promise<void>;
+  selectFolder: (id: string | null) => void;
 
   // 搜索
   setSearchQuery: (query: string) => void;
@@ -42,7 +43,7 @@ interface NoteState {
   getAllTags: () => string[];
 
   // 模板
-  createFromTemplate: (template: Note['template'], folderId?: number) => Promise<number>;
+  createFromTemplate: (template: Note['template'], folderId?: string) => Promise<string>;
 
   // 计算属性
   getFilteredNotes: () => Note[];
@@ -134,7 +135,9 @@ export const useNoteStore = create<NoteState>((set, get) => {
     createNote: async (data) => {
       const now = new Date();
       const content = data.content ?? '';
+      const id = generateId();
       const note: Note = {
+        id,
         title: data.title,
         content,
         template: data.template ?? 'blank',
@@ -145,9 +148,9 @@ export const useNoteStore = create<NoteState>((set, get) => {
         wordCount: content.length,
         pinned: false,
       };
-      const id = await noteStore.create(note);
+      await noteStore.create(note);
       await get().loadNotes();
-      return id as number;
+      return id;
     },
 
     updateNote: async (id, changes) => {
@@ -186,16 +189,18 @@ export const useNoteStore = create<NoteState>((set, get) => {
     },
 
     createFolder: async (name, parentId?, color?) => {
+      const id = generateId();
       const folder: NoteFolder = {
+        id,
         name,
         parentId,
         color,
         createdAt: new Date(),
         order: Date.now(),
       };
-      const id = await noteFolderStore.create(folder);
+      await noteFolderStore.create(folder);
       await get().loadFolders();
-      return id as number;
+      return id;
     },
 
     updateFolder: async (id, changes) => {

@@ -1,0 +1,154 @@
+"""
+课伴 AI 网关 — DeepSeekProvider（深度求索）
+
+通过 OpenAI 兼容 SDK 调用 DeepSeek API。
+- base_url: https://api.deepseek.com/v1
+- 支持缓存命中（系统提示复用可降低成本）
+- 所有 prompt 使用中文
+"""
+
+import time
+import logging
+from typing import Any
+
+import openai
+from openai import AsyncOpenAI
+
+from providers.base_provider import AIProvider
+from errors import ProviderUnavailableError, ModelResponseError, RateLimitExceededError
+
+logger = logging.getLogger(__name__)
+
+
+class DeepSeekProvider(AIProvider):
+    """DeepSeek Provider — 深度求索"""
+
+    def __init__(self, base_url: str, api_key: str):
+        super().__init__(base_url, api_key, provider_name="deepseek")
+        # 使用 openai SDK 的兼容模式连接 DeepSeek
+        self._client = AsyncOpenAI(
+            base_url=base_url,
+            api_key=api_key,
+        )
+
+    async def generate(
+        self,
+        prompt: str,
+        system_prompt: str = "",
+        model: str = "deepseek-chat",
+        temperature: float = 0.7,
+        max_tokens: int = 2048,
+        response_format: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """
+        调用 DeepSeek 生成内容
+
+        DeepSeek 支持 prompt 缓存，系统提示复用可降低 token 成本。
+        """
+        start_time = time.monotonic()
+
+        # 构建消息列表
+        messages: list[dict[str, str]] = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+
+        try:
+            # 构建请求参数
+            kwargs: dict[str, Any] = {
+                "model": model,
+                "messages": messages,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+            }
+            if response_format:
+                kwargs["response_format"] = response_format
+
+            response = await self._client.chat.completions.create(**kwargs)
+
+            latency_ms = int((time.monotonic() - start_time) * 1000)
+
+            # 提取结果
+            content = response.choices[0].message.content or ""
+            tokens_used = 0
+            if response.usage:
+                tokens_used = response.usage.total_tokens or 0
+
+            # DeepSeek 缓存命中信息（如果有的话）
+            cache_hit_tokens = 0
+            cache_miss_tokens = 0
+            cache_hit = False
+            effective_tokens = tokens_used
+
+            if hasattr(response, "usage") and response.usage is not None:
+                usage = response.usage
+                # DeepSeek 返回 prompt_cache_hit_tokens 表示缓存命中的 token 数
+                if hasattr(usage, "prompt_cache_hit_tokens"):
+                    cache_hit_tokens = getattr(usage, "prompt_cache_hit_tokens", 0) or 0
+                    cache_hit = cache_hit_tokens > 0
+
+                if cache_hit:
+                    prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
+                    completion_tokens = getattr(usage, "completion_tokens", 0) or 0
+                    cache_miss_tokens = prompt_tokens - cache_hit_tokens
+                    # DeepSeek 缓存命中按 1/4 价格计费
+                    effective_tokens = int(cache_hit_tokens * 0.25) + cache_miss_tokens + completion_tokens
+                    logger.info(
+                        "DeepSeek 缓存命中: hit=%d, miss=%d, 实际计费 token=%d",
+                        cache_hit_tokens, cache_miss_tokens, effective_tokens,
+                    )
+
+            logger.info(
+                "DeepSeekProvider 调用成功: model=%s, tokens=%d, effective_tokens=%d, latency=%dms, cache_hit=%s",
+                model, tokens_used, effective_tokens, latency_ms, cache_hit,
+            )
+
+            return {
+                "content": content,
+                "tokens_used": tokens_used,
+                "effective_tokens": effective_tokens,
+                "cache_hit": cache_hit,
+                "cache_hit_tokens": cache_hit_tokens,
+                "model": model,
+                "latency_ms": latency_ms,
+            }
+
+        except Exception as e:
+            latency_ms = int((time.monotonic() - start_time) * 1000)
+            err_str = str(e).lower()
+            logger.error("DeepSeekProvider 调用失败: %s (耗时 %dms)", str(e), latency_ms)
+
+            # 错误分类处理
+            if isinstance(e, openai.APITimeoutError) or "timeout" in err_str:
+                logger.warning("DeepSeekProvider 网络超时")
+                raise ProviderUnavailableError("deepseek", f"网络超时: {e}") from e
+
+            if isinstance(e, openai.RateLimitError) or "rate_limit" in err_str or "429" in err_str:
+                logger.warning("DeepSeekProvider 触发频率限制")
+                raise RateLimitExceededError("deepseek", 0) from e
+
+            if isinstance(e, openai.APIConnectionError) or "connection" in err_str:
+                logger.warning("DeepSeekProvider 连接失败")
+                raise ProviderUnavailableError("deepseek", f"连接失败: {e}") from e
+
+            if "content" in err_str and ("filter" in err_str or "policy" in err_str or "审核" in err_str):
+                logger.warning("DeepSeekProvider 内容审核拦截")
+                raise ModelResponseError(model, "内容未通过安全审核") from e
+
+            raise ModelResponseError(model, str(e)) from e
+
+    async def health_check(self) -> bool:
+        """检查 DeepSeek API 是否可用（发送轻量级请求验证）"""
+        if not self.api_key:
+            return False
+        try:
+            response = await self._client.chat.completions.create(
+                model="deepseek-chat",
+                messages=[{"role": "user", "content": "ping"}],
+                max_tokens=1,
+                temperature=0,
+            )
+            return response.choices is not None and len(response.choices) > 0
+        except Exception as e:
+            logger.warning("DeepSeekProvider health check 失败: %s", str(e))
+            return False

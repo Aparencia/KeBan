@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Button, Card, Modal, Input, Tag, EmptyState, Skeleton } from '@/components/ui';
+import { Button, Card, Modal, Input, Tag, EmptyState, Skeleton, useToast } from '@/components/ui';
 import {
   ArrowLeft,
   BookOpen,
@@ -10,14 +10,17 @@ import {
   Plus,
   Pencil,
   Trash2,
+  Loader2,
+  Check,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useFlashcardStore } from '../store/useFlashcardStore';
+import { useAIFlashcards } from '@/lib/ai/useAI';
+import type { Flashcard as AIFlashcard } from '@/lib/ai/types';
 
 export default function DeckDetailPage() {
   const { deckId } = useParams<{ deckId: string }>();
   const navigate = useNavigate();
-  const numericDeckId = Number(deckId);
 
   const {
     decks,
@@ -32,27 +35,35 @@ export default function DeckDetailPage() {
     getDeckStats,
   } = useFlashcardStore();
 
-  const deck = decks.find((d) => d.id === numericDeckId);
+  const deck = decks.find((d) => d.id === deckId);
 
   // Add / Edit modal state
   const [cardModalOpen, setCardModalOpen] = useState(false);
-  const [editingCardId, setEditingCardId] = useState<number | null>(null);
+  const [editingCardId, setEditingCardId] = useState<string | null>(null);
   const [cardFront, setCardFront] = useState('');
   const [cardBack, setCardBack] = useState('');
   const [saving, setSaving] = useState(false);
 
   // Delete confirm
-  const [deleteCardId, setDeleteCardId] = useState<number | null>(null);
+  const [deleteCardId, setDeleteCardId] = useState<string | null>(null);
+
+  // AI generate state
+  const [aiModalOpen, setAIModalOpen] = useState(false);
+  const [aiInputContent, setAIInputContent] = useState('');
+  const [aiGeneratedCards, setAIGeneratedCards] = useState<AIFlashcard[]>([]);
+  const [aiAddingIndex, setAIAddingIndex] = useState<number | null>(null);
+  const { loading: aiLoading, error: aiError, generate } = useAIFlashcards();
+  const { toast } = useToast();
 
   useEffect(() => {
-    if (!isNaN(numericDeckId)) {
+    if (deckId) {
       loadDecks();
-      selectDeck(numericDeckId);
-      loadCards(numericDeckId);
+      selectDeck(deckId);
+      loadCards(deckId);
     }
-  }, [numericDeckId, loadDecks, selectDeck, loadCards]);
+  }, [deckId, loadDecks, selectDeck, loadCards]);
 
-  const stats = !isNaN(numericDeckId) ? getDeckStats(numericDeckId) : { total: 0, due: 0, newCards: 0 };
+  const stats = deckId ? getDeckStats(deckId) : { total: 0, due: 0, newCards: 0 };
 
   const statItems = [
     { label: '总卡片', value: stats.total, icon: BookOpen, color: 'text-flashcard' },
@@ -90,7 +101,7 @@ export default function DeckDetailPage() {
         await updateCard(editingCardId, { front: cardFront.trim(), back: cardBack.trim() });
       } else {
         await createCard({
-          deckId: numericDeckId,
+          deckId: deckId!,
           front: cardFront.trim(),
           back: cardBack.trim(),
           type: 'basic',
@@ -135,6 +146,19 @@ export default function DeckDetailPage() {
         </div>
         <Button size="sm" icon={<Plus className="w-icon-sm h-icon-sm" strokeWidth={2} />} onClick={openAddModal}>
           添加卡片
+        </Button>
+
+        <Button
+          size="sm"
+          variant="secondary"
+          icon={aiLoading ? <Loader2 className="w-icon-sm h-icon-sm animate-spin" /> : <Sparkles className="w-icon-sm h-icon-sm" />}
+          onClick={() => {
+            setAIInputContent('');
+            setAIGeneratedCards([]);
+            setAIModalOpen(true);
+          }}
+        >
+          AI 生成闪卡
         </Button>
       </div>
 
@@ -260,6 +284,103 @@ export default function DeckDetailPage() {
             value={cardBack}
             onChange={(e) => setCardBack(e.target.value)}
           />
+        </div>
+      </Modal>
+
+      {/* AI 生成闪卡 Modal */}
+      <Modal
+        open={aiModalOpen}
+        onClose={() => setAIModalOpen(false)}
+        title="AI 生成闪卡"
+        description="输入知识内容，AI 将自动生成闪卡"
+        size="lg"
+        footer={
+          aiGeneratedCards.length === 0 ? (
+            <>
+              <Button variant="secondary" onClick={() => setAIModalOpen(false)}>取消</Button>
+              <Button
+                onClick={() => {
+                  if (!aiInputContent.trim()) {
+                    toast({ type: 'warning', message: '请输入一些内容再生成闪卡' });
+                    return;
+                  }
+                  generate(aiInputContent)
+                    .then((result) => {
+                      if (result) setAIGeneratedCards(result.cards);
+                    })
+                    .catch(() => toast({ type: 'error', message: 'AI 生成失败，请稍后重试' }));
+                }}
+                loading={aiLoading}
+                disabled={!aiInputContent.trim()}
+                icon={<Sparkles className="w-icon-sm h-icon-sm" />}
+              >
+                生成闪卡
+              </Button>
+            </>
+          ) : (
+            <Button variant="secondary" onClick={() => setAIModalOpen(false)}>关闭</Button>
+          )
+        }
+      >
+        <div className="flex flex-col gap-kb-md">
+          {aiGeneratedCards.length === 0 ? (
+            <>
+              <div>
+                <label className="text-b2 font-medium text-text-primary mb-kb-xs block">知识内容</label>
+                <textarea
+                  value={aiInputContent}
+                  onChange={(e) => setAIInputContent(e.target.value)}
+                  placeholder="粘贴或输入笔记、教材内容等，AI 将提取关键信息生成闪卡…"
+                  className={cn(
+                    'w-full min-h-[120px] p-kb-md bg-bg-secondary border border-border/50 rounded-kb-md',
+                    'text-b2 text-text-primary placeholder:text-text-tertiary/60',
+                    'outline-none focus:border-brand-500/50 focus:ring-1 focus:ring-brand-500/20',
+                    'resize-y',
+                  )}
+                />
+              </div>
+              {aiError && (
+                <div className="p-3 rounded-kb-md bg-rose-500/10 border border-rose-500/20 text-b2 text-rose-500">
+                  {aiError}
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="flex flex-col gap-kb-sm">
+              <p className="text-b2 text-text-tertiary mb-1">
+                生成 {aiGeneratedCards.length} 张闪卡，点击「添加到卡组」将其加入当前牌组：
+              </p>
+              {aiGeneratedCards.map((card, idx) => (
+                <Card key={idx} padding="sm" className="flex items-start gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-b2 font-medium text-text-primary">{card.front}</p>
+                    <p className="text-b3 text-text-secondary mt-0.5">{card.back}</p>
+                    {card.hint && <p className="text-c1 text-text-tertiary mt-0.5 italic">提示：{card.hint}</p>}
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    icon={<Check className="w-icon-sm h-icon-sm" />}
+                    disabled={aiAddingIndex === idx}
+                    onClick={() => {
+                      setAIAddingIndex(idx);
+                      createCard({
+                        deckId: deckId!,
+                        front: card.front,
+                        back: card.back,
+                        type: 'basic',
+                      })
+                        .then(() => toast({ type: 'success', message: '卡片已添加' }))
+                        .catch(() => toast({ type: 'error', message: '添加失败' }))
+                        .finally(() => setAIAddingIndex(null));
+                    }}
+                  >
+                    {aiAddingIndex === idx ? '添加中…' : '添加到卡组'}
+                  </Button>
+                </Card>
+              ))}
+            </div>
+          )}
         </div>
       </Modal>
 

@@ -35,13 +35,12 @@ export default function FeynmanPage() {
   const [weakModalOpen, setWeakModalOpen] = useState(false);
   const [newConcept, setNewConcept] = useState('');
   const [creating, setCreating] = useState(false);
-  const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
 
   // 汇总所有未掌握的薄弱点，附带来源概念名
   const unmasteredWeakPoints = useMemo(() => {
-    const result: { wp: (typeof weakPoints)[number][number]; concept: string; noteId: number }[] = [];
-    for (const [noteIdStr, wps] of Object.entries(weakPoints)) {
-      const noteId = Number(noteIdStr);
+    const result: { wp: (typeof weakPoints)[number][number]; concept: string; noteId: string }[] = [];
+    for (const [noteId, wps] of Object.entries(weakPoints)) {
       const note = notes.find((n) => n.id === noteId);
       const concept = note?.concept ?? '未知概念';
       for (const wp of wps) {
@@ -82,7 +81,7 @@ export default function FeynmanPage() {
     }
   }, [newConcept, createNote, navigate]);
 
-  const handleDelete = useCallback(async (id: number, e: React.MouseEvent) => {
+  const handleDelete = useCallback(async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     await deleteNote(id);
     setDeleteId(null);

@@ -7,6 +7,7 @@ import {
 import { createNewCardState } from '@/lib/sm2';
 import type { Flashcard, FlashcardDeck } from '@/types/models';
 import { useStudySessionStore } from './useStudySessionStore';
+import { generateId } from '@/lib/utils/uuid';
 
 // ---------------------------------------------------------------------------
 // 类型定义
@@ -23,28 +24,28 @@ interface FlashcardState {
   decks: FlashcardDeck[];
   cards: Flashcard[];
   isLoading: boolean;
-  selectedDeckId: number | null;
+  selectedDeckId: string | null;
 
   // 牌组操作
   loadDecks: () => Promise<void>;
-  createDeck: (name: string, description?: string, color?: string) => Promise<number>;
-  updateDeck: (id: number, changes: Partial<FlashcardDeck>) => Promise<void>;
-  deleteDeck: (id: number) => Promise<void>;
-  selectDeck: (id: number | null) => void;
+  createDeck: (name: string, description?: string, color?: string) => Promise<string>;
+  updateDeck: (id: string, changes: Partial<FlashcardDeck>) => Promise<void>;
+  deleteDeck: (id: string) => Promise<void>;
+  selectDeck: (id: string | null) => void;
 
   // 卡片操作
-  loadCards: (deckId: number) => Promise<void>;
+  loadCards: (deckId: string) => Promise<void>;
   createCard: (
     card: Omit<
       Flashcard,
       'id' | 'easeFactor' | 'interval' | 'repetitions' | 'dueDate' | 'createdAt' | 'updatedAt' | 'order'
     >,
-  ) => Promise<number>;
-  updateCard: (id: number, changes: Partial<Flashcard>) => Promise<void>;
-  deleteCard: (id: number) => Promise<void>;
+  ) => Promise<string>;
+  updateCard: (id: string, changes: Partial<Flashcard>) => Promise<void>;
+  deleteCard: (id: string) => Promise<void>;
 
   // 统计
-  getDeckStats: (deckId: number) => DeckStats;
+  getDeckStats: (deckId: string) => DeckStats;
 }
 
 // ---------------------------------------------------------------------------
@@ -75,7 +76,9 @@ export const useFlashcardStore = create<FlashcardState>((set, get) => {
 
     createDeck: async (name, description, color) => {
       const now = new Date();
+      const id = generateId();
       const deck: FlashcardDeck = {
+        id,
         name,
         description,
         color,
@@ -83,10 +86,10 @@ export const useFlashcardStore = create<FlashcardState>((set, get) => {
         updatedAt: now,
         order: Date.now(),
       };
-      const id = await flashcardDeckStore.create(deck);
+      await flashcardDeckStore.create(deck);
       // 将新牌组追加到本地状态
-      set((state) => ({ decks: [...state.decks, { ...deck, id }] }));
-      return id as number;
+      set((state) => ({ decks: [...state.decks, deck] }));
+      return id;
     },
 
     updateDeck: async (id, changes) => {
@@ -144,8 +147,10 @@ export const useFlashcardStore = create<FlashcardState>((set, get) => {
     createCard: async (cardInput) => {
       const now = new Date();
       const sm2Init = createNewCardState();
+      const id = generateId();
       const card: Flashcard = {
         ...cardInput,
+        id,
         easeFactor: sm2Init.easeFactor,
         interval: sm2Init.interval,
         repetitions: sm2Init.repetitions,
@@ -154,9 +159,9 @@ export const useFlashcardStore = create<FlashcardState>((set, get) => {
         updatedAt: now,
         order: Date.now(),
       };
-      const id = await flashcardStore.create(card);
-      set((state) => ({ cards: [...state.cards, { ...card, id }] }));
-      return id as number;
+      await flashcardStore.create(card);
+      set((state) => ({ cards: [...state.cards, card] }));
+      return id;
     },
 
     updateCard: async (id, changes) => {

@@ -24,7 +24,7 @@ export default function FlashcardsPage() {
   const [newDesc, setNewDesc] = useState('');
   const [creating, setCreating] = useState(false);
   // Context menu / long-press delete
-  const [deleteTarget, setDeleteTarget] = useState<number | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Load decks + all cards on mount
@@ -35,7 +35,7 @@ export default function FlashcardsPage() {
 
   // Compute stats for a given deck
   const getStats = useCallback(
-    (deckId: number): DeckLocalStats => {
+    (deckId: string): DeckLocalStats => {
       const deckCards = allCards.filter((c) => c.deckId === deckId);
       const now = new Date();
       return {
@@ -65,7 +65,7 @@ export default function FlashcardsPage() {
   };
 
   // Delete deck
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: string) => {
     await deleteDeck(id);
     const cards = await flashcardStore.getAll();
     setAllCards(cards);
@@ -73,7 +73,7 @@ export default function FlashcardsPage() {
   };
 
   // Long press handlers
-  const handlePointerDown = (id: number) => {
+  const handlePointerDown = (id: string) => {
     longPressTimer.current = setTimeout(() => {
       setDeleteTarget(id);
     }, 600);
@@ -86,7 +86,7 @@ export default function FlashcardsPage() {
   };
 
   // Right-click handler
-  const handleContextMenu = (e: React.MouseEvent, id: number) => {
+  const handleContextMenu = (e: React.MouseEvent, id: string) => {
     e.preventDefault();
     setDeleteTarget(id);
   };

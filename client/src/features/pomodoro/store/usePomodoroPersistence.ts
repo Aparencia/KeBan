@@ -1,12 +1,15 @@
 import { pomodoroSettingsStore, pomodoroSessionStore } from '@/lib/storage';
 import type { PomodoroSession, PomodoroSettings } from '@/types/models';
 import { playBeep } from '@/utils/sound';
+import { generateId } from '@/lib/utils/uuid';
+
+const SETTINGS_ID = 'default';
 
 /**
  * 从 IndexedDB 加载番茄钟设置
  */
 export async function loadSettings(): Promise<PomodoroSettings | null> {
-  const existing = await pomodoroSettingsStore.getById(1);
+  const existing = await pomodoroSettingsStore.getById(SETTINGS_ID);
   if (existing) return existing;
 
   const all = await pomodoroSettingsStore.getAll();
@@ -16,12 +19,12 @@ export async function loadSettings(): Promise<PomodoroSettings | null> {
 /**
  * 保存番茄钟设置到 IndexedDB（固定 id=1，存在则更新，不存在则创建）
  */
-export async function saveSettings(settings: PomodoroSettings): Promise<void> {
-  const existing = await pomodoroSettingsStore.getById(1);
+export async function saveSettings(settings: Omit<PomodoroSettings, 'id'>): Promise<void> {
+  const existing = await pomodoroSettingsStore.getById(SETTINGS_ID);
   if (existing) {
-    await pomodoroSettingsStore.update(1, settings);
+    await pomodoroSettingsStore.update(SETTINGS_ID, settings);
   } else {
-    await pomodoroSettingsStore.create({ ...settings, id: 1 } as PomodoroSettings);
+    await pomodoroSettingsStore.create({ ...settings, id: SETTINGS_ID } as PomodoroSettings);
   }
 }
 
@@ -31,7 +34,7 @@ export async function saveSettings(settings: PomodoroSettings): Promise<void> {
 export async function recordSession(
   session: Omit<PomodoroSession, 'id'>,
 ): Promise<void> {
-  await pomodoroSessionStore.create(session as PomodoroSession);
+  await pomodoroSessionStore.create({ ...session, id: generateId() } as PomodoroSession);
 }
 
 /**

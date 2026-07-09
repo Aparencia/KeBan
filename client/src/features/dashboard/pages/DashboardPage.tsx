@@ -6,7 +6,6 @@ import {
   Layers,
   Lightbulb,
   CheckCircle2,
-  BookOpen,
   Activity,
   PenLine,
   Brain,
@@ -16,7 +15,7 @@ import { pomodoroSessionStore, flashcardStore, flashcardReviewStore } from '@/li
 import { useFlashcardStore } from '@/features/flashcards/store/useFlashcardStore';
 import { useNoteStore } from '@/features/notes/store/useNoteStore';
 import { useFeynmanStore } from '@/features/feynman/store/useFeynmanStore';
-import type { PomodoroSession, Flashcard, FlashcardReview, Note, FeynmanNote } from '@/types/models';
+import type { PomodoroSession, Flashcard, FlashcardReview } from '@/types/models';
 
 /* ---- 工具函数 ---- */
 

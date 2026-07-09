@@ -1,6 +1,8 @@
 import { RouterProvider } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ToastProvider } from '@/components/ui/Toast';
+import { AuthProvider } from '@/lib/auth/AuthContext';
+import { SyncProvider } from '@/lib/sync/SyncContext';
 import { router } from '@/routes';
 import { useTheme } from '@/hooks/useTheme';
 
@@ -19,9 +21,13 @@ function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <ToastProvider>
-        <RouterProvider router={router} />
-      </ToastProvider>
+      <AuthProvider>
+        <SyncProvider>
+          <ToastProvider>
+            <RouterProvider router={router} />
+          </ToastProvider>
+        </SyncProvider>
+      </AuthProvider>
     </QueryClientProvider>
   );
 }

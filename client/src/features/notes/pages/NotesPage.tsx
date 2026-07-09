@@ -84,7 +84,7 @@ export default function NotesPage() {
     }
   };
 
-  const handleSelectNote = (noteId: number) => {
+  const handleSelectNote = (noteId: string) => {
     selectNote(noteId);
     navigate(`/notes/${noteId}`);
   };

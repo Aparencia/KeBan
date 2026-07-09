@@ -9,12 +9,19 @@ dist/
 build/
 *.exe
 *.wasm
+*.pdb
+*.dll
+client/src-tauri/target/
 
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
+.qoder/
+
+# Git worktree
+vPpiCi/
 
 # OS
 .DS_Store

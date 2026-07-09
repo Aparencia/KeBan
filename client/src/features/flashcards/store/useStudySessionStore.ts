@@ -6,6 +6,7 @@ import {
 import { sm2, Rating } from '@/lib/sm2';
 import type { Flashcard, FlashcardReview } from '@/types/models';
 import { useFlashcardStore } from './useFlashcardStore';
+import { generateId } from '@/lib/utils/uuid';
 
 // ---------------------------------------------------------------------------
 // 常量
@@ -32,12 +33,12 @@ interface StudySessionState {
   cardStartTime: Date | null;
 
   // 会话操作
-  startSession: (deckId: number) => Promise<void>;
+  startSession: (deckId: string) => Promise<void>;
   rateCard: (rating: Rating) => Promise<void>;
   flipCard: () => void;
   endSession: () => void;
   /** 清理指定牌组的会话数据（牌组删除时调用） */
-  clearDeckSession: (deckId: number) => void;
+  clearDeckSession: (deckId: string) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -175,6 +176,7 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
 
       // 创建复习记录（FlashcardReview.rating 为 1-4，需 +1 映射）
       const review: FlashcardReview = {
+        id: generateId(),
         cardId: card.id,
         deckId: card.deckId,
         rating: (rating + 1) as FlashcardReview['rating'],
@@ -249,7 +251,7 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
     // -----------------------------------------------------------------------
     // clearDeckSession：牌组删除时清理对应会话数据
     // -----------------------------------------------------------------------
-    clearDeckSession: (deckId: number) => {
+    clearDeckSession: (deckId: string) => {
       const { sessionCards, isActive } = get();
       if (!isActive) return;
       // 如果当前会话中包含该牌组的卡片，结束会话

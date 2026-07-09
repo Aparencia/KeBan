@@ -17,6 +17,8 @@ const FeynmanPage = lazy(() => import('@/features/feynman/pages/FeynmanPage'));
 const FeynmanSessionPage = lazy(() => import('@/features/feynman/pages/FeynmanSessionPage'));
 const SettingsPage = lazy(() => import('@/pages/SettingsPage'));
 const OnboardingPage = lazy(() => import('@/pages/OnboardingPage'));
+const LoginPage = lazy(() => import('@/pages/LoginPage'));
+const RegisterPage = lazy(() => import('@/pages/RegisterPage'));
 
 // Loading fallback
 function PageLoader() {
@@ -55,6 +57,14 @@ const routes: RouteObject[] = [
   {
     path: '/onboarding',
     element: <SuspenseWrapper><OnboardingPage /></SuspenseWrapper>,
+  },
+  {
+    path: '/login',
+    element: <SuspenseWrapper><LoginPage /></SuspenseWrapper>,
+  },
+  {
+    path: '/register',
+    element: <SuspenseWrapper><RegisterPage /></SuspenseWrapper>,
   },
 ];
 

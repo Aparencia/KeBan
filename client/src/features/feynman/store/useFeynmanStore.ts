@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { feynmanNoteStore, feynmanSummaryStore, feynmanWeakPointStore } from '@/lib/storage';
 import type { FeynmanNote, FeynmanSummary, FeynmanWeakPoint } from '@/types/models';
+import { generateId } from '@/lib/utils/uuid';
 
 // ── Store 内部组合视图（用于 UI 展示）─────────────────────────
 
@@ -15,30 +16,30 @@ export interface FeynmanNoteView {
 interface FeynmanState {
   // 数据
   notes: FeynmanNote[];
-  summaries: Record<number, FeynmanSummary | null>;        // noteId → summary
-  weakPoints: Record<number, FeynmanWeakPoint[]>;          // noteId → weakPoints[]
-  currentNoteId: number | null;
+  summaries: Record<string, FeynmanSummary | null>;        // noteId → summary
+  weakPoints: Record<string, FeynmanWeakPoint[]>;          // noteId → weakPoints[]
+  currentNoteId: string | null;
   isLoading: boolean;
 
   // 会话操作
   loadNotes: () => Promise<void>;
-  loadNote: (id: number) => Promise<void>;
-  createNote: (concept: string) => Promise<number>;
-  updateNote: (id: number, changes: Partial<FeynmanNote>) => Promise<void>;
-  deleteNote: (id: number) => Promise<void>;
+  loadNote: (id: string) => Promise<void>;
+  createNote: (concept: string) => Promise<string>;
+  updateNote: (id: string, changes: Partial<FeynmanNote>) => Promise<void>;
+  deleteNote: (id: string) => Promise<void>;
 
   // 四步流程
-  setExplanation: (noteId: number, explanation: string) => Promise<void>;
-  addWeakPoint: (noteId: number, weakPoint: Omit<FeynmanWeakPoint, 'id' | 'noteId' | 'createdAt'>) => Promise<number>;
-  removeWeakPoint: (noteId: number, weakPointId: number) => Promise<void>;
-  toggleWeakPointMastered: (noteId: number, weakPointId: number) => Promise<void>;
-  setSimplifiedSummary: (noteId: number, summary: string) => Promise<void>;
-  advanceStep: (noteId: number) => Promise<void>;
-  setSelfRating: (noteId: number, rating: number) => Promise<void>;
-  completeNote: (noteId: number) => Promise<void>;
+  setExplanation: (noteId: string, explanation: string) => Promise<void>;
+  addWeakPoint: (noteId: string, weakPoint: Omit<FeynmanWeakPoint, 'id' | 'noteId' | 'createdAt'>) => Promise<string>;
+  removeWeakPoint: (noteId: string, weakPointId: string) => Promise<void>;
+  toggleWeakPointMastered: (noteId: string, weakPointId: string) => Promise<void>;
+  setSimplifiedSummary: (noteId: string, summary: string) => Promise<void>;
+  advanceStep: (noteId: string) => Promise<void>;
+  setSelfRating: (noteId: string, rating: number) => Promise<void>;
+  completeNote: (noteId: string) => Promise<void>;
 
   // 批量加载
-  loadWeakPointsForNotes: (noteIds: number[]) => Promise<void>;
+  loadWeakPointsForNotes: (noteIds: string[]) => Promise<void>;
 
   // 统计
   getStats: () => { total: number; completed: number; weakPointsCount: number };
@@ -80,7 +81,7 @@ export const useFeynmanStore = create<FeynmanState>((set, get) => {
       }
     },
 
-    loadNote: async (id: number) => {
+    loadNote: async (id: string) => {
       set({ isLoading: true });
       try {
         const [note, summaries, weakPoints] = await Promise.all([
@@ -108,7 +109,9 @@ export const useFeynmanStore = create<FeynmanState>((set, get) => {
 
     createNote: async (concept: string) => {
       const now = new Date();
+      const id = generateId();
       const note: FeynmanNote = {
+        id,
         concept,
         explanation: '',
         status: 'not_started',
@@ -116,18 +119,17 @@ export const useFeynmanStore = create<FeynmanState>((set, get) => {
         createdAt: now,
         updatedAt: now,
       };
-      const id = await feynmanNoteStore.create(note);
-      const created = { ...note, id } as FeynmanNote;
+      await feynmanNoteStore.create(note);
       set((state) => ({
-        notes: [created, ...state.notes],
+        notes: [note, ...state.notes],
         summaries: { ...state.summaries, [id]: null },
         weakPoints: { ...state.weakPoints, [id]: [] },
         currentNoteId: id,
       }));
-      return id as number;
+      return id;
     },
 
-    updateNote: async (id: number, changes: Partial<FeynmanNote>) => {
+    updateNote: async (id: string, changes: Partial<FeynmanNote>) => {
       const current = get().notes.find((n) => n.id === id);
       if (!current) return;
       const updated: FeynmanNote = { ...current, ...changes, updatedAt: new Date() };
@@ -135,7 +137,7 @@ export const useFeynmanStore = create<FeynmanState>((set, get) => {
       set((state) => ({ notes: patchNote(state.notes, updated) }));
     },
 
-    deleteNote: async (id: number) => {
+    deleteNote: async (id: string) => {
       // 删除关联的 summary 和 weakPoints
       const summaries = await feynmanSummaryStore.where('noteId', id);
       const weakPoints = await feynmanWeakPointStore.where('noteId', id);
@@ -162,7 +164,7 @@ export const useFeynmanStore = create<FeynmanState>((set, get) => {
 
     // ── 四步流程 ────────────────────────────────────────────
 
-    setExplanation: async (noteId: number, explanation: string) => {
+    setExplanation: async (noteId: string, explanation: string) => {
       const note = get().notes.find((n) => n.id === noteId);
       if (!note) return;
 
@@ -178,26 +180,27 @@ export const useFeynmanStore = create<FeynmanState>((set, get) => {
       set((state) => ({ notes: patchNote(state.notes, updated) }));
     },
 
-    addWeakPoint: async (noteId: number, weakPoint: Omit<FeynmanWeakPoint, 'id' | 'noteId' | 'createdAt'>) => {
+    addWeakPoint: async (noteId: string, weakPoint: Omit<FeynmanWeakPoint, 'id' | 'noteId' | 'createdAt'>) => {
+      const id = generateId();
       const record: FeynmanWeakPoint = {
         ...weakPoint,
+        id,
         noteId,
         mastered: weakPoint.mastered ?? false,
         createdAt: new Date(),
       };
-      const id = await feynmanWeakPointStore.create(record);
-      const created = { ...record, id } as FeynmanWeakPoint;
+      await feynmanWeakPointStore.create(record);
 
       set((state) => ({
         weakPoints: {
           ...state.weakPoints,
-          [noteId]: [...(state.weakPoints[noteId] ?? []), created],
+          [noteId]: [...(state.weakPoints[noteId] ?? []), record],
         },
       }));
-      return id as number;
+      return id;
     },
 
-    removeWeakPoint: async (noteId: number, weakPointId: number) => {
+    removeWeakPoint: async (noteId: string, weakPointId: string) => {
       await feynmanWeakPointStore.delete(weakPointId);
       set((state) => ({
         weakPoints: {
@@ -207,7 +210,7 @@ export const useFeynmanStore = create<FeynmanState>((set, get) => {
       }));
     },
 
-    toggleWeakPointMastered: async (noteId: number, weakPointId: number) => {
+    toggleWeakPointMastered: async (noteId: string, weakPointId: string) => {
       const wps = get().weakPoints[noteId] ?? [];
       const wp = wps.find((w) => w.id === weakPointId);
       if (!wp) return;
@@ -225,7 +228,7 @@ export const useFeynmanStore = create<FeynmanState>((set, get) => {
       }));
     },
 
-    setSimplifiedSummary: async (noteId: number, summary: string) => {
+    setSimplifiedSummary: async (noteId: string, summary: string) => {
       const existing = get().summaries[noteId];
 
       if (existing) {
@@ -238,20 +241,22 @@ export const useFeynmanStore = create<FeynmanState>((set, get) => {
       } else {
         // 新建记录
         const now = new Date();
+        const id = generateId();
         const record: FeynmanSummary = {
+          id,
           noteId,
           summary,
           createdAt: now,
           updatedAt: now,
         };
-        const id = await feynmanSummaryStore.create(record);
+        await feynmanSummaryStore.create(record);
         set((state) => ({
-          summaries: { ...state.summaries, [noteId]: { ...record, id } as FeynmanSummary },
+          summaries: { ...state.summaries, [noteId]: record },
         }));
       }
     },
 
-    advanceStep: async (noteId: number) => {
+    advanceStep: async (noteId: string) => {
       const note = get().notes.find((n) => n.id === noteId);
       if (!note) return;
 
@@ -280,7 +285,7 @@ export const useFeynmanStore = create<FeynmanState>((set, get) => {
       set((state) => ({ notes: patchNote(state.notes, updated) }));
     },
 
-    setSelfRating: async (noteId: number, rating: number) => {
+    setSelfRating: async (noteId: string, rating: number) => {
       const note = get().notes.find((n) => n.id === noteId);
       if (!note) return;
 
@@ -289,7 +294,7 @@ export const useFeynmanStore = create<FeynmanState>((set, get) => {
       set((state) => ({ notes: patchNote(state.notes, updated) }));
     },
 
-    completeNote: async (noteId: number) => {
+    completeNote: async (noteId: string) => {
       const note = get().notes.find((n) => n.id === noteId);
       if (!note) return;
 
@@ -306,10 +311,10 @@ export const useFeynmanStore = create<FeynmanState>((set, get) => {
 
     // ── 批量加载 ──────────────────────────────────────────────
 
-    loadWeakPointsForNotes: async (noteIds: number[]) => {
+    loadWeakPointsForNotes: async (noteIds: string[]) => {
       if (noteIds.length === 0) return;
       const allWp = await feynmanWeakPointStore.getAll();
-      const grouped: Record<number, FeynmanWeakPoint[]> = {};
+      const grouped: Record<string, FeynmanWeakPoint[]> = {};
       for (const id of noteIds) grouped[id] = [];
       for (const wp of allWp) {
         if (noteIds.includes(wp.noteId)) {

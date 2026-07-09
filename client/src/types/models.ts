@@ -1,6 +1,6 @@
 // 番茄钟会话记录
 export interface PomodoroSession {
-  id?: number;
+  id: string;
   mode: 'class' | 'self_study';  // 上课模式 / 自习模式
   subject?: string;              // 科目（可选）
   duration: number;              // 计划时长（秒）
@@ -11,7 +11,7 @@ export interface PomodoroSession {
 
 // 番茄钟配置
 export interface PomodoroSettings {
-  id?: number;
+  id: string;
   workDuration: number;          // 工作时长（分钟），默认 25
   shortBreakDuration: number;    // 短休息（分钟），默认 5
   longBreakDuration: number;     // 长休息（分钟），默认 15
@@ -25,11 +25,11 @@ export interface PomodoroSettings {
 
 // 笔记
 export interface Note {
-  id?: number;
+  id: string;
   title: string;
   content: string;               // TipTap JSON 内容
   template: 'outline' | 'cornell' | 'mindmap' | 'free' | 'qa' | 'blank';
-  folderId?: number;
+  folderId?: string;
   tags: string[];
   createdAt: Date;
   updatedAt: Date;
@@ -39,9 +39,9 @@ export interface Note {
 
 // 笔记文件夹
 export interface NoteFolder {
-  id?: number;
+  id: string;
   name: string;
-  parentId?: number;             // 支持嵌套文件夹
+  parentId?: string;             // 支持嵌套文件夹
   color?: string;                // 文件夹颜色标识
   createdAt: Date;
   order: number;                 // 排序权重
@@ -49,10 +49,10 @@ export interface NoteFolder {
 
 // 闪卡牌组
 export interface FlashcardDeck {
-  id?: number;
+  id: string;
   name: string;
   description?: string;
-  parentId?: number;             // 支持嵌套牌组
+  parentId?: string;             // 支持嵌套牌组
   color?: string;
   createdAt: Date;
   updatedAt: Date;
@@ -61,8 +61,8 @@ export interface FlashcardDeck {
 
 // 闪卡
 export interface Flashcard {
-  id?: number;
-  deckId: number;
+  id: string;
+  deckId: string;
   front: string;                 // 正面内容（支持 HTML/Markdown）
   back: string;                  // 背面内容
   type: 'basic' | 'cloze' | 'multi_choice';  // 卡片类型
@@ -79,9 +79,9 @@ export interface Flashcard {
 
 // 闪卡复习记录
 export interface FlashcardReview {
-  id?: number;
-  cardId: number;
-  deckId: number;
+  id: string;
+  cardId: string;
+  deckId: string;
   rating: 1 | 2 | 3 | 4;       // Again(1) / Hard(2) / Good(3) / Easy(4)
   easeFactorBefore: number;
   easeFactorAfter: number;
@@ -93,7 +93,7 @@ export interface FlashcardReview {
 
 // 费曼学习笔记
 export interface FeynmanNote {
-  id?: number;
+  id: string;
   concept: string;               // 学习的概念
   explanation: string;           // 讲解内容（第一步）
   status: 'not_started' | 'in_progress' | 'completed';
@@ -106,8 +106,8 @@ export interface FeynmanNote {
 
 // 费曼简化总结（第四步）
 export interface FeynmanSummary {
-  id?: number;
-  noteId: number;                // 关联 feynmanNotes.id
+  id: string;
+  noteId: string;                // 关联 feynmanNotes.id
   summary: string;               // 简化重述内容
   createdAt: Date;
   updatedAt: Date;
@@ -115,8 +115,8 @@ export interface FeynmanSummary {
 
 // 费曼薄弱点（第二步）
 export interface FeynmanWeakPoint {
-  id?: number;
-  noteId: number;
+  id: string;
+  noteId: string;
   text: string;
   position: { start: number; end: number };
   mastered: boolean;
@@ -125,19 +125,49 @@ export interface FeynmanWeakPoint {
 
 // 操作日志（为后续同步预留）
 export interface OperationLog {
-  id?: number;
+  id: string;
   entityType: string;            // 'note' | 'flashcard' | 'pomodoro' | 'feynman' 等
-  entityId: number | string;
+  entityId: string;
   operation: 'create' | 'update' | 'delete';
   payload?: string;              // JSON 格式的变更数据
   createdAt: Date;
   synced: boolean;               // 是否已同步到云端
+  // MVP-2 新增同步字段
+  version: number;
+  deviceId: string;
+  patch?: string;
 }
 
 // 应用设置
 export interface AppSettings {
-  id?: number;
+  id: string;
   key: string;                   // 设置键名
   value: string;                 // 设置值（JSON 字符串）
   updatedAt: Date;
+}
+
+// MVP-2 同步相关接口
+export interface SyncConflict {
+  id: string;
+  entityType: string;
+  entityId: string;
+  localData: string;  // JSON serialized
+  remoteData: string; // JSON serialized
+  localVersion: number;
+  remoteVersion: number;
+  status: 'pending' | 'resolved-local' | 'resolved-remote' | 'resolved-manual';
+  createdAt: Date;
+  resolvedAt?: Date;
+}
+
+export interface OfflineQueueItem {
+  id: string;
+  entityType: string;
+  entityId: string;
+  operation: 'create' | 'update' | 'delete';
+  payload?: string;
+  version: number;
+  deviceId: string;
+  createdAt: Date;
+  retryCount: number;
 }

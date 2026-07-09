@@ -10,12 +10,13 @@
 // ---------------------------------------------------------------------------
 
 /** 用户评分枚举：Again(0) / Hard(1) / Good(2) / Easy(3) */
-export enum Rating {
-  Again = 0,
-  Hard = 1,
-  Good = 2,
-  Easy = 3,
-}
+export const Rating = {
+  Again: 0,
+  Hard: 1,
+  Good: 2,
+  Easy: 3,
+} as const;
+export type Rating = (typeof Rating)[keyof typeof Rating];
 
 /** SM-2 算法计算结果 */
 export interface SM2Result {
@@ -49,10 +50,10 @@ function addDays(date: Date, days: number): Date {
 function toQuality(rating: Rating): number {
   // Again→1, Hard→3, Good→4, Easy→5
   const map: Record<Rating, number> = {
-    [Rating.Again]: 1,
-    [Rating.Hard]: 3,
-    [Rating.Good]: 4,
-    [Rating.Easy]: 5,
+    0: 1,  // Again
+    1: 3,  // Hard
+    2: 4,  // Good
+    3: 5,  // Easy
   };
   return map[rating];
 }

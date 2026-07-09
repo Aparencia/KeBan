@@ -21,6 +21,7 @@ const DEFAULT_SETTINGS = {
   autoStartWork: false,
   soundEnabled: true,
   notificationEnabled: false,
+  classDuration: 45,
 };
 
 const DEFAULT_STATE = {

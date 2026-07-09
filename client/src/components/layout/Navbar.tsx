@@ -1,24 +1,33 @@
-import { Sun, Moon, Wifi, WifiOff } from 'lucide-react';
+import { Sun, Moon, Wifi, WifiOff, Signal, RefreshCw, CheckCircle2 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { usePageTitle } from '@/hooks/usePageTitle';
+import { useNetworkStatus } from '@/hooks/useNetworkStatus';
+import { useSync } from '@/lib/sync/SyncContext';
 import { cn } from '@/lib/utils';
 
-type NetworkStatus = 'online' | 'online-no-ai' | 'offline';
-
-interface NavbarProps {
-  networkStatus?: NetworkStatus;
+function formatLastSync(date: Date | null): string {
+  if (!date) return '从未同步';
+  const diff = Date.now() - date.getTime();
+  if (diff < 60_000) return '刚刚同步';
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)} 分钟前`;
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)} 小时前`;
+  return date.toLocaleDateString();
 }
 
-const statusConfig: Record<NetworkStatus, { color: string; label: string }> = {
-  online: { color: 'bg-semantic-success', label: '在线' },
-  'online-no-ai': { color: 'bg-semantic-warning', label: '离线AI' },
-  offline: { color: 'bg-text-tertiary', label: '离线' },
-};
+const networkStatusConfig = {
+  online: { color: 'bg-semantic-success', label: '在线', icon: Wifi, iconColor: 'text-text-secondary' },
+  weak: { color: 'bg-semantic-warning', label: '弱网', icon: Signal, iconColor: 'text-semantic-warning' },
+  offline: { color: 'bg-semantic-danger', label: '离线', icon: WifiOff, iconColor: 'text-text-tertiary' },
+} as const;
 
-export default function Navbar({ networkStatus = 'online' }: NavbarProps) {
+export default function Navbar() {
   const { theme, toggleTheme } = useTheme();
   const pageTitle = usePageTitle();
-  const status = statusConfig[networkStatus];
+  const { status: netStatus } = useNetworkStatus();
+  const { isSyncing, lastSyncAt, pendingCount } = useSync();
+
+  const netConfig = networkStatusConfig[netStatus];
+  const NetIcon = netConfig.icon;
 
   return (
     <header
@@ -34,16 +43,32 @@ export default function Navbar({ networkStatus = 'online' }: NavbarProps) {
         {pageTitle}
       </h1>
 
-      {/* Right: Status + Theme toggle */}
+      {/* Right: Sync + Network + Theme toggle */}
       <div className="flex items-center gap-kb-md">
-        {/* Network status */}
-        <div className="flex items-center gap-kb-xs" title={status.label}>
-          {networkStatus === 'offline' ? (
-            <WifiOff className="w-icon-sm h-icon-sm text-text-tertiary" />
+        {/* Sync status */}
+        <div
+          className="flex items-center gap-kb-xs text-caption text-text-tertiary"
+          title={
+            isSyncing
+              ? '正在同步...'
+              : pendingCount > 0
+                ? `${pendingCount} 项待同步`
+                : formatLastSync(lastSyncAt)
+          }
+        >
+          {isSyncing ? (
+            <RefreshCw className="w-icon-xs h-icon-xs animate-spin text-semantic-info" />
+          ) : pendingCount > 0 ? (
+            <span className="text-caption text-semantic-warning">{pendingCount}</span>
           ) : (
-            <Wifi className="w-icon-sm h-icon-sm text-text-secondary" />
+            <CheckCircle2 className="w-icon-xs h-icon-xs text-semantic-success" />
           )}
-          <span className={cn('w-2 h-2 rounded-kb-full', status.color)} />
+        </div>
+
+        {/* Network status */}
+        <div className="flex items-center gap-kb-xs" title={netConfig.label}>
+          <NetIcon className={cn('w-icon-sm h-icon-sm', netConfig.iconColor)} />
+          <span className={cn('w-2 h-2 rounded-kb-full', netConfig.color)} />
         </div>
 
         {/* Theme toggle */}

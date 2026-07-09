@@ -1,0 +1,147 @@
+"""
+课伴 AI 网关 — 费曼评估路由
+
+POST /api/v1/ai/evaluate-explanation
+调用 DeepSeek 评估用户对概念的费曼式解释。
+"""
+
+import time
+import logging
+from pydantic import BaseModel, Field
+from fastapi import APIRouter, Request
+
+from config import MODEL_ROUTING, AI_PROVIDERS
+from providers.deepseek_provider import DeepSeekProvider
+from providers.fallback_provider import FallbackProvider
+from chains.evaluation_chain import EvaluationChain
+from errors import ProviderUnavailableError
+
+logger = logging.getLogger(__name__)
+router = APIRouter(prefix="/api/v1/ai", tags=["费曼评估"])
+
+# 初始化 Provider
+_deepseek_provider: DeepSeekProvider | None = None
+_fallback_provider = FallbackProvider()
+
+
+def _get_deepseek_provider() -> DeepSeekProvider:
+    """获取 DeepSeekProvider 单例"""
+    global _deepseek_provider
+    if _deepseek_provider is None:
+        cfg = AI_PROVIDERS["deepseek"]
+        _deepseek_provider = DeepSeekProvider(
+            base_url=cfg["base_url"], api_key=cfg["api_key"]
+        )
+    return _deepseek_provider
+
+
+# ============================================================
+# 请求/响应模型
+# ============================================================
+
+
+class EvaluateRequest(BaseModel):
+    """费曼评估请求"""
+    concept: str = Field(..., description="待解释的概念名称", min_length=1)
+    explanation: str = Field(..., description="用户对概念的费曼式解释", min_length=10)
+
+
+class DimensionScore(BaseModel):
+    """维度评分"""
+    dimension: str = Field(..., description="评分维度名称")
+    score: float = Field(..., description="分数 (0-10)", ge=0, le=10)
+    feedback: str = Field(..., description="该维度的反馈")
+
+
+class EvaluationResult(BaseModel):
+    """费曼评估结果"""
+    overall_score: float = Field(..., description="综合评分 (0-10)", ge=0, le=10)
+    dimensions: list[DimensionScore] = Field(..., description="各维度评分")
+    strengths: list[str] = Field(default_factory=list, description="优点列表")
+    improvements: list[str] = Field(default_factory=list, description="改进建议列表")
+    encouragement: str = Field(default="", description="鼓励性评语")
+    model: str = Field(..., description="使用的模型名称")
+    tokens_used: int = Field(..., description="消耗的 token 数")
+    latency_ms: int = Field(..., description="请求耗时（毫秒）")
+
+
+# ============================================================
+# 路由处理
+# ============================================================
+
+
+@router.post(
+    "/evaluate-explanation",
+    response_model=EvaluationResult,
+    summary="费曼学习法评估",
+)
+async def evaluate_explanation(
+    request: Request, body: EvaluateRequest
+) -> EvaluationResult:
+    """
+    评估用户对概念的费曼式解释
+
+    - 使用 DeepSeek deepseek-chat 模型
+    - 从准确性、完整性、简洁性、通俗性四个维度评分
+    - 提供具体改进建议和鼓励性反馈
+    """
+    user_id = getattr(request.state, "user_id", "anonymous")
+    logger.info(
+        "费曼评估请求: user=%s, concept=%s, explanation_length=%d",
+        user_id, body.concept, len(body.explanation),
+    )
+
+    # 获取模型路由配置
+    provider_key, model_slot = MODEL_ROUTING["evaluate"]
+    model_name = AI_PROVIDERS[provider_key]["models"][model_slot]
+
+    try:
+        provider = _get_deepseek_provider()
+        chain = EvaluationChain(provider=provider, model=model_name)
+        result = await chain.run(
+            concept=body.concept,
+            explanation=body.explanation,
+        )
+
+        # 从 chain 结果构建 EvaluationResult
+        dimensions = [
+            DimensionScore(
+                dimension=dim["dimension"],
+                score=dim["score"],
+                feedback=dim["feedback"],
+            )
+            for dim in result.get("dimensions", [])
+        ]
+
+        evaluation = EvaluationResult(
+            overall_score=result.get("overall_score", 5.0),
+            dimensions=dimensions,
+            strengths=result.get("strengths", []),
+            improvements=result.get("improvements", []),
+            encouragement=result.get("encouragement", ""),
+            model=result.get("model", model_name),
+            tokens_used=result.get("tokens_used", 0),
+            latency_ms=result.get("latency_ms", 0),
+        )
+
+    except ProviderUnavailableError as e:
+        logger.warning("DeepSeek 不可用，使用降级评估: %s", e.message)
+        # 降级：返回通用鼓励性反馈
+        evaluation = EvaluationResult(
+            overall_score=5.0,
+            dimensions=[
+                DimensionScore(
+                    dimension="overall",
+                    score=5.0,
+                    feedback="AI 评估暂不可用，请继续努力用自己的话解释概念！",
+                )
+            ],
+            strengths=["尝试用自己的话解释概念是很好的学习习惯"],
+            improvements=["AI 服务恢复后可获取更详细的评估"],
+            encouragement="费曼学习法是掌握知识的绝佳方法，继续保持！",
+            model="fallback",
+            tokens_used=0,
+            latency_ms=0,
+        )
+
+    return evaluation
