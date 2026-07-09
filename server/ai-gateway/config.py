@@ -9,9 +9,12 @@ import logging
 import os
 from typing import Any, Callable, Awaitable
 
+from pathlib import Path
+
 from dotenv import load_dotenv
 
-load_dotenv()
+_env_path = Path(__file__).parent.parent / ".env"
+load_dotenv(dotenv_path=_env_path)
 
 logger = logging.getLogger(__name__)
 
@@ -50,10 +53,10 @@ AI_PROVIDERS: dict = {
 # ============================================================
 
 MODEL_ROUTING: dict[str, tuple[str, str]] = {
-    "summarize": ("qwen", "summary"),
-    "generate_cards": ("qwen", "flashcard"),
-    "evaluate": ("deepseek", "evaluate"),
-    "recommend": ("deepseek", "recommend"),
+    "summarize": ("glm", "free"),
+    "generate_cards": ("glm", "free"),
+    "evaluate": ("glm", "free"),
+    "recommend": ("glm", "free"),
 }
 
 # ============================================================
@@ -65,7 +68,7 @@ def get_provider_for_feature(app, feature: str):
     """
     根据 MODEL_ROUTING 表获取对应 Provider 实例和模型名称。
 
-    如果目标 Provider 未初始化（API Key 缺失），自动回退到 fallback。
+    如果目标 Provider 未初始化或 API Key 无效，自动回退到 GLM/fallback。
 
     Args:
         app: FastAPI 应用实例（通过 app.state.providers 获取 Provider）
@@ -76,8 +79,20 @@ def get_provider_for_feature(app, feature: str):
     """
     provider_key, model_slot = MODEL_ROUTING.get(feature, ("fallback", "free"))
     provider = app.state.providers.get(provider_key)
+    # 检查 Provider 是否配置了有效 API Key
+    if provider and not is_valid_api_key(provider.api_key):
+        logger.warning("Provider [%s] API Key 无效，尝试回退到 GLM/fallback", provider_key)
+        provider = None
+    # 若 Provider 未初始化或 API Key 无效，尝试回退到 GLM
+    if not provider:
+        provider = app.state.providers.get("glm")
+        provider_key = "glm"
+        model_slot = "free"
+    # GLM 也不可用时，使用 fallback
     if not provider:
         provider = app.state.providers.get("fallback")
+        provider_key = "fallback"
+        model_slot = "free"
     model_name = AI_PROVIDERS.get(provider_key, {}).get("models", {}).get(model_slot, "fallback")
     return provider, model_name
 
@@ -175,6 +190,14 @@ RATE_LIMITS: dict[str, int] = {
 # 应用配置
 # ============================================================
 
+PLACEHOLDER_PREFIXES = ("sk-your-", "your-", "change-this", "placeholder")
+
+
+def is_valid_api_key(key: str) -> bool:
+    """检查 API Key 是否为有效配置（非占位符）"""
+    return bool(key) and not any(key.startswith(p) for p in PLACEHOLDER_PREFIXES)
+
+
 APP_CONFIG = {
     "title": "课伴 AI 网关",
     "version": "0.1.0-alpha",
@@ -183,7 +206,7 @@ APP_CONFIG = {
         origin.strip()
         for origin in os.getenv(
             "CORS_ORIGINS",
-            "http://localhost:5173,http://localhost:1420,tauri://localhost",
+            "http://localhost:5173,http://localhost:1420,tauri://localhost,http://tauri.localhost",
         ).split(",")
         if origin.strip()
     ],

@@ -9,7 +9,7 @@
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
-const DEFAULT_GATEWAY_URL: &str = "http://localhost:8000";
+const DEFAULT_GATEWAY_URL: &str = "http://127.0.0.1:8000";
 
 // ================================================================
 // Summarize — POST /api/v1/ai/summarize
@@ -221,14 +221,21 @@ async fn post_json<Req: Serialize, Res: for<'de> Deserialize<'de>>(
     client: &reqwest::Client,
     path: &str,
     body: &Req,
+    auth_token: Option<&str>,
 ) -> Result<Res, String> {
     let url = format!("{}{}", gateway_url(), path);
-    let resp = client
-        .post(&url)
-        .json(body)
+    log::info!("POST {}", url);
+    let mut req = client.post(&url).json(body);
+    if let Some(token) = auth_token {
+        req = req.header("Authorization", format!("Bearer {}", token));
+    }
+    let resp = req
         .send()
         .await
-        .map_err(|e| format!("HTTP request failed: {e}"))?;
+        .map_err(|e| {
+            log::error!("HTTP request to {} failed: {}", url, e);
+            format!("HTTP request failed: {e}")
+        })?;
 
     if !resp.status().is_success() {
         let status = resp.status().as_u16();
@@ -236,12 +243,17 @@ async fn post_json<Req: Serialize, Res: for<'de> Deserialize<'de>>(
             .text()
             .await
             .unwrap_or_else(|_| "unknown error".into());
+        log::error!("HTTP {}: {}", status, detail);
         return Err(format!("HTTP {status}: {detail}"));
     }
 
+    log::info!("POST {} -> {}", url, resp.status());
     resp.json::<Res>()
         .await
-        .map_err(|e| format!("Response parse error: {e}"))
+        .map_err(|e| {
+            log::error!("Response parse error for {}: {}", url, e);
+            format!("Response parse error: {e}")
+        })
 }
 
 // ================================================================
@@ -255,6 +267,7 @@ pub async fn ai_summarize(
     max_length: Option<u32>,
     style: Option<String>,
     language: Option<String>,
+    auth_token: Option<String>,
 ) -> Result<SummarizeResult, String> {
     let req = SummarizeRequest {
         text,
@@ -265,7 +278,7 @@ pub async fn ai_summarize(
         },
     };
 
-    let resp: SummarizeResponse = post_json(&client, "/api/v1/ai/summarize", &req).await?;
+    let resp: SummarizeResponse = post_json(&client, "/api/v1/ai/summarize", &req, auth_token.as_deref()).await?;
 
     Ok(SummarizeResult {
         summary: resp.summary,
@@ -282,6 +295,7 @@ pub async fn ai_generate_cards(
     max_cards: Option<u32>,
     difficulty: Option<String>,
     card_type: Option<String>,
+    auth_token: Option<String>,
 ) -> Result<FlashcardResult, String> {
     let req = CardGenRequest {
         note,
@@ -293,7 +307,7 @@ pub async fn ai_generate_cards(
     };
 
     let resp: CardGenResponse =
-        post_json(&client, "/api/v1/ai/generate-cards", &req).await?;
+        post_json(&client, "/api/v1/ai/generate-cards", &req, auth_token.as_deref()).await?;
 
     Ok(FlashcardResult {
         cards: resp
@@ -317,6 +331,7 @@ pub async fn ai_evaluate(
     client: State<'_, reqwest::Client>,
     concept: String,
     explanation: String,
+    auth_token: Option<String>,
 ) -> Result<EvaluateResult, String> {
     let req = EvaluateRequest {
         concept,
@@ -324,7 +339,7 @@ pub async fn ai_evaluate(
     };
 
     let resp: EvaluationResponse =
-        post_json(&client, "/api/v1/ai/evaluate-explanation", &req).await?;
+        post_json(&client, "/api/v1/ai/evaluate-explanation", &req, auth_token.as_deref()).await?;
 
     Ok(EvaluateResult {
         overall_score: resp.overall_score,
@@ -350,6 +365,7 @@ pub async fn ai_evaluate(
 pub async fn ai_recommend_duration(
     client: State<'_, reqwest::Client>,
     history: Vec<FocusSessionInput>,
+    auth_token: Option<String>,
 ) -> Result<DurationResult, String> {
     let req = RecommendRequest {
         history: history
@@ -364,7 +380,7 @@ pub async fn ai_recommend_duration(
     };
 
     let resp: DurationConfigRes =
-        post_json(&client, "/api/v1/ai/recommend-duration", &req).await?;
+        post_json(&client, "/api/v1/ai/recommend-duration", &req, auth_token.as_deref()).await?;
 
     Ok(DurationResult {
         recommended_minutes: resp.recommended_minutes,

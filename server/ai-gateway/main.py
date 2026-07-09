@@ -17,6 +17,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 
 from config import APP_CONFIG
@@ -61,7 +62,7 @@ async def lifespan(app: FastAPI):
     logger.info("Redis 连接已建立")
 
     # 初始化各 Provider 并检查 API Key 配置
-    from config import AI_PROVIDERS
+    from config import AI_PROVIDERS, is_valid_api_key
     from providers.qwen_provider import QwenProvider
     from providers.deepseek_provider import DeepSeekProvider
     from providers.glm_provider import GLMProvider
@@ -71,7 +72,7 @@ async def lifespan(app: FastAPI):
     app.state.providers = {}
 
     qwen_cfg = AI_PROVIDERS.get("qwen", {})
-    if qwen_cfg.get("api_key"):
+    if is_valid_api_key(qwen_cfg.get("api_key", "")):
         app.state.providers["qwen"] = QwenProvider(
             base_url=qwen_cfg["base_url"],
             api_key=qwen_cfg["api_key"],
@@ -81,7 +82,7 @@ async def lifespan(app: FastAPI):
         logger.warning("Provider [qwen]: API Key 未配置，跳过初始化")
 
     deepseek_cfg = AI_PROVIDERS.get("deepseek", {})
-    if deepseek_cfg.get("api_key"):
+    if is_valid_api_key(deepseek_cfg.get("api_key", "")):
         app.state.providers["deepseek"] = DeepSeekProvider(
             base_url=deepseek_cfg["base_url"],
             api_key=deepseek_cfg["api_key"],
@@ -91,7 +92,7 @@ async def lifespan(app: FastAPI):
         logger.warning("Provider [deepseek]: API Key 未配置，跳过初始化")
 
     glm_cfg = AI_PROVIDERS.get("glm", {})
-    if glm_cfg.get("api_key"):
+    if is_valid_api_key(glm_cfg.get("api_key", "")):
         app.state.providers["glm"] = GLMProvider(
             base_url=glm_cfg["base_url"],
             api_key=glm_cfg["api_key"],
@@ -105,8 +106,8 @@ async def lifespan(app: FastAPI):
     logger.info("Provider [fallback]: 已初始化（降级兜底）")
 
     for name, cfg in AI_PROVIDERS.items():
-        has_key = bool(cfg["api_key"])
-        status = "已配置" if has_key else "未配置（API Key 缺失）"
+        has_key = is_valid_api_key(cfg.get("api_key", ""))
+        status = "已配置" if has_key else "未配置（API Key 缺失或为占位符）"
         logger.info("Provider [%s]: %s", name, status)
 
     yield
@@ -132,33 +133,41 @@ app = FastAPI(
 
 
 # ============================================================
-# 中间件注册（注意：中间件执行顺序与注册顺序相反）
+# 安全头中间件
 # ============================================================
 
-# 安全头中间件（注册在最前，因此在 CORS 之后执行，为每个响应添加安全头）
-@app.middleware("http")
-async def add_security_headers(request: Request, call_next):
-    response: Response = await call_next(request)
-    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-    response.headers["X-Content-Type-Options"] = "nosniff"
-    response.headers["X-Frame-Options"] = "DENY"
-    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-    return response
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """为每个响应添加安全头"""
 
-# CORS 中间件（最外层）
-app.add_middleware(
+    async def dispatch(self, request: Request, call_next):
+        response: Response = await call_next(request)
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        return response
+
+
+# ============================================================
+# 中间件注册（执行顺序与注册顺序相反：后注册的先执行）
+#
+# 注册顺序（从内到外）：
+#   1. SecurityHeaders — 最先注册 = 最内层
+#   2. JWTAuth         — 第二层
+#   3. RateLimit       — 第三层
+#   4. CORS            — 最后注册 = 最外层，最先处理请求（含 OPTIONS 预检）
+# ============================================================
+
+app.add_middleware(SecurityHeadersMiddleware)   # 最内层
+app.add_middleware(JWTAuthMiddleware)           # 第二层
+app.add_middleware(RateLimitMiddleware)         # 第三层
+app.add_middleware(                             # 最外层
     CORSMiddleware,
     allow_origins=APP_CONFIG["cors_origins"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# JWT 认证中间件
-app.add_middleware(JWTAuthMiddleware)
-
-# 频率限制中间件
-app.add_middleware(RateLimitMiddleware)
 
 
 # ============================================================

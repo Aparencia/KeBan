@@ -82,6 +82,10 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
     """JWT 认证中间件"""
 
     async def dispatch(self, request: Request, call_next):
+        # CORS 预检请求直接放行，避免被 JWT 拦截
+        if request.method == "OPTIONS":
+            return await call_next(request)
+
         # 跳过白名单路径
         if request.url.path in PUBLIC_PATHS:
             return await call_next(request)
@@ -106,12 +110,43 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
         """
         从请求头提取并验证 JWT token（RS256 / Supabase JWT）
 
+        当 SUPABASE_JWT_SECRET 未配置时启用开发降级模式：
+        - 有 Bearer token 时提取 payload 中的 sub（不验证签名）
+        - 无 token 时返回 "anonymous"
+
         Returns:
             str: 验证通过的用户 ID（sub claim）
 
         Raises:
             AuthenticationError: token 缺失或验证失败
         """
+        raw_secret = APP_CONFIG.get("jwt_secret", "")
+
+        if not raw_secret:
+            # 本地开发降级：SUPABASE_JWT_SECRET 未配置时
+            if not getattr(self, '_warned_dev_mode', False):
+                logger.warning(
+                    "⚠️ JWT 验证处于开发降级模式！请勿在生产环境使用。"
+                    "配置 SUPABASE_JWT_SECRET 以启用完整验证。"
+                )
+                self._warned_dev_mode = True
+
+            auth_header = request.headers.get("Authorization", "")
+            if auth_header.startswith("Bearer "):
+                token = auth_header[7:]
+                try:
+                    # 无签名验证提取 claims（仅用于开发调试）
+                    import json
+                    payload_b64 = token.split('.')[1]
+                    # 补齐 base64 padding
+                    payload_b64 += '=' * (4 - len(payload_b64) % 4)
+                    payload = json.loads(base64.b64decode(payload_b64))
+                    return payload.get("sub", "dev-user")
+                except Exception:
+                    return "dev-user"
+            return "anonymous"
+
+        # === 正常 RS256 JWT 验证流程 ===
         auth_header = request.headers.get("Authorization")
         if not auth_header:
             raise AuthenticationError("缺少 Authorization 请求头")

@@ -18,6 +18,9 @@ export class RemoteAIPlugin implements AIPlugin {
 
   // ── POST /api/v1/ai/summarize ──────────────────────────────
   async summarizeNote(noteContent: string, options?: SummarizeOptions): Promise<SummarizeResult> {
+    if (!noteContent || noteContent.trim().length < 10) {
+      throw new AIError('笔记内容过短（至少 10 个字符），无法生成摘要', 'invalid_response', false);
+    }
     try {
       // 构建后端 SummarizeRequest: { text, options: { max_length, style, language } }
       const backendOptions: Record<string, unknown> = {};

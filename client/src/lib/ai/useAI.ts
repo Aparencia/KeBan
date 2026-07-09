@@ -27,10 +27,9 @@ export function useAISummarize() {
       const result = await aiPluginLoader.summarizeNote(content, options);
       setState({ data: result, loading: false, error: null, isFallback: false });
       return result;
-    } catch (error: any) {
+    } catch (error: unknown) {
       const fallback = getLocalFallbackMessage('summarize');
       setState({ data: null, loading: false, error: fallback.message + '。' + fallback.suggestion, isFallback: true });
-      throw error;
     }
   }, []);
 
@@ -51,10 +50,9 @@ export function useAIFlashcards() {
       const result = await aiPluginLoader.generateFlashcards(content, options);
       setState({ data: result, loading: false, error: null, isFallback: false });
       return result;
-    } catch (error: any) {
+    } catch (error: unknown) {
       const fallback = getLocalFallbackMessage('flashcard');
       setState({ data: null, loading: false, error: fallback.message + '。' + fallback.suggestion, isFallback: true });
-      throw error;
     }
   }, []);
 
@@ -75,10 +73,9 @@ export function useAIEvaluate() {
       const result = await aiPluginLoader.evaluateExplanation(concept, explanation, options);
       setState({ data: result, loading: false, error: null, isFallback: false });
       return result;
-    } catch (error: any) {
+    } catch (error: unknown) {
       const fallback = getLocalFallbackMessage('evaluate');
       setState({ data: null, loading: false, error: fallback.message + '。' + fallback.suggestion, isFallback: true });
-      throw error;
     }
   }, []);
 
@@ -99,9 +96,9 @@ export function useAIDuration() {
       const result = await aiPluginLoader.recommendDuration(historyData, options);
       setState({ data: result, loading: false, error: null, isFallback: result.isLocalFallback });
       return result;
-    } catch (error: any) {
-      setState({ data: null, loading: false, error: error.message, isFallback: true });
-      throw error;
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : (typeof error === 'string' ? error : '番茄钟推荐失败');
+      setState({ data: null, loading: false, error: msg, isFallback: true });
     }
   }, []);
 

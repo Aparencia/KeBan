@@ -30,7 +30,7 @@ def with_retry_and_timeout(max_retries: int = 2):
         @wraps(func)
         async def wrapper(self, *args, **kwargs):
             # 从 kwargs 推断 feature 名称（由 chain 层传入）
-            feature = kwargs.get('_feature', '')
+            feature = kwargs.pop('_feature', '')
             if feature and feature in TIMEOUT_CONFIG:
                 timeout = TIMEOUT_CONFIG[feature]
             else:
@@ -116,7 +116,7 @@ class AIProvider(ABC):
         import time
         start = time.monotonic()
         try:
-            await self.generate("ping", max_tokens=5)
+            await self.generate("ping", max_tokens=5, _feature="health_check")
             latency = (time.monotonic() - start) * 1000
             return {"status": "healthy", "latency_ms": round(latency, 1), "error": None}
         except Exception as e:

@@ -137,19 +137,3 @@ class DeepSeekProvider(AIProvider):
                 raise ModelResponseError(model, "内容未通过安全审核") from e
 
             raise ModelResponseError(model, str(e)) from e
-
-    async def health_check(self) -> bool:
-        """检查 DeepSeek API 是否可用（发送轻量级请求验证）"""
-        if not self.api_key:
-            return False
-        try:
-            response = await self._client.chat.completions.create(
-                model="deepseek-chat",
-                messages=[{"role": "user", "content": "ping"}],
-                max_tokens=1,
-                temperature=0,
-            )
-            return response.choices is not None and len(response.choices) > 0
-        except Exception as e:
-            logger.warning("DeepSeekProvider health check 失败: %s", str(e))
-            return False

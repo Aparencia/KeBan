@@ -9,10 +9,11 @@ import {
   ArrowLeft, Bold, Italic, Underline as UnderlineIcon, Strikethrough,
   Highlighter, Heading1, Heading2, Heading3, List, ListOrdered,
   Code, Quote, Undo2, Redo2, Save, Sparkles, X,
+  Copy, RefreshCw, Download, ChevronDown, Check,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useNoteStore } from '../store/useNoteStore';
-import { useAISummarize } from '@/lib/ai/useAI';
+import { useAISummarize, useAIFlashcards } from '@/lib/ai/useAI';
 import { useToast } from '@/components/ui';
 
 interface ToolbarButtonProps {
@@ -60,6 +61,21 @@ export default function NoteEditPage() {
   const [summaryModalOpen, setSummaryModalOpen] = useState(false);
   const { loading: aiLoading, data: aiData, error: aiError, summarize } = useAISummarize();
   const { toast } = useToast();
+
+  // AI 摘要后续操作 hooks
+  const { loading: flashcardLoading, generate: generateFlashcards } = useAIFlashcards();
+  const [insertMenuOpen, setInsertMenuOpen] = useState(false);
+  const [convertedKeys, setConvertedKeys] = useState<Set<number>>(new Set());
+
+  // === AI 摘要操作辅助函数 ===
+
+  const buildSummaryText = useCallback((data: NonNullable<typeof aiData>) => {
+    let text = data.summary;
+    if (data.keyPoints && data.keyPoints.length > 0) {
+      text += '\n\n关键要点：\n' + data.keyPoints.map((kp, i) => `${i + 1}. ${kp}`).join('\n');
+    }
+    return text;
+  }, []);
 
   // 解析初始内容
   const initialContent = useMemo(() => {
@@ -109,6 +125,78 @@ export default function NoteEditPage() {
       debouncedSave(contentStr);
     },
   });
+
+  const handleInsertNote = useCallback((position: 'cursor' | 'start' | 'end') => {
+    if (!editor || !aiData) return;
+    const text = buildSummaryText(aiData);
+    const htmlContent = text.split('\n').map(line => `<p>${line || '<br>'}</p>`).join('');
+    if (position === 'cursor') {
+      editor.chain().focus().insertContent(htmlContent).run();
+    } else if (position === 'start') {
+      const currentHTML = editor.getHTML();
+      editor.chain().focus().setContent(htmlContent + currentHTML).run();
+    } else {
+      const docSize = editor.state.doc.content.size;
+      editor.chain().focus().insertContentAt(docSize, htmlContent).run();
+    }
+    setInsertMenuOpen(false);
+    setSummaryModalOpen(false);
+    toast({ type: 'success', message: '摘要已插入笔记' });
+  }, [editor, aiData, buildSummaryText, toast]);
+
+  const handleCopySummary = useCallback(() => {
+    if (!aiData) return;
+    navigator.clipboard.writeText(buildSummaryText(aiData)).then(
+      () => toast({ type: 'success', message: '摘要已复制到剪贴板' }),
+      () => toast({ type: 'error', message: '复制失败' }),
+    );
+  }, [aiData, buildSummaryText, toast]);
+
+  const handleGenerateFlashcard = useCallback(async (keyPoint: string, index: number) => {
+    try {
+      const result = await generateFlashcards(keyPoint);
+      if (!result) throw new Error('generate failed');
+      setConvertedKeys(prev => new Set(prev).add(index));
+      toast({ type: 'success', message: `已生成 ${result.cards.length} 张闪卡` });
+    } catch {
+      toast({ type: 'error', message: '闪卡生成失败，请稍后重试' });
+    }
+  }, [generateFlashcards, toast]);
+
+  const handleGenerateAllFlashcards = useCallback(async () => {
+    if (!aiData?.keyPoints?.length) return;
+    try {
+      const result = await generateFlashcards(aiData.keyPoints.join('\n'));
+      if (!result) throw new Error('generate failed');
+      setConvertedKeys(new Set(aiData.keyPoints!.map((_, i) => i)));
+      toast({ type: 'success', message: `已从全部要点生成 ${result.cards.length} 张闪卡` });
+    } catch {
+      toast({ type: 'error', message: '闪卡生成失败，请稍后重试' });
+    }
+  }, [aiData, generateFlashcards, toast]);
+
+  const handleRegenerate = useCallback(() => {
+    if (!editor) return;
+    const text = editor.getText();
+    if (!text.trim()) { toast({ type: 'warning', message: '笔记内容为空' }); return; }
+    setConvertedKeys(new Set());
+    summarize(text).catch(() => toast({ type: 'error', message: 'AI 摘要生成失败' }));
+  }, [editor, summarize, toast]);
+
+  const handleExport = useCallback(() => {
+    if (!aiData) return;
+    let md = `## 摘要\n\n${aiData.summary}\n`;
+    if (aiData.keyPoints?.length) {
+      md += '\n## 关键要点\n\n';
+      aiData.keyPoints.forEach((kp, i) => { md += `${i + 1}. ${kp}\n`; });
+    }
+    md += `\n---\n*由课伴 AI 生成于 ${new Date(aiData.generatedAt).toLocaleString()}*\n`;
+    const url = URL.createObjectURL(new Blob([md], { type: 'text/markdown;charset=utf-8' }));
+    const a = document.createElement('a');
+    a.href = url; a.download = `ai-summary-${Date.now()}.md`; a.click();
+    URL.revokeObjectURL(url);
+    toast({ type: 'success', message: '摘要已导出' });
+  }, [aiData, toast]);
 
   // 加载笔记数据
   useEffect(() => {
@@ -326,7 +414,7 @@ export default function NoteEditPage() {
             aria-hidden
           />
           <div className={cn(
-            'relative w-full max-w-md bg-bg-elevated rounded-kb-xl shadow-kb-lg',
+            'relative w-full max-w-lg bg-bg-elevated rounded-kb-xl shadow-kb-lg',
             'border border-border/40 p-kb-lg',
           )}>
             <button
@@ -358,23 +446,123 @@ export default function NoteEditPage() {
 
             {aiData && !aiLoading && (
               <div className="mt-kb-md flex flex-col gap-kb-md">
-                <div>
+                {/* 摘要文本 + 复制按钮 */}
+                <div className="group relative">
                   <p className="text-b3 font-medium text-text-tertiary uppercase tracking-wide mb-1">摘要</p>
-                  <p className="text-b2 text-text-secondary leading-relaxed">{aiData.summary}</p>
+                  <p className="text-b2 text-text-secondary leading-relaxed pr-8">{aiData.summary}</p>
+                  <button
+                    onClick={handleCopySummary}
+                    title="复制摘要"
+                    className="absolute top-0 right-0 p-1.5 rounded-kb-sm text-text-tertiary hover:text-brand-600 hover:bg-brand-50 opacity-0 group-hover:opacity-100 transition-all duration-kb-fast"
+                  >
+                    <Copy className="w-3.5 h-3.5" strokeWidth={1.5} />
+                  </button>
                 </div>
-                {aiData.keyPoints?.length > 0 && (
+
+                {/* 关键要点 + 逐项闪卡按钮 */}
+                {(aiData.keyPoints?.length ?? 0) > 0 && (
                   <div>
                     <p className="text-b3 font-medium text-text-tertiary uppercase tracking-wide mb-1">关键要点</p>
                     <ul className="flex flex-col gap-1.5">
                       {aiData.keyPoints?.map((kp, i) => (
-                        <li key={i} className="flex items-start gap-2 text-b2 text-text-secondary">
-                          <span className="mt-1 w-1.5 h-1.5 rounded-kb-full bg-brand-500 flex-shrink-0" />
-                          {kp}
+                        <li key={i} className="group flex items-start gap-2 text-b2 text-text-secondary rounded-kb-sm px-2 py-1 -mx-2 hover:bg-bg-tertiary/50 transition-colors">
+                          <span className="mt-1.5 w-1.5 h-1.5 rounded-kb-full bg-brand-500 flex-shrink-0" />
+                          <span className="flex-1">{kp}</span>
+                          <button
+                            onClick={() => handleGenerateFlashcard(kp, i)}
+                            disabled={flashcardLoading}
+                            title={convertedKeys.has(i) ? '已生成闪卡' : '生成闪卡'}
+                            className={`flex-shrink-0 p-1 rounded-kb-sm transition-all duration-kb-fast ${
+                              convertedKeys.has(i)
+                                ? 'text-emerald-500 opacity-100'
+                                : 'text-text-tertiary hover:text-brand-600 hover:bg-brand-50 opacity-0 group-hover:opacity-100'
+                            } ${flashcardLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                          >
+                            {convertedKeys.has(i) ? (
+                              <Check className="w-3.5 h-3.5" strokeWidth={2} />
+                            ) : (
+                              <Sparkles className="w-3.5 h-3.5" strokeWidth={1.5} />
+                            )}
+                          </button>
                         </li>
                       ))}
                     </ul>
                   </div>
                 )}
+
+                {/* 智能建议区 */}
+                {(aiData.keyPoints?.length ?? 0) > 2 && (
+                  <div className="flex items-center gap-3 p-3 bg-brand-50 border border-brand-200/30 rounded-kb-md">
+                    <span className="text-b2 text-brand-700">
+                      💡 检测到 {aiData.keyPoints!.length} 个核心概念，适合制作复习闪卡
+                    </span>
+                    <button
+                      onClick={handleGenerateAllFlashcards}
+                      disabled={flashcardLoading}
+                      className={`flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-kb-md text-b3 font-medium bg-brand-600 text-white hover:bg-brand-700 active:scale-95 transition-all duration-kb-fast ${
+                        flashcardLoading ? 'opacity-60 cursor-not-allowed' : ''
+                      }`}
+                    >
+                      {flashcardLoading ? (
+                        <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                      ) : (
+                        <Sparkles className="w-3.5 h-3.5" strokeWidth={1.5} />
+                      )}
+                      一键生成
+                    </button>
+                  </div>
+                )}
+
+                {/* 通用操作区 */}
+                <div className="border-t border-border/30 pt-3 mt-1 flex items-center gap-2">
+                  <div className="relative">
+                    <button
+                      onClick={() => setInsertMenuOpen(!insertMenuOpen)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-kb-md text-b2 font-medium bg-bg-secondary text-text-secondary border border-border/50 hover:bg-bg-tertiary hover:text-text-primary active:scale-95 transition-all duration-kb-fast"
+                    >
+                      插入笔记
+                      <ChevronDown className="w-3.5 h-3.5" strokeWidth={1.5} />
+                    </button>
+                    {insertMenuOpen && (
+                      <div className="absolute bottom-full left-0 mb-1 w-36 bg-bg-elevated rounded-kb-md shadow-kb-md border border-border/40 py-1 z-10">
+                        <button onClick={() => handleInsertNote('cursor')} className="w-full text-left px-3 py-2 text-b2 text-text-secondary hover:bg-bg-tertiary hover:text-text-primary transition-colors">光标位置</button>
+                        <button onClick={() => handleInsertNote('start')} className="w-full text-left px-3 py-2 text-b2 text-text-secondary hover:bg-bg-tertiary hover:text-text-primary transition-colors">笔记开头</button>
+                        <button onClick={() => handleInsertNote('end')} className="w-full text-left px-3 py-2 text-b2 text-text-secondary hover:bg-bg-tertiary hover:text-text-primary transition-colors">笔记末尾</button>
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    onClick={handleRegenerate}
+                    disabled={aiLoading}
+                    title="重新生成摘要"
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-kb-md text-b2 font-medium bg-bg-secondary text-text-secondary border border-border/50 hover:bg-bg-tertiary hover:text-text-primary active:scale-95 transition-all duration-kb-fast ${
+                      aiLoading ? 'opacity-60 cursor-not-allowed' : ''
+                    }`}
+                  >
+                    {aiLoading ? (
+                      <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                    ) : (
+                      <RefreshCw className="w-3.5 h-3.5" strokeWidth={1.5} />
+                    )}
+                    重新生成
+                  </button>
+
+                  <button
+                    onClick={handleExport}
+                    title="导出摘要"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-kb-md text-b2 font-medium bg-bg-secondary text-text-secondary border border-border/50 hover:bg-bg-tertiary hover:text-text-primary active:scale-95 transition-all duration-kb-fast"
+                  >
+                    <Download className="w-3.5 h-3.5" strokeWidth={1.5} />
+                    导出
+                  </button>
+                </div>
               </div>
             )}
           </div>
