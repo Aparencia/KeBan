@@ -32,6 +32,9 @@ Thumbs.db
 .env.local
 .env.*.local
 
+# Documentation (local only, not version controlled)
+docs/
+
 # Logs
 *.log
 logs/
