@@ -3,6 +3,183 @@
   <p align="center"><strong>你的 AI 智能学习伙伴 — 让每一分钟网课都高效有价值</strong></p>
   <p align="center">
     <img src="https://img.shields.io/badge/status-alpha-orange.svg" alt="Status" />
+    <img src="https://img.shields.io/badge/version-v0.3.0-blue.svg" alt="Version" />
+    <img src="https://img.shields.io/badge/license-Private-lightgrey.svg" alt="License" />
+  </p>
+</p>
+
+---
+
+## 📝 关于课伴
+
+**课伴（KeBan）** 是一款面向学生和自学者的高效学习桌面应用。它围绕网课学习场景，将时间管理、笔记记录、记忆巩固和深度理解整合在一个工具中，帮助你建立科学的学习闭环。
+
+> 💡 **核心理念：本地优先 + AI 增强可选**
+>
+> 所有核心功能 **离线完整可用**，无需任何网络依赖；联网时可按需开启 AI 辅助，作为增值能力叠加。你的学习数据，始终掌握在自己手中。
+
+---
+
+## ✨ 核心功能
+
+课伴围绕 **"学 → 记 → 练 → 悟"** 学习闭环，提供四大模块：
+
+### 🍅 番茄钟 — 时间管理
+
+- 三段式计时：工作 / 短休息 / 长休息自动轮转
+- 双模式切换：上课模式（45 分钟）与自习模式（25/5 标准节奏）
+- 后台不中断，切换页面计时继续运行
+- 专注时长统计与趋势分析，量化学习投入
+
+### 📝 智能笔记 — 知识沉淀
+
+- 专业富文本编辑体验，支持多种排版
+- 多种模板：大纲式、康奈尔笔记法、自由画布等
+- 3 级嵌套文件夹 + 自由标签系统，灵活组织笔记
+- 本地全文搜索，自动保存，数据不丢失
+
+### 🃏 闪卡 — 记忆巩固
+
+- 基于间隔重复算法的科学记忆系统
+- 3 级嵌套牌组：科目 → 章节 → 知识点
+- 复习统计与遗忘曲线可视化
+- 支持 CSV / JSON 批量导入
+
+### 🧠 费曼学习法 — 深度理解
+
+- 四步引导：选概念 → 用自己的话解释 → 识别薄弱点 → 简化重述
+- 自动标记与汇总薄弱知识点
+- 1–5 星理解度评估，直观衡量掌握程度
+
+### 🤖 AI 增强（联网可选）
+
+| 能力 | 说明 |
+|------|------|
+| 笔记智能摘要 | 一键生成课堂笔记摘要与续写润色 |
+| AI 自动生成闪卡 | 从笔记内容智能生成记忆卡片 |
+| 费曼学习评估 | AI 评估解释质量，给出改进建议 |
+| 智能时长推荐 | 根据学习数据推荐最佳番茄钟时长 |
+
+---
+
+## 🚀 快速开始
+
+### 环境要求
+
+- **Node.js** 18+
+- **npm** 9+
+
+### 安装与运行
+
+```bash
+# 克隆仓库
+git clone https://github.com/Aparencia/KeBan.git
+cd KeBan
+
+# 安装依赖
+cd client
+npm install
+
+# 启动开发服务器
+npm run dev
+```
+
+### 构建桌面安装包
+
+```bash
+cd client
+npm run electron:build
+```
+
+构建产物位于 `client/release/` 目录。
+
+---
+
+## 📁 项目结构
+
+```
+KeBan/
+├── client/              # 前端客户端（桌面应用）
+├── server/              # 后端服务（AI 网关 + 数据同步）
+├── docs/                # 项目文档（按阶段组织）
+├── scripts/             # 脚本工具
+├── .env.example         # 环境变量模板
+└── README.md
+```
+
+| 目录 | 说明 |
+|------|------|
+| `client/` | 前端应用与 Electron 桌面端，包含所有 UI 和业务逻辑 |
+| `server/` | 后端微服务，包括 AI 增强网关和数据同步服务 |
+| `docs/` | 按项目生命周期组织的开发文档（phase0 ~ phase3） |
+| `scripts/` | 构建、部署等辅助脚本 |
+
+---
+
+## 🗺️ 路线图
+
+| 阶段 | 状态 | 核心交付 |
+|------|------|----------|
+| **MVP-1 Alpha** | ✅ 已完成 | 纯本地核心版 — 四大模块 + 离线支持 + 本地存储 |
+| **MVP-2 Alpha** | 🔧 进行中 | AI 增强 + 云同步 + 桌面端 + 用户认证 |
+| **Beta 公测** | 📋 规划中 | 全功能集成，面向真实用户测试 |
+| **正式上线** | 🎯 规划中 | 生产就绪版 |
+
+---
+
+## 👥 贡献指南
+
+### 提交规范
+
+项目使用 **Conventional Commits** 规范，格式如下：
+
+```
+<type>(<scope>): <description>
+```
+
+**常用类型：**
+
+| 类型 | 说明 |
+|------|------|
+| `feat` | 新功能 |
+| `fix` | 缺陷修复 |
+| `refactor` | 重构（不新增功能、不修复缺陷） |
+| `docs` | 文档变更 |
+| `style` | 代码格式调整 |
+| `test` | 测试相关 |
+| `chore` | 构建或工具变更 |
+| `perf` | 性能优化 |
+
+**示例：**
+
+```
+feat(notes): 添加康奈尔笔记模板
+fix(pomodoro): 修复切换标签页后计时器暂停的问题
+docs: 更新 README 快速开始章节
+```
+
+### 代码质量
+
+提交前请确保以下检查全部通过：
+
+```bash
+npm run lint    # 代码检查
+npm run test    # 单元测试
+npm run build   # 构建验证
+```
+
+---
+
+## 📄 许可证
+
+**Private — All Rights Reserved.**
+
+本项目为私有项目，所有权利保留。未经书面许可，不得复制、修改或分发本项目的任何部分。
+<p align="center">
+  <h1 align="center">📚 课伴 KeBan</h1>
+  <p align="center"><strong>你的 AI 智能学习伙伴 — 让每一分钟网课都高效有价值</strong></p>
+  <p align="center">
+    <img src="https://img.shields.io/badge/status-alpha-orange.svg" alt="Status" />
     <img src="https://img.shields.io/badge/version-v0.2.0--alpha-blue.svg" alt="Version" />
     <img src="https://img.shields.io/badge/build-passing-brightgreen.svg" alt="Build" />
     <img src="https://img.shields.io/badge/license-Private-lightgrey.svg" alt="License" />
