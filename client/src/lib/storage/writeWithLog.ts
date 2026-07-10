@@ -17,9 +17,9 @@ import { cryptoManager } from '../crypto';
 const SENSITIVE_FIELDS: Record<string, string[]> = {
   notes: ['content'],
   flashcards: ['front', 'back'],
-  feynmanNotes: ['content'],
-  feynmanSummaries: ['content'],
-  feynmanWeakPoints: ['content'],
+  feynmanNotes: ['explanation'],
+  feynmanSummaries: ['summary'],
+  feynmanWeakPoints: ['text'],
 };
 
 /**

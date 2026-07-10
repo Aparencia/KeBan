@@ -37,3 +37,10 @@ export type { SkeletonProps, SkeletonVariant } from './Skeleton';
 // EmptyState
 export { EmptyState } from './EmptyState';
 export type { EmptyStateProps } from './EmptyState';
+
+// ContextMenu
+export { ContextMenu } from './ContextMenu';
+export type { ContextMenuProps, ContextMenuItem } from './ContextMenu';
+
+// RichTooltip
+export { RichTooltip } from './RichTooltip';

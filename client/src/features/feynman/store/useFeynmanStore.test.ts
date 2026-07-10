@@ -6,6 +6,18 @@ vi.mock('@/lib/utils/uuid', () => ({
   generateId: () => 'mock-uuid-1',
 }));
 
+// Mock operationLog to avoid IndexedDB dependency
+vi.mock('@/lib/storage/operationLog', () => ({
+  logOperation: vi.fn().mockResolvedValue(undefined),
+}));
+
+// Mock crypto to avoid encryption dependency
+vi.mock('@/lib/crypto', () => ({
+  cryptoManager: {
+    isReady: () => false,
+  },
+}));
+
 // Mock storage to isolate pure business logic
 vi.mock('@/lib/storage', () => ({
   feynmanNoteStore: {
@@ -17,6 +29,7 @@ vi.mock('@/lib/storage', () => ({
   },
   feynmanSummaryStore: {
     where: vi.fn().mockResolvedValue([]),
+    getById: vi.fn().mockResolvedValue(null),
     create: vi.fn().mockResolvedValue('mock-summary-1'),
     update: vi.fn().mockResolvedValue(undefined),
     delete: vi.fn().mockResolvedValue(undefined),
@@ -24,6 +37,7 @@ vi.mock('@/lib/storage', () => ({
   feynmanWeakPointStore: {
     getAll: vi.fn().mockResolvedValue([]),
     where: vi.fn().mockResolvedValue([]),
+    getById: vi.fn().mockResolvedValue(null),
     create: vi.fn().mockResolvedValue('mock-wp-1'),
     update: vi.fn().mockResolvedValue(undefined),
     delete: vi.fn().mockResolvedValue(undefined),

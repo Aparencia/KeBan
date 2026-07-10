@@ -27,6 +27,8 @@ interface PomodoroState {
   settings: PomodoroSettings;
   /** 当前工作会话开始时间戳（ms），用于计算 actualDuration */
   sessionStartTime: number | null;
+  /** 当前番茄目标文字 */
+  currentGoal: string | null;
 
   start: () => void;
   pause: () => void;
@@ -34,6 +36,7 @@ interface PomodoroState {
   reset: () => void;
   skip: () => void;
   setMode: (mode: Mode) => void;
+  setCurrentGoal: (goal: string | null) => void;
   tick: () => void;
   updateSettings: (settings: Partial<PomodoroSettings>) => void;
   initialize: () => Promise<void>;
@@ -89,6 +92,7 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
     mode: 'self_study',
     settings: defaultSettings,
     sessionStartTime: null,
+    currentGoal: null,
 
     initialize: async () => {
       const saved = await loadSettings();
@@ -142,7 +146,7 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
 
     skip: () => {
       const { phase, completedCount, settings, mode } = get();
-      const newCount = phase === 'work' ? completedCount + 1 : completedCount;
+      const newCount = phase === 'long_break' ? 0 : (phase === 'work' ? completedCount + 1 : completedCount);
       const nextPhase = getNextPhase(phase, completedCount, settings.longBreakInterval, mode);
       const duration = getPhaseDuration(nextPhase, settings, mode);
       set({
@@ -165,6 +169,8 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
       }
     },
 
+    setCurrentGoal: (goal) => set({ currentGoal: goal }),
+
     tick: () => {
       const { remainingSeconds, isRunning, phase, completedCount, settings, mode } = get();
       if (!isRunning) return;
@@ -172,7 +178,7 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
       if (remainingSeconds <= 1) {
         // Phase completed
         const wasRunning = isRunning;
-        const newCount = phase === 'work' ? completedCount + 1 : completedCount;
+        const newCount = phase === 'long_break' ? 0 : (phase === 'work' ? completedCount + 1 : completedCount);
         const nextPhase = getNextPhase(phase, completedCount, settings.longBreakInterval, mode);
         const duration = getPhaseDuration(nextPhase, settings, mode);
 
@@ -201,6 +207,16 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
             actualDuration,
             completedAt: new Date(),
             interrupted: false,
+            goal: get().currentGoal ?? undefined,
+          }).then(() => {
+            // 触发成就检查（动态 import 避免循环依赖）
+            import('@/lib/achievements/evaluator').then(({ checkAchievements }) => {
+              checkAchievements({ type: 'pomodoro_completed' }).then((unlocked) => {
+                unlocked.forEach(a => {
+                  window.dispatchEvent(new CustomEvent('achievement-unlocked', { detail: a }));
+                });
+              });
+            }).catch(() => {});
           }).catch(console.error);
         }
         // 播放提示音

@@ -12,6 +12,8 @@ build/
 *.pdb
 *.dll
 client/src-tauri/target/
+dist-electron/
+client/release/
 
 # IDE
 .vscode/
@@ -34,6 +36,8 @@ Thumbs.db
 
 # Documentation (local only, not version controlled)
 docs/
+brainstorm*.md
+ui_brainstorm.md
 
 # Logs
 *.log

@@ -19,17 +19,17 @@ describe('RemoteAIPlugin', () => {
   describe('summarizeNote()', () => {
     it('should call /api/v1/ai/summarize with text and options', async () => {
       mockAiPost.mockResolvedValueOnce({ summary: '短摘要', model: 'test', tokens_used: 10, latency_ms: 100 });
-      const result = await plugin.summarizeNote('这是笔记内容');
-      expect(mockAiPost).toHaveBeenCalledWith('/api/v1/ai/summarize', { text: '这是笔记内容', options: {} });
+      const result = await plugin.summarizeNote('这是一段足够长的笔记内容');
+      expect(mockAiPost).toHaveBeenCalledWith('/api/v1/ai/summarize', { text: '这是一段足够长的笔记内容', options: {} });
       expect(result.summary).toBe('短摘要');
       expect(result.generatedAt).toBeInstanceOf(Date);
     });
 
     it('should pass options along with text', async () => {
       mockAiPost.mockResolvedValueOnce({ summary: '摘要', model: 'test', tokens_used: 10, latency_ms: 100 });
-      await plugin.summarizeNote('内容', { maxLength: 200, language: 'zh' });
+      await plugin.summarizeNote('这是足够长的笔记内容', { maxLength: 200, language: 'zh' });
       expect(mockAiPost).toHaveBeenCalledWith('/api/v1/ai/summarize', {
-        text: '内容',
+        text: '这是足够长的笔记内容',
         options: { max_length: 200, language: 'zh' },
       });
     });
@@ -58,10 +58,10 @@ describe('RemoteAIPlugin', () => {
   describe('evaluateExplanation()', () => {
     it('should call /api/v1/ai/evaluate-explanation with concept and explanation', async () => {
       mockAiPost.mockResolvedValueOnce({
-        overall_score: 80,
+        overall_score: 8.5,
         dimensions: [],
-        strengths: [],
-        improvements: [],
+        strengths: ['讲解清晰'],
+        improvements: ['可以增加实际案例', '注意术语解释'],
         encouragement: 'good',
         model: 'test',
         tokens_used: 10,
@@ -72,7 +72,24 @@ describe('RemoteAIPlugin', () => {
         concept: '量子力学',
         explanation: '量子力学是研究微观粒子的学科',
       });
-      expect(result.overallScore).toBe(80);
+      expect(result.overallScore).toBe(8.5);
+      expect(result.weaknesses).toEqual(['可以增加实际案例', '注意术语解释']);
+      expect(result.suggestions).toEqual(['可以增加实际案例', '注意术语解释']);
+    });
+
+    it('should normalize 0-100 overall_score to 0-10 range', async () => {
+      mockAiPost.mockResolvedValueOnce({
+        overall_score: 75,
+        dimensions: [],
+        strengths: [],
+        improvements: [],
+        encouragement: '',
+        model: 'test',
+        tokens_used: 10,
+        latency_ms: 100,
+      });
+      const result = await plugin.evaluateExplanation('光合作用', '光合作用是植物利用光能将二氧化碳和水转化为有机物的过程');
+      expect(result.overallScore).toBe(7.5);
     });
   });
 
@@ -104,7 +121,7 @@ describe('RemoteAIPlugin', () => {
       const timeoutErr = new Error('request timeout exceeded');
       mockAiPost.mockRejectedValue(timeoutErr);
       try {
-        await plugin.summarizeNote('x');
+        await plugin.summarizeNote('这是足够长的笔记内容用于测试超时');
         expect.fail('Should have thrown');
       } catch (e: any) {
         expect(e).toBeInstanceOf(AIError);
@@ -118,7 +135,7 @@ describe('RemoteAIPlugin', () => {
       const abortErr = new DOMException('The operation was aborted', 'AbortError');
       mockAiPost.mockRejectedValueOnce(abortErr);
       try {
-        await plugin.summarizeNote('x');
+        await plugin.summarizeNote('这是足够长的笔记内容用于测试中断');
       } catch (e: any) {
         expect(e).toBeInstanceOf(AIError);
         expect(e.code).toBe('timeout');

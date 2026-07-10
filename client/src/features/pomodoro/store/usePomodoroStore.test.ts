@@ -351,6 +351,94 @@ describe('Pomodoro Store', () => {
     });
   });
 
+  // ── completedCount reset after long_break ─────────────────
+
+  describe('completedCount reset after long_break', () => {
+    /** Helper: fast-forward through one complete phase (tick until remainingSeconds <= 1 then tick once more) */
+    const completePhase = () => {
+      usePomodoroStore.setState({ remainingSeconds: 1, isRunning: true });
+      usePomodoroStore.getState().tick();
+    };
+
+    it('should reset completedCount to 0 after long_break ends (tick)', () => {
+      // Start at completedCount=3 (about to do 4th work → long_break)
+      usePomodoroStore.setState({ phase: 'work', completedCount: 3, isRunning: true, remainingSeconds: 1 });
+      usePomodoroStore.getState().tick(); // work → long_break, completedCount=4
+      expect(usePomodoroStore.getState().phase).toBe('long_break');
+      expect(usePomodoroStore.getState().completedCount).toBe(4);
+
+      // Complete long_break
+      completePhase(); // long_break → work, completedCount should reset to 0
+      const state = usePomodoroStore.getState();
+      expect(state.phase).toBe('work');
+      expect(state.completedCount).toBe(0);
+    });
+
+    it('should correctly trigger long_break again in the second cycle (full two-round)', () => {
+      // Simulate: completedCount=3, work phase ending → long_break
+      usePomodoroStore.setState({ phase: 'work', completedCount: 3, isRunning: true, remainingSeconds: 1 });
+      usePomodoroStore.getState().tick(); // → long_break, count=4
+      completePhase(); // long_break → work, count=0
+
+      // Now do 3 more work phases (count goes 0→1→2→3)
+      for (let i = 0; i < 3; i++) {
+        completePhase(); // work → short_break
+        completePhase(); // short_break → work
+      }
+      expect(usePomodoroStore.getState().completedCount).toBe(3);
+      expect(usePomodoroStore.getState().phase).toBe('work');
+
+      // 4th work in new cycle → long_break
+      completePhase();
+      const state = usePomodoroStore.getState();
+      expect(state.phase).toBe('long_break');
+      expect(state.completedCount).toBe(4);
+    });
+
+    it('should reset completedCount to 0 when skipping long_break', () => {
+      usePomodoroStore.setState({ phase: 'long_break', completedCount: 4 });
+      usePomodoroStore.getState().skip();
+      const state = usePomodoroStore.getState();
+      expect(state.phase).toBe('work');
+      expect(state.completedCount).toBe(0);
+    });
+
+    it('should have correct phase sequence for 8 consecutive pomodoros (2 full cycles)', () => {
+      const interval = DEFAULT_SETTINGS.longBreakInterval; // 4
+      const phases: string[] = [];
+      usePomodoroStore.setState({ phase: 'work', completedCount: 0, isRunning: true });
+
+      for (let i = 0; i < 8; i++) {
+        completePhase(); // work → break
+        phases.push(usePomodoroStore.getState().phase);
+        completePhase(); // break → work
+        phases.push(usePomodoroStore.getState().phase);
+      }
+
+      // Expected pattern: for every 4th work, long_break; otherwise short_break
+      // After work 1: short_break, work
+      // After work 2: short_break, work
+      // After work 3: short_break, work
+      // After work 4: long_break, work (count resets to 0)
+      // After work 5: short_break, work
+      // After work 6: short_break, work
+      // After work 7: short_break, work
+      // After work 8: long_break, work (count resets to 0)
+      const expected = [
+        'short_break', 'work',
+        'short_break', 'work',
+        'short_break', 'work',
+        'long_break', 'work',
+        'short_break', 'work',
+        'short_break', 'work',
+        'short_break', 'work',
+        'long_break', 'work',
+      ];
+      expect(phases).toEqual(expected);
+      expect(usePomodoroStore.getState().completedCount).toBe(0);
+    });
+  });
+
   // ── setMode ───────────────────────────────────────────────
 
   describe('setMode', () => {

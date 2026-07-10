@@ -101,7 +101,7 @@ export class RemoteAIPlugin implements AIPlugin {
       );
 
       return {
-        overallScore: result.overall_score,
+        overallScore: result.overall_score > 10 ? result.overall_score / 10 : result.overall_score,
         dimensions: result.dimensions.map(d => ({
           name: d.dimension,
           score: d.score,
@@ -109,7 +109,7 @@ export class RemoteAIPlugin implements AIPlugin {
         })),
         suggestions: result.improvements,
         strengths: result.strengths,
-        weaknesses: [],
+        weaknesses: result.improvements,
         encouragement: result.encouragement,
         generatedAt: new Date(),
         model: result.model,

@@ -4,6 +4,18 @@ import type { OfflineQueueItem } from '@/types/models';
 import { getDeviceId } from '../storage/operationLog';
 
 /**
+ * 计算指数退避延迟（毫秒）
+ * base=1s，max=60s，附加随机抖动避免雷群效应
+ */
+export function calculateBackoff(retryCount: number): number {
+  const baseDelay = 1000; // 1 秒
+  const maxDelay = 60000; // 60 秒
+  const exponential = baseDelay * Math.pow(2, retryCount);
+  const jitter = Math.random() * 1000;
+  return Math.min(exponential + jitter, maxDelay);
+}
+
+/**
  * 离线操作队列管理器
  * 在网络不可用时缓存写操作，网络恢复后按序重放
  */
@@ -70,13 +82,41 @@ export class OfflineQueue {
   }
 
   /**
-   * 增加重试计数
+   * 增加重试计数（保留向后兼容）
    */
   async incrementRetry(id: string): Promise<void> {
     const item = await db.offlineQueue.get(id);
     if (item) {
       await db.offlineQueue.update(id, { retryCount: item.retryCount + 1 });
     }
+  }
+
+  /**
+   * 调度重试：计算指数退避并设置 nextRetryAt，同时递增 retryCount
+   */
+  async scheduleRetry(id: string): Promise<void> {
+    const item = await db.offlineQueue.get(id);
+    if (item) {
+      const backoff = calculateBackoff(item.retryCount);
+      await db.offlineQueue.update(id, {
+        retryCount: item.retryCount + 1,
+        nextRetryAt: Date.now() + backoff,
+      });
+    }
+  }
+
+  /**
+   * 获取当前可重试的队列项
+   * 条件：retryCount < maxRetries 且 (nextRetryAt 未设置 或 nextRetryAt <= Date.now())
+   */
+  async getReadyItems(maxRetries: number = 5): Promise<OfflineQueueItem[]> {
+    const now = Date.now();
+    const items = await db.offlineQueue.orderBy('version').toArray();
+    return items.filter(
+      item =>
+        item.retryCount < maxRetries &&
+        (item.nextRetryAt == null || item.nextRetryAt <= now)
+    );
   }
 
   /**

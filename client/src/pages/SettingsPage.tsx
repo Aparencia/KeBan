@@ -4,7 +4,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { useToast } from '@/components/ui/Toast';
 import { useMode } from '@/hooks/useMode';
 import type { AppMode } from '@/lib/mode/ModeManager';
-import { Sun, Moon, Download, Upload, HardDrive, Shield, Info, Rows3, Grid3x3, AlignJustify, Cloud, Globe, Lightbulb } from 'lucide-react';
+import { Sun, Moon, Download, Upload, HardDrive, Shield, Info, Rows3, Grid3x3, AlignJustify, Cloud, Globe, Lightbulb, Eye, EyeOff, Cpu } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   exportAllData,
@@ -14,6 +14,8 @@ import {
   getStorageInfo,
 } from '@/lib/storage';
 import type { StorageInfo } from '@/lib/storage';
+import { getAIConfig, saveAIConfig, updateAIGatewayUrl } from '@/lib/ai/config';
+import type { AIConfig } from '@/lib/ai/config';
 
 const DENSITY_KEY = 'keban-density';
 
@@ -39,11 +41,28 @@ const modeOptions: { key: AppMode; label: string; desc: string; icon: React.FC<R
   { key: 'full', label: '完全云端', desc: '数据实时同步到云端，多设备共享', icon: Globe },
 ];
 
+const providerOptions: { key: AIConfig['provider']; label: string }[] = [
+  { key: 'qwen', label: '通义千问（Qwen）' },
+  { key: 'deepseek', label: '深度求索（DeepSeek）' },
+  { key: 'glm', label: '智谱清言（GLM）' },
+  { key: 'custom', label: '自定义' },
+];
+
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
   const { toast } = useToast();
   const { mode, changeMode, recommendedMode } = useMode();
   const [density, setDensity] = useState<Density>(getStoredDensity);
+
+  // AI 配置状态
+  const [aiConfig, setAIConfig] = useState<AIConfig>(getAIConfig);
+  const [showApiKey, setShowApiKey] = useState(false);
+
+  const handleAIConfigSave = () => {
+    saveAIConfig(aiConfig);
+    updateAIGatewayUrl(aiConfig.gatewayUrl);
+    toast({ type: 'success', message: 'AI 配置已保存' });
+  };
 
   const handleDensityChange = (key: Density) => {
     setDensity(key);
@@ -180,6 +199,33 @@ export default function SettingsPage() {
                 </button>
               ))}
             </div>
+
+            {/* 密度预览 */}
+            <div className="mt-3 rounded-kb-md border border-border/50 bg-bg-secondary overflow-hidden">
+              <div className="px-3 py-2 border-b border-border/30">
+                <span className="text-b3 text-text-tertiary">预览效果</span>
+              </div>
+              <div className="space-y-0">
+                {[1, 2, 3].map((i) => (
+                  <div
+                    key={i}
+                    className="flex items-center gap-2 border-b border-border/20 last:border-0"
+                    style={{
+                      padding: density === 'compact' ? '6px 12px' : density === 'loose' ? '16px 12px' : '10px 12px',
+                    }}
+                  >
+                    <div className="w-8 h-8 rounded-kb-sm bg-brand-100 dark:bg-brand-900/30 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-b2 font-medium text-text-primary truncate">笔记标题 {i}</div>
+                      <div className="text-b3 text-text-secondary truncate">这是笔记内容的预览文本...</div>
+                    </div>
+                    <div className="flex gap-1 flex-shrink-0">
+                      <span className="px-1.5 py-0.5 text-b3 rounded text-brand-600 bg-brand-50">标签</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </Card>
 
@@ -243,6 +289,89 @@ export default function SettingsPage() {
               </div>
             </div>
           )}
+        </Card>
+
+        {/* ── AI 服务配置 ── */}
+        <Card padding="md" className="flex flex-col gap-kb-md">
+          <h2 className="text-b1 font-semibold text-text-primary">AI 服务配置</h2>
+
+          {/* Provider 选择 */}
+          <div className="flex flex-col gap-kb-sm">
+            <label className="text-b2 font-medium text-text-secondary">AI 提供商</label>
+            <select
+              value={aiConfig.provider}
+              onChange={(e) => setAIConfig({ ...aiConfig, provider: e.target.value as AIConfig['provider'] })}
+              className={cn(
+                'w-full px-3 py-2 rounded-kb-md text-b2',
+                'bg-bg-elevated border-2 border-border/50 text-text-primary',
+                'focus:outline-none focus:border-brand-500',
+                'transition-colors duration-kb-fast',
+              )}
+            >
+              {providerOptions.map(({ key, label }) => (
+                <option key={key} value={key}>{label}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* API Key */}
+          <div className="flex flex-col gap-kb-sm">
+            <label className="text-b2 font-medium text-text-secondary">API Key</label>
+            <div className="relative">
+              <input
+                type={showApiKey ? 'text' : 'password'}
+                value={aiConfig.apiKey}
+                onChange={(e) => setAIConfig({ ...aiConfig, apiKey: e.target.value })}
+                placeholder="请输入 API Key"
+                className={cn(
+                  'w-full px-3 py-2 pr-10 rounded-kb-md text-b2',
+                  'bg-bg-elevated border-2 border-border/50 text-text-primary',
+                  'placeholder:text-text-quaternary',
+                  'focus:outline-none focus:border-brand-500',
+                  'transition-colors duration-kb-fast',
+                )}
+              />
+              <button
+                type="button"
+                onClick={() => setShowApiKey(!showApiKey)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-tertiary hover:text-text-secondary transition-colors"
+                tabIndex={-1}
+              >
+                {showApiKey
+                  ? <EyeOff className="w-icon-sm h-icon-sm" strokeWidth={1.5} />
+                  : <Eye className="w-icon-sm h-icon-sm" strokeWidth={1.5} />}
+              </button>
+            </div>
+          </div>
+
+          {/* Gateway URL */}
+          <div className="flex flex-col gap-kb-sm">
+            <label className="text-b2 font-medium text-text-secondary">Gateway URL</label>
+            <input
+              type="text"
+              value={aiConfig.gatewayUrl}
+              onChange={(e) => setAIConfig({ ...aiConfig, gatewayUrl: e.target.value })}
+              placeholder="http://localhost:8000"
+              className={cn(
+                'w-full px-3 py-2 rounded-kb-md text-b2',
+                'bg-bg-elevated border-2 border-border/50 text-text-primary',
+                'placeholder:text-text-quaternary',
+                'focus:outline-none focus:border-brand-500',
+                'transition-colors duration-kb-fast',
+              )}
+            />
+          </div>
+
+          {/* 保存按钮 */}
+          <Button
+            variant="primary"
+            size="md"
+            icon={<Cpu className="w-icon-sm h-icon-sm" strokeWidth={1.5} />}
+            className="w-full"
+            onClick={handleAIConfigSave}
+          >
+            保存 AI 配置
+          </Button>
         </Card>
 
         {/* ── 数据管理 ── */}
@@ -320,7 +449,7 @@ export default function SettingsPage() {
             </div>
             <div>
               <p className="text-b1 font-semibold text-text-primary">课伴</p>
-              <p className="text-c1 text-text-tertiary">v0.1.0 · Beta 预览版</p>
+              <p className="text-c1 text-text-tertiary">v0.3.0 · MVP-2 Alpha</p>
             </div>
           </div>
 

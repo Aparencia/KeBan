@@ -18,24 +18,24 @@ const variantStyles: Record<ButtonVariant, string> = {
   primary: [
     'bg-brand-600 text-white',
     'hover:bg-brand-700 hover:shadow-kb-md',
-    'active:bg-brand-800 active:scale-[0.98]',
+    'active:bg-brand-800 active:scale-95',
     'shadow-kb-sm',
   ].join(' '),
   secondary: [
     'bg-bg-tertiary text-text-primary',
     'hover:bg-border hover:shadow-kb-sm',
-    'active:bg-border-strong active:scale-[0.98]',
+    'active:bg-border-strong active:scale-95',
     'border border-white/10',
   ].join(' '),
   ghost: [
     'bg-transparent text-text-secondary',
     'hover:bg-bg-tertiary hover:text-text-primary',
-    'active:bg-bg-secondary active:scale-[0.98]',
+    'active:bg-bg-secondary active:scale-95',
   ].join(' '),
   danger: [
     'bg-[#F43F5E] text-white',
     'hover:bg-rose-700 hover:shadow-kb-md',
-    'active:bg-rose-800 active:scale-[0.98]',
+    'active:bg-rose-800 active:scale-95',
     'shadow-kb-sm',
   ].join(' '),
 };

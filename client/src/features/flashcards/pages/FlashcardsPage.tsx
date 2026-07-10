@@ -1,9 +1,10 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Card, Button, Tag, Modal, Input, EmptyState, Skeleton } from '@/components/ui';
-import { Plus, Layers, Clock, Trash2, Layers3 } from 'lucide-react';
+import { Card, Button, Tag, Modal, Input, EmptyState, Skeleton, useToast } from '@/components/ui';
+import { Plus, Layers, Clock, Trash2, Layers3, Upload } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useFlashcardStore } from '../store/useFlashcardStore';
 import { flashcardStore } from '@/lib/storage';
+import { importDeck } from '@/lib/storage/exportImport';
 import type { Flashcard } from '@/types/models';
 
 interface DeckLocalStats {
@@ -26,6 +27,29 @@ export default function FlashcardsPage() {
   // Context menu / long-press delete
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState(false);
+  const { toast } = useToast();
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImporting(true);
+    try {
+      const result = await importDeck(file);
+      toast({ type: 'success', message: `导入成功：${result.cardCount} 张卡片` });
+      // 刷新牌组列表
+      loadDecks();
+      const cards = await flashcardStore.getAll();
+      setAllCards(cards);
+    } catch {
+      toast({ type: 'error', message: '导入失败，请确认文件格式正确' });
+    } finally {
+      setImporting(false);
+      // 重置 input 以便再次选择同一文件
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
 
   // Load decks + all cards on mount
   useEffect(() => {
@@ -101,13 +125,34 @@ export default function FlashcardsPage() {
           <h1 className="text-h1 font-semibold text-text-primary">闪卡</h1>
           <p className="text-b2 text-text-tertiary mt-0.5">间隔重复，高效记忆</p>
         </div>
-        <Button
-          size="sm"
-          icon={<Plus className="w-icon-sm h-icon-sm" strokeWidth={2} />}
-          onClick={() => setModalOpen(true)}
-        >
-          新建牌组
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="secondary"
+            icon={importing
+              ? <span className="w-icon-sm h-icon-sm border-2 border-current border-t-transparent rounded-full animate-spin inline-block" />
+              : <Upload className="w-icon-sm h-icon-sm" strokeWidth={2} />}
+            disabled={importing}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            导入牌组
+          </Button>
+          <Button
+            size="sm"
+            icon={<Plus className="w-icon-sm h-icon-sm" strokeWidth={2} />}
+            onClick={() => setModalOpen(true)}
+          >
+            新建牌组
+          </Button>
+        </div>
+        {/* 隐藏的文件选择 input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".kban-deck"
+          className="hidden"
+          onChange={handleImport}
+        />
       </div>
 
       {/* 牌组网格 */}
@@ -134,7 +179,7 @@ export default function FlashcardsPage() {
             }
           />
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-kb-md">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-kb-md" data-allow-context-menu>
             {decks.map((deck) => {
               const stats = getStats(deck.id!);
               const progress =

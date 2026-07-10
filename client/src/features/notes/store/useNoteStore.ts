@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { noteStore, noteFolderStore } from '@/lib/storage';
+import { createWithLog, updateWithLog, deleteWithLog } from '@/lib/storage/writeWithLog';
 import type { Note, NoteFolder } from '@/types/models';
-import { generateId } from '@/lib/utils/uuid';
 
 interface NoteState {
   // 数据
@@ -135,9 +135,7 @@ export const useNoteStore = create<NoteState>((set, get) => {
     createNote: async (data) => {
       const now = new Date();
       const content = data.content ?? '';
-      const id = generateId();
-      const note: Note = {
-        id,
+      const noteData = {
         title: data.title,
         content,
         template: data.template ?? 'blank',
@@ -148,7 +146,7 @@ export const useNoteStore = create<NoteState>((set, get) => {
         wordCount: content.length,
         pinned: false,
       };
-      await noteStore.create(note);
+      const id = await createWithLog(noteStore, 'notes', noteData);
       await get().loadNotes();
       return id;
     },
@@ -158,12 +156,12 @@ export const useNoteStore = create<NoteState>((set, get) => {
       if (changes.content !== undefined) {
         updateData.wordCount = changes.content.length;
       }
-      await noteStore.update(id, updateData);
+      await updateWithLog(noteStore, 'notes', id, updateData);
       await get().loadNotes();
     },
 
     deleteNote: async (id) => {
-      await noteStore.delete(id);
+      await deleteWithLog(noteStore, 'notes', id);
       const { selectedNoteId } = get();
       if (selectedNoteId === id) {
         set({ selectedNoteId: null });
@@ -174,7 +172,7 @@ export const useNoteStore = create<NoteState>((set, get) => {
     togglePin: async (id) => {
       const note = await noteStore.getById(id);
       if (note) {
-        await noteStore.update(id, { pinned: !note.pinned, updatedAt: new Date() });
+        await updateWithLog(noteStore, 'notes', id, { pinned: !note.pinned, updatedAt: new Date() });
         await get().loadNotes();
       }
     },
@@ -189,22 +187,20 @@ export const useNoteStore = create<NoteState>((set, get) => {
     },
 
     createFolder: async (name, parentId?, color?) => {
-      const id = generateId();
-      const folder: NoteFolder = {
-        id,
+      const folderData = {
         name,
         parentId,
         color,
         createdAt: new Date(),
         order: Date.now(),
       };
-      await noteFolderStore.create(folder);
+      const id = await createWithLog(noteFolderStore, 'noteFolders', folderData);
       await get().loadFolders();
       return id;
     },
 
     updateFolder: async (id, changes) => {
-      await noteFolderStore.update(id, changes);
+      await updateWithLog(noteFolderStore, 'noteFolders', id, changes);
       await get().loadFolders();
     },
 
@@ -216,7 +212,7 @@ export const useNoteStore = create<NoteState>((set, get) => {
           await noteStore.update(note.id, { folderId: undefined });
         }
       }
-      await noteFolderStore.delete(id);
+      await deleteWithLog(noteFolderStore, 'noteFolders', id);
       const { selectedFolderId } = get();
       if (selectedFolderId === id) {
         set({ selectedFolderId: null });

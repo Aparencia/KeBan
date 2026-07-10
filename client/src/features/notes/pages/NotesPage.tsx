@@ -1,11 +1,16 @@
-import { useEffect, useState } from 'react';
-import { Button, Card, Input, Tag, EmptyState } from '@/components/ui';
-import { Search, Plus, FolderPlus, ChevronRight, FileText, PanelLeftClose, PanelLeft, Pin } from 'lucide-react';
+import { useEffect, useState, useCallback } from 'react';
+import { Button, Card, Input, Tag, EmptyState, Modal } from '@/components/ui';
+import { useToast } from '@/components/ui';
+import {
+  Search, Plus, FolderPlus, ChevronRight, FileText, PanelLeftClose, PanelLeft, Pin, PinOff,
+  MoreVertical, Trash2, Copy, Download,
+} from 'lucide-react';
 import { TemplateSelector } from '../components/TemplateSelector';
 import type { NoteTemplate } from '../components/TemplateSelector';
 import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
 import { useNoteStore } from '../store/useNoteStore';
+import type { Note } from '@/types/models';
 
 const templateLabels: Record<NoteTemplate | 'qa', string> = {
   outline: '大纲式', cornell: '康奈尔', mindmap: '思维导图', free: '自由笔记', blank: '空白', qa: '问答',
@@ -48,7 +53,15 @@ export default function NotesPage() {
     folders, selectedFolderId, selectedNoteId, searchQuery, selectedTags,
     loadNotes, loadFolders, createNote, createFolder, selectNote, selectFolder,
     setSearchQuery, getFilteredNotes, createFromTemplate, toggleTag, getAllTags,
+    deleteNote, togglePin,
   } = useNoteStore();
+
+  const { toast } = useToast();
+
+  // 菜单与操作状态
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+  const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
 
   // 初始化加载
   useEffect(() => {
@@ -88,6 +101,96 @@ export default function NotesPage() {
     selectNote(noteId);
     navigate(`/notes/${noteId}`);
   };
+
+  // === 卡片操作函数 ===
+  const currentMenuNote = filteredNotes.find((n) => n.id === menuOpenId) ?? null;
+
+  const handleTogglePin = useCallback((noteId: string) => {
+    togglePin(noteId);
+    toast({ type: 'success', message: '已更新置顶状态' });
+  }, [togglePin, toast]);
+
+  const handleDeleteNote = useCallback((id: string) => {
+    setDeleteTargetId(id);
+    setMenuOpenId(null);
+    setMenuPos(null);
+  }, []);
+
+  const handleConfirmDelete = useCallback(async () => {
+    if (deleteTargetId) {
+      await deleteNote(deleteTargetId);
+      toast({ type: 'success', message: '笔记已删除' });
+    }
+    setDeleteTargetId(null);
+  }, [deleteTargetId, deleteNote, toast]);
+
+  const handleDuplicateNote = useCallback(async (note: Note) => {
+    await createNote({
+      title: note.title + ' (副本)',
+      content: note.content,
+      folderId: note.folderId,
+      tags: note.tags,
+      template: note.template,
+    });
+    toast({ type: 'success', message: '笔记已复制' });
+    setMenuOpenId(null);
+    setMenuPos(null);
+  }, [createNote, toast]);
+
+  const handleExportNote = useCallback((note: Note) => {
+    let text = note.title + '\n\n';
+    try {
+      const json = JSON.parse(note.content);
+      if (json?.content) {
+        const extract = (nodes: unknown[]): string => {
+          let t = '';
+          for (const node of nodes) {
+            const n = node as { text?: string; content?: unknown[]; type?: string };
+            if (n.text) t += n.text;
+            if (n.content) t += extract(n.content);
+            if (n.type === 'paragraph' || n.type === 'heading') t += '\n';
+          }
+          return t;
+        };
+        text += extract(json.content);
+      }
+    } catch {
+      text += note.content;
+    }
+    const url = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${note.title || 'note'}-${Date.now()}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast({ type: 'success', message: '笔记已导出' });
+    setMenuOpenId(null);
+    setMenuPos(null);
+  }, [toast]);
+
+  // 外部关闭菜单
+  useEffect(() => {
+    if (!menuOpenId) return;
+    const handleMouseDown = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('[data-note-menu]')) {
+        setMenuOpenId(null);
+        setMenuPos(null);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setMenuOpenId(null);
+        setMenuPos(null);
+      }
+    };
+    document.addEventListener('mousedown', handleMouseDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleMouseDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [menuOpenId]);
 
   return (
     <div className="flex h-[calc(100vh-4rem)] overflow-hidden">
@@ -234,6 +337,7 @@ export default function NotesPage() {
                 padding="md"
                 onClick={() => handleSelectNote(note.id!)}
                 className={cn(
+                  'group relative',
                   selectedNoteId === note.id && 'border-brand-400 bg-brand-50/30',
                 )}
               >
@@ -254,11 +358,67 @@ export default function NotesPage() {
                       <span className="text-c1 text-text-tertiary ml-auto">{formatDate(note.updatedAt)}</span>
                     </div>
                   </div>
+                  {/* MoreVertical 按钮 */}
+                  <button
+                    data-note-menu
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      setMenuPos({ x: rect.right, y: rect.bottom });
+                      setMenuOpenId(menuOpenId === note.id ? null : note.id);
+                    }}
+                    className="p-1 rounded hover:bg-bg-tertiary opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                  >
+                    <MoreVertical className="w-4 h-4 text-text-secondary" strokeWidth={1.5} />
+                  </button>
                 </div>
               </Card>
             ))
           )}
         </div>
+
+        {/* 下拉菜单 */}
+        {menuOpenId && menuPos && currentMenuNote && (
+          <div
+            data-note-menu
+            className="fixed z-50 bg-bg-elevated border border-border/50 rounded-kb-md shadow-lg py-1 min-w-[160px]"
+            style={{ left: menuPos.x - 160, top: menuPos.y }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* 置顶/取消置顶 */}
+            <button
+              onClick={() => { handleTogglePin(menuOpenId); setMenuOpenId(null); setMenuPos(null); }}
+              className="w-full flex items-center gap-2 px-3 py-2 text-b2 text-text-secondary hover:bg-bg-tertiary hover:text-text-primary transition-colors"
+            >
+              {currentMenuNote.pinned
+                ? <><PinOff className="w-4 h-4" strokeWidth={1.5} /> 取消置顶</>
+                : <><Pin className="w-4 h-4" strokeWidth={1.5} /> 置顶</>}
+            </button>
+            {/* 复制 */}
+            <button
+              onClick={() => handleDuplicateNote(currentMenuNote)}
+              className="w-full flex items-center gap-2 px-3 py-2 text-b2 text-text-secondary hover:bg-bg-tertiary hover:text-text-primary transition-colors"
+            >
+              <Copy className="w-4 h-4" strokeWidth={1.5} /> 复制
+            </button>
+            {/* 导出 */}
+            <button
+              onClick={() => handleExportNote(currentMenuNote)}
+              className="w-full flex items-center gap-2 px-3 py-2 text-b2 text-text-secondary hover:bg-bg-tertiary hover:text-text-primary transition-colors"
+            >
+              <Download className="w-4 h-4" strokeWidth={1.5} /> 导出
+            </button>
+            {/* 分隔线 */}
+            <div className="border-t border-border/40 my-1" />
+            {/* 删除 */}
+            <button
+              onClick={() => handleDeleteNote(menuOpenId)}
+              className="w-full flex items-center gap-2 px-3 py-2 text-b2 text-semantic-error hover:bg-semantic-error/10 transition-colors"
+            >
+              <Trash2 className="w-4 h-4" strokeWidth={1.5} /> 删除
+            </button>
+          </div>
+        )}
       </main>
 
       {/* ── 右栏：预览（桌面） ── */}
@@ -321,6 +481,30 @@ export default function NotesPage() {
         onClose={() => setTemplateOpen(false)}
         onSelect={handleTemplateSelect}
       />
+
+      {/* ── 删除确认 Modal ── */}
+      <Modal
+        open={!!deleteTargetId}
+        onClose={() => setDeleteTargetId(null)}
+        title="确认删除"
+        description="确定要删除这条笔记吗？此操作不可撤销。"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setDeleteTargetId(null)}>
+              取消
+            </Button>
+            <Button
+              variant="danger"
+              icon={<Trash2 className="w-icon-sm h-icon-sm" strokeWidth={1.5} />}
+              onClick={handleConfirmDelete}
+            >
+              删除
+            </Button>
+          </>
+        }
+      >
+        <div />
+      </Modal>
     </div>
   );
 }

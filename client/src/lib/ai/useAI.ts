@@ -28,6 +28,7 @@ export function useAISummarize() {
       setState({ data: result, loading: false, error: null, isFallback: false });
       return result;
     } catch (error: unknown) {
+      console.error('[AI] summarize hook error:', error);
       const fallback = getLocalFallbackMessage('summarize');
       setState({ data: null, loading: false, error: fallback.message + '。' + fallback.suggestion, isFallback: true });
     }
@@ -51,6 +52,7 @@ export function useAIFlashcards() {
       setState({ data: result, loading: false, error: null, isFallback: false });
       return result;
     } catch (error: unknown) {
+      console.error('[AI] flashcard hook error:', error);
       const fallback = getLocalFallbackMessage('flashcard');
       setState({ data: null, loading: false, error: fallback.message + '。' + fallback.suggestion, isFallback: true });
     }
@@ -74,6 +76,7 @@ export function useAIEvaluate() {
       setState({ data: result, loading: false, error: null, isFallback: false });
       return result;
     } catch (error: unknown) {
+      console.error('[AI] evaluate hook error:', error);
       const fallback = getLocalFallbackMessage('evaluate');
       setState({ data: null, loading: false, error: fallback.message + '。' + fallback.suggestion, isFallback: true });
     }
@@ -97,6 +100,7 @@ export function useAIDuration() {
       setState({ data: result, loading: false, error: null, isFallback: result.isLocalFallback });
       return result;
     } catch (error: unknown) {
+      console.error('[AI] duration hook error:', error);
       const msg = error instanceof Error ? error.message : (typeof error === 'string' ? error : '番茄钟推荐失败');
       setState({ data: null, loading: false, error: msg, isFallback: true });
     }

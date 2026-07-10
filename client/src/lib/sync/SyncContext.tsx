@@ -77,9 +77,8 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       if (config.syncEnabled) {
         syncEngine.sync();      // 模式切换后立即触发一次
         syncEngine.startAutoSync(60000); // 重启定时同步
-      } else {
-        syncEngine.stopAutoSync();
       }
+      // syncDisabled 时无需在此停止，effect cleanup 统一处理 stopAutoSync
     });
 
     return () => {

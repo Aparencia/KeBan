@@ -1,21 +1,26 @@
 /**
  * 平台检测工具
+ * 支持 Electron / PWA / Browser 三种运行环境
  */
 
-export function isTauri(): boolean {
-  return !!(window as any).__TAURI__ || !!(window as any).__TAURI_INTERNALS__;
+export function isElectron(): boolean {
+  return !!window.electronAPI;
+}
+
+export function isDesktop(): boolean {
+  return isElectron();
 }
 
 export function isPWA(): boolean {
-  return !isTauri() && window.matchMedia('(display-mode: standalone)').matches;
+  return !isDesktop() && window.matchMedia('(display-mode: standalone)').matches;
 }
 
 export function isBrowser(): boolean {
-  return !isTauri() && !isPWA();
+  return !isDesktop() && !isPWA();
 }
 
-export function getPlatform(): 'tauri' | 'pwa' | 'browser' {
-  if (isTauri()) return 'tauri';
+export function getPlatform(): 'electron' | 'pwa' | 'browser' {
+  if (isElectron()) return 'electron';
   if (isPWA()) return 'pwa';
   return 'browser';
 }

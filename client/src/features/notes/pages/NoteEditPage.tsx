@@ -5,16 +5,33 @@ import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
 import Highlight from '@tiptap/extension-highlight';
 import Placeholder from '@tiptap/extension-placeholder';
+import { Table } from '@tiptap/extension-table';
+import { TableRow } from '@tiptap/extension-table-row';
+import { TableCell } from '@tiptap/extension-table-cell';
+import { TableHeader } from '@tiptap/extension-table-header';
+import { TaskList } from '@tiptap/extension-task-list';
+import { TaskItem } from '@tiptap/extension-task-item';
+import { Image } from '@tiptap/extension-image';
+import { TextAlign } from '@tiptap/extension-text-align';
+import { Color } from '@tiptap/extension-color';
+import { TextStyle } from '@tiptap/extension-text-style';
 import {
   ArrowLeft, Bold, Italic, Underline as UnderlineIcon, Strikethrough,
   Highlighter, Heading1, Heading2, Heading3, List, ListOrdered,
   Code, Quote, Undo2, Redo2, Save, Sparkles, X,
   Copy, RefreshCw, Download, ChevronDown, Check,
+  Table2, ListTodo, ImageIcon, AlignLeft, AlignCenter, AlignRight, AlignJustify, Palette,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useNoteStore } from '../store/useNoteStore';
+import { CornellLayout } from '../components/CornellLayout';
+import FreeCanvas from '../components/FreeCanvas';
+import type { FreeCanvasData } from '@/types/models';
+import { useFlashcardStore } from '@/features/flashcards/store/useFlashcardStore';
 import { useAISummarize, useAIFlashcards } from '@/lib/ai/useAI';
 import { useToast } from '@/components/ui';
+
+type SaveStatus = 'idle' | 'saving' | 'saved' | 'failed';
 
 interface ToolbarButtonProps {
   icon: React.FC<React.SVGProps<SVGSVGElement> & { strokeWidth?: number | string }>;
@@ -57,6 +74,20 @@ export default function NoteEditPage() {
   const titleRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // AI 闪卡持久化
+  const { loadDecks, createDeck, createCard } = useFlashcardStore();
+
+  // 获取目标牌组：优先使用已有牌组，否则自动创建默认牌组
+  const ensureDefaultDeck = useCallback(async (): Promise<string> => {
+    await loadDecks();
+    const currentDecks = useFlashcardStore.getState().decks;
+    if (currentDecks.length > 0) return currentDecks[0].id;
+    return createDeck('AI 闪卡', '由笔记 AI 自动生成的闪卡');
+  }, [loadDecks, createDeck]);
+
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
+  const saveStatusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // AI Summary state
   const [summaryModalOpen, setSummaryModalOpen] = useState(false);
   const { loading: aiLoading, data: aiData, error: aiError, summarize } = useAISummarize();
@@ -66,6 +97,7 @@ export default function NoteEditPage() {
   const { loading: flashcardLoading, generate: generateFlashcards } = useAIFlashcards();
   const [insertMenuOpen, setInsertMenuOpen] = useState(false);
   const [convertedKeys, setConvertedKeys] = useState<Set<number>>(new Set());
+  const imageInputRef = useRef<HTMLInputElement>(null);
 
   // === AI 摘要操作辅助函数 ===
 
@@ -91,13 +123,31 @@ export default function NoteEditPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [note?.id]);
 
+  // 解析自由画布数据
+  const freeCanvasData = useMemo<FreeCanvasData | null>(() => {
+    if (!note?.content || note?.template !== 'free') return null;
+    try {
+      const parsed = JSON.parse(note.content);
+      if (parsed && parsed.blocks) return parsed;
+      return null;
+    } catch { return null; }
+  }, [note?.id, note?.content, note?.template]);
+
   // debounce 保存函数
   const debouncedSave = useCallback(
     (content: string) => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
-      debounceRef.current = setTimeout(() => {
+      debounceRef.current = setTimeout(async () => {
         if (noteId) {
-          updateNote(noteId, { content });
+          setSaveStatus('saving');
+          try {
+            await updateNote(noteId, { content });
+            setSaveStatus('saved');
+            if (saveStatusTimerRef.current) clearTimeout(saveStatusTimerRef.current);
+            saveStatusTimerRef.current = setTimeout(() => setSaveStatus('idle'), 2000);
+          } catch {
+            setSaveStatus('failed');
+          }
         }
       }, 500);
     },
@@ -108,6 +158,7 @@ export default function NoteEditPage() {
   useEffect(() => {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
+      if (saveStatusTimerRef.current) clearTimeout(saveStatusTimerRef.current);
     };
   }, []);
 
@@ -117,6 +168,16 @@ export default function NoteEditPage() {
       Underline,
       Highlight.configure({ multicolor: false }),
       Placeholder.configure({ placeholder: '开始记录你的笔记...' }),
+      Table.configure({ resizable: true }),
+      TableRow,
+      TableCell,
+      TableHeader,
+      TaskList,
+      TaskItem.configure({ nested: true }),
+      Image.configure({ inline: true }),
+      TextAlign.configure({ types: ['heading', 'paragraph'] }),
+      Color,
+      TextStyle,
     ],
     content: initialContent,
     onUpdate: ({ editor: e }) => {
@@ -125,6 +186,20 @@ export default function NoteEditPage() {
       debouncedSave(contentStr);
     },
   });
+
+  // 图片上传处理
+  const handleImageSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !editor) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = reader.result as string;
+      editor.chain().focus().setImage({ src: base64 }).run();
+    };
+    reader.readAsDataURL(file);
+    // 清空 input 以便重复选择同一文件
+    e.target.value = '';
+  }, [editor]);
 
   const handleInsertNote = useCallback((position: 'cursor' | 'start' | 'end') => {
     if (!editor || !aiData) return;
@@ -156,24 +231,36 @@ export default function NoteEditPage() {
     try {
       const result = await generateFlashcards(keyPoint);
       if (!result) throw new Error('generate failed');
+      const targetDeckId = await ensureDefaultDeck();
+      await Promise.all(
+        result.cards.map((card) =>
+          createCard({ deckId: targetDeckId, front: card.front, back: card.back, type: 'basic' }),
+        ),
+      );
       setConvertedKeys(prev => new Set(prev).add(index));
       toast({ type: 'success', message: `已生成 ${result.cards.length} 张闪卡` });
     } catch {
       toast({ type: 'error', message: '闪卡生成失败，请稍后重试' });
     }
-  }, [generateFlashcards, toast]);
+  }, [generateFlashcards, toast, ensureDefaultDeck, createCard]);
 
   const handleGenerateAllFlashcards = useCallback(async () => {
     if (!aiData?.keyPoints?.length) return;
     try {
       const result = await generateFlashcards(aiData.keyPoints.join('\n'));
       if (!result) throw new Error('generate failed');
+      const targetDeckId = await ensureDefaultDeck();
+      await Promise.all(
+        result.cards.map((card) =>
+          createCard({ deckId: targetDeckId, front: card.front, back: card.back, type: 'basic' }),
+        ),
+      );
       setConvertedKeys(new Set(aiData.keyPoints!.map((_, i) => i)));
       toast({ type: 'success', message: `已从全部要点生成 ${result.cards.length} 张闪卡` });
     } catch {
       toast({ type: 'error', message: '闪卡生成失败，请稍后重试' });
     }
-  }, [aiData, generateFlashcards, toast]);
+  }, [aiData, generateFlashcards, toast, ensureDefaultDeck, createCard]);
 
   const handleRegenerate = useCallback(() => {
     if (!editor) return;
@@ -266,6 +353,18 @@ export default function NoteEditPage() {
           )}
         />
 
+        <span className={cn(
+          'text-b3 transition-opacity duration-300 flex-shrink-0',
+          saveStatus === 'idle' && 'opacity-0',
+          saveStatus === 'saving' && 'text-text-tertiary opacity-100',
+          saveStatus === 'saved' && 'text-semantic-success opacity-100',
+          saveStatus === 'failed' && 'text-semantic-error opacity-100',
+        )}>
+          {saveStatus === 'saving' && '保存中...'}
+          {saveStatus === 'saved' && '已保存'}
+          {saveStatus === 'failed' && '保存失败'}
+        </span>
+
         <button
           onClick={() => {
             if (editor) {
@@ -317,7 +416,8 @@ export default function NoteEditPage() {
         </button>
       </div>
 
-      {/* 工具栏 */}
+      {/* 工具栏（康奈尔/自由画布模式隐藏） */}
+      {note?.template !== 'cornell' && note?.template !== 'free' && (
       <div className="flex items-center gap-1 px-kb-md py-2 border-b border-border/40 flex-shrink-0 overflow-x-auto">
         <ToolbarButton icon={Undo2} label="撤销" onClick={() => editor?.chain().focus().undo().run()} />
         <ToolbarButton icon={Redo2} label="重做" onClick={() => editor?.chain().focus().redo().run()} />
@@ -396,14 +496,102 @@ export default function NoteEditPage() {
           isActive={editor?.isActive('codeBlock')}
           onClick={() => editor?.chain().focus().toggleCodeBlock().run()}
         />
+        <ToolbarDivider />
+        <ToolbarButton
+          icon={Table2}
+          label="插入表格"
+          onClick={() => editor?.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
+        />
+        <ToolbarButton
+          icon={ListTodo}
+          label="任务列表"
+          isActive={editor?.isActive('taskList')}
+          onClick={() => editor?.chain().focus().toggleTaskList().run()}
+        />
+        <ToolbarButton
+          icon={ImageIcon}
+          label="插入图片"
+          onClick={() => imageInputRef.current?.click()}
+        />
+        <ToolbarDivider />
+        <ToolbarButton
+          icon={AlignLeft}
+          label="左对齐"
+          isActive={editor?.isActive({ textAlign: 'left' })}
+          onClick={() => editor?.chain().focus().setTextAlign('left').run()}
+        />
+        <ToolbarButton
+          icon={AlignCenter}
+          label="居中"
+          isActive={editor?.isActive({ textAlign: 'center' })}
+          onClick={() => editor?.chain().focus().setTextAlign('center').run()}
+        />
+        <ToolbarButton
+          icon={AlignRight}
+          label="右对齐"
+          isActive={editor?.isActive({ textAlign: 'right' })}
+          onClick={() => editor?.chain().focus().setTextAlign('right').run()}
+        />
+        <ToolbarButton
+          icon={AlignJustify}
+          label="两端对齐"
+          isActive={editor?.isActive({ textAlign: 'justify' })}
+          onClick={() => editor?.chain().focus().setTextAlign('justify').run()}
+        />
+        <ToolbarDivider />
+        <label
+          title="文字颜色"
+          className="relative p-2 rounded-kb-sm cursor-pointer text-text-secondary hover:bg-bg-tertiary hover:text-text-primary active:bg-bg-secondary active:scale-95 transition-all duration-kb-fast"
+        >
+          <Palette className="w-icon-sm h-icon-sm" strokeWidth={1.5} />
+          <input
+            type="color"
+            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+            onChange={(e) => editor?.chain().focus().setColor(e.target.value).run()}
+          />
+        </label>
       </div>
+      )}
+
+      {/* 隐藏的图片上传 input */}
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleImageSelect}
+      />
 
       {/* 编辑区 */}
+      {note?.template === 'free' ? (
+        <div className="flex-1 overflow-hidden">
+          <FreeCanvas
+            content={freeCanvasData}
+            onChange={(data) => {
+              const json = JSON.stringify(data);
+              if (noteId) debouncedSave(json);
+            }}
+          />
+        </div>
+      ) : (
       <div className="flex-1 overflow-y-auto px-kb-md py-kb-lg">
         <div className="max-w-3xl mx-auto">
-          <EditorContent editor={editor} />
+          {note?.template === 'cornell' ? (
+            <CornellLayout
+              content={(() => { try { return JSON.parse(note.content || '{}'); } catch { return {}; } })()}
+              onChange={(data) => {
+                if (noteId) {
+                  const contentStr = JSON.stringify(data);
+                  debouncedSave(contentStr);
+                }
+              }}
+            />
+          ) : (
+            <EditorContent editor={editor} />
+          )}
         </div>
       </div>
+      )}
 
       {/* AI 摘要结果弹窗 */}
       {summaryModalOpen && (

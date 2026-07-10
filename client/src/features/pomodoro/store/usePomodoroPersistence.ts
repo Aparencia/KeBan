@@ -1,7 +1,7 @@
 import { pomodoroSettingsStore, pomodoroSessionStore } from '@/lib/storage';
+import { createWithLog } from '@/lib/storage/writeWithLog';
 import type { PomodoroSession, PomodoroSettings } from '@/types/models';
 import { playBeep } from '@/utils/sound';
-import { generateId } from '@/lib/utils/uuid';
 
 const SETTINGS_ID = 'default';
 
@@ -34,7 +34,7 @@ export async function saveSettings(settings: Omit<PomodoroSettings, 'id'>): Prom
 export async function recordSession(
   session: Omit<PomodoroSession, 'id'>,
 ): Promise<void> {
-  await pomodoroSessionStore.create({ ...session, id: generateId() } as PomodoroSession);
+  await createWithLog(pomodoroSessionStore, 'pomodoroSessions', session);
 }
 
 /**

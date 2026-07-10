@@ -1,0 +1,25 @@
+# Electron Builder 打包配置 - 课伴桌面端
+appId: com.keban.app
+productName: "课伴"
+directories:
+  output: release
+  buildResources: build
+files:
+  - dist/**/*
+  - dist-electron/**/*
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: build/icon.ico
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  installerHeaderIcon: build/icon.ico
+  createDesktopShortcut: true
+  shortcutName: "课伴"
+  perMachine: false
+  language: "2052"

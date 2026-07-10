@@ -26,8 +26,10 @@ const { mockOfflineQueue } = vi.hoisted(() => ({
     isProcessing: vi.fn().mockReturnValue(false),
     setProcessing: vi.fn(),
     getPendingItems: vi.fn().mockResolvedValue([]),
+    getReadyItems: vi.fn().mockResolvedValue([]),
     removeItems: vi.fn(),
     incrementRetry: vi.fn(),
+    scheduleRetry: vi.fn(),
     cleanupExpired: vi.fn(),
   },
 }));

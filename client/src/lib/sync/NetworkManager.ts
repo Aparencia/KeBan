@@ -3,6 +3,8 @@
  * 监听浏览器 online/offline 事件 + 心跳检测判断网络质量
  */
 
+import { isDesktop } from '../utils/platform';
+
 export type NetworkStatus = 'online' | 'offline' | 'weak';
 
 export interface NetworkState {
@@ -29,6 +31,10 @@ export class NetworkManager {
   }) {
     const apiBase = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
     this.heartbeatUrl = options?.heartbeatUrl || `${apiBase}/api/health`;
+    // 桌面环境（Electron）下心跳 URL 必须是绝对 URL，避免协议拦截
+    if (isDesktop() && !this.heartbeatUrl.startsWith('http')) {
+      this.heartbeatUrl = 'http://127.0.0.1:8080/api/health';
+    }
     this.heartbeatIntervalMs = options?.heartbeatIntervalMs || 30000; // 30秒
     this.weakThresholdMs = options?.weakThresholdMs || 5000; // 5秒超时视为弱网
 

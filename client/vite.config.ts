@@ -3,10 +3,14 @@ import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 import path from 'path'
 
+// 检测 Electron 桌面端构建模式
+const isElectronBuild = !!process.env.ELECTRON_BUILD;
+
 export default defineConfig({
+  base: isElectronBuild ? './' : '/',
   plugins: [
     react(),
-    VitePWA({
+    ...(isElectronBuild ? [] : [VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
       manifest: {
@@ -71,11 +75,11 @@ export default defineConfig({
       devOptions: {
         enabled: false,
       },
-    }),
+    })]),
   ],
   server: {
     watch: {
-      ignored: ['**/src-tauri/**'],
+      ignored: ['**/electron/**', '**/dist-electron/**'],
     },
   },
   resolve: {

@@ -1,18 +1,18 @@
 import { RemoteAIPlugin } from './RemoteAIPlugin';
-import { TauriAIPlugin } from './TauriAIPlugin';
+import { ElectronAIPlugin } from './ElectronAIPlugin';
 import { LocalDurationRecommender } from './LocalFallback';
-import { isTauri } from '../utils/platform';
+import { isElectron } from '../utils/platform';
 import type { AIPlugin, DurationHistoryData, DurationOptions, DurationResult,
   SummarizeResult, FlashcardResult, EvaluateResult,
   SummarizeOptions, FlashcardOptions, EvaluateOptions } from './types';
 
 /**
  * AI 插件加载器（单例）
- * 管理远程 AI 插件、Tauri 插件和本地降级
+ * Electron 插件、远程插件和本地降级
  */
 class AIPluginLoader {
   private remotePlugin: RemoteAIPlugin | null = null;
-  private tauriPlugin: TauriAIPlugin | null = null;
+  private electronPlugin: ElectronAIPlugin | null = null;
   private localRecommender: LocalDurationRecommender;
 
   constructor() {
@@ -30,37 +30,39 @@ class AIPluginLoader {
   }
 
   /**
-   * 获取 Tauri AI 插件实例（懒加载）
+   * 获取 Electron AI 插件实例（懒加载）
    * 自动从 Supabase session 注入 authToken
    */
-  async getTauriPlugin(): Promise<TauriAIPlugin> {
-    if (!this.tauriPlugin) {
-      this.tauriPlugin = new TauriAIPlugin();
+  async getElectronPlugin(): Promise<ElectronAIPlugin> {
+    if (!this.electronPlugin) {
+      this.electronPlugin = new ElectronAIPlugin();
     }
-    // 自动注入 Supabase auth token（与 RemoteAIPlugin/apiClient 对齐）
     try {
       const { supabase } = await import('../auth/supabaseClient');
       const { data: { session } } = await supabase.auth.getSession();
-      this.tauriPlugin.setAuthToken(session?.access_token ?? null);
+      this.electronPlugin.setAuthToken(session?.access_token ?? null);
     } catch (err) {
-      // supabase 不可用时静默降级（兼容 JWT 开发模式）
-      console.warn('[AIPluginLoader] Supabase token injection skipped:', err);
+      console.error('[AI] Supabase token injection failed:', err);
     }
-    return this.tauriPlugin;
+    return this.electronPlugin;
   }
 
   /**
    * 根据运行环境获取 AI 插件实例
-   * Tauri 环境优先使用 Rust invoke 通道，否则使用远程 HTTP
+   * Electron 环境 → IPC 通道
+   * 其他 → 远程 HTTP
    */
   async getAIPlugin(): Promise<AIPlugin> {
-    return isTauri() ? await this.getTauriPlugin() : this.getRemotePlugin();
+    console.log('[AI] getAIPlugin called, isElectron:', isElectron());
+    if (isElectron()) return await this.getElectronPlugin();
+    return this.getRemotePlugin();
   }
 
   /**
    * 摘要功能
    */
   async summarizeNote(content: string, options?: SummarizeOptions): Promise<SummarizeResult> {
+    console.log('[AI] summarizeNote, content length:', content.length);
     return (await this.getAIPlugin()).summarizeNote(content, options);
   }
 

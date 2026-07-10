@@ -4,10 +4,10 @@ import {
   flashcardStore,
   flashcardReviewStore,
 } from '@/lib/storage';
+import { createWithLog, updateWithLog, deleteWithLog } from '@/lib/storage/writeWithLog';
 import { createNewCardState } from '@/lib/sm2';
 import type { Flashcard, FlashcardDeck } from '@/types/models';
 import { useStudySessionStore } from './useStudySessionStore';
-import { generateId } from '@/lib/utils/uuid';
 
 // ---------------------------------------------------------------------------
 // 类型定义
@@ -38,7 +38,7 @@ interface FlashcardState {
   createCard: (
     card: Omit<
       Flashcard,
-      'id' | 'easeFactor' | 'interval' | 'repetitions' | 'dueDate' | 'createdAt' | 'updatedAt' | 'order'
+      'id' | 'easeFactor' | 'interval' | 'repetitions' | 'lapses' | 'dueDate' | 'createdAt' | 'updatedAt' | 'order'
     >,
   ) => Promise<string>;
   updateCard: (id: string, changes: Partial<Flashcard>) => Promise<void>;
@@ -76,9 +76,7 @@ export const useFlashcardStore = create<FlashcardState>((set, get) => {
 
     createDeck: async (name, description, color) => {
       const now = new Date();
-      const id = generateId();
-      const deck: FlashcardDeck = {
-        id,
+      const deckData = {
         name,
         description,
         color,
@@ -86,15 +84,16 @@ export const useFlashcardStore = create<FlashcardState>((set, get) => {
         updatedAt: now,
         order: Date.now(),
       };
-      await flashcardDeckStore.create(deck);
+      const id = await createWithLog(flashcardDeckStore, 'flashcardDecks', deckData);
       // 将新牌组追加到本地状态
+      const deck: FlashcardDeck = { id, ...deckData };
       set((state) => ({ decks: [...state.decks, deck] }));
       return id;
     },
 
     updateDeck: async (id, changes) => {
       const updatedAt = new Date();
-      await flashcardDeckStore.update(id, { ...changes, updatedAt });
+      await updateWithLog(flashcardDeckStore, 'flashcardDecks', id, { ...changes, updatedAt });
       set((state) => ({
         decks: state.decks.map((d) =>
           d.id === id ? { ...d, ...changes, updatedAt } : d,
@@ -108,10 +107,10 @@ export const useFlashcardStore = create<FlashcardState>((set, get) => {
       const deckReviews = await flashcardReviewStore.where('deckId', id);
 
       await Promise.all([
-        ...deckReviews.map((r) => flashcardReviewStore.delete(r.id!)),
-        ...deckCards.map((c) => flashcardStore.delete(c.id!)),
+        ...deckReviews.map((r) => deleteWithLog(flashcardReviewStore, 'flashcardReviews', r.id!)),
+        ...deckCards.map((c) => deleteWithLog(flashcardStore, 'flashcards', c.id!)),
       ]);
-      await flashcardDeckStore.delete(id);
+      await deleteWithLog(flashcardDeckStore, 'flashcardDecks', id);
 
       set((state) => ({
         decks: state.decks.filter((d) => d.id !== id),
@@ -147,26 +146,26 @@ export const useFlashcardStore = create<FlashcardState>((set, get) => {
     createCard: async (cardInput) => {
       const now = new Date();
       const sm2Init = createNewCardState();
-      const id = generateId();
-      const card: Flashcard = {
+      const cardData = {
         ...cardInput,
-        id,
         easeFactor: sm2Init.easeFactor,
         interval: sm2Init.interval,
         repetitions: sm2Init.repetitions,
+        lapses: sm2Init.lapses,
         dueDate: sm2Init.dueDate,
         createdAt: now,
         updatedAt: now,
         order: Date.now(),
       };
-      await flashcardStore.create(card);
+      const id = await createWithLog(flashcardStore, 'flashcards', cardData);
+      const card: Flashcard = { id, ...cardData };
       set((state) => ({ cards: [...state.cards, card] }));
       return id;
     },
 
     updateCard: async (id, changes) => {
       const updatedAt = new Date();
-      await flashcardStore.update(id, { ...changes, updatedAt });
+      await updateWithLog(flashcardStore, 'flashcards', id, { ...changes, updatedAt });
       set((state) => ({
         cards: state.cards.map((c) =>
           c.id === id ? { ...c, ...changes, updatedAt } : c,
@@ -175,7 +174,7 @@ export const useFlashcardStore = create<FlashcardState>((set, get) => {
     },
 
     deleteCard: async (id) => {
-      await flashcardStore.delete(id);
+      await deleteWithLog(flashcardStore, 'flashcards', id);
       set((state) => ({
         cards: state.cards.filter((c) => c.id !== id),
       }));

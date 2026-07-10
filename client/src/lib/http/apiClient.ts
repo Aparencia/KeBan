@@ -1,15 +1,18 @@
 import { supabase } from '../auth/supabaseClient';
+import { getAIConfig } from '../ai/config';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
-const AI_GATEWAY_URL = import.meta.env.VITE_AI_GATEWAY_URL || 'http://localhost:8000';
 
 interface RequestOptions extends RequestInit {
   timeout?: number;
 }
 
-function createClient(baseUrl: string) {
+function createClient(baseUrlOrGetter: string | (() => string)) {
+  const resolveUrl = typeof baseUrlOrGetter === 'function' ? baseUrlOrGetter : () => baseUrlOrGetter;
+
   async function request<T = unknown>(endpoint: string, options: RequestOptions = {}): Promise<T> {
     const { timeout = 30000, headers: customHeaders, ...rest } = options;
+    const baseUrl = resolveUrl();
 
     const {
       data: { session },
@@ -67,5 +70,5 @@ function createClient(baseUrl: string) {
 /** sync-service 客户端（:8080） */
 export const apiClient = createClient(API_BASE_URL);
 
-/** ai-gateway 客户端（:8000） */
-export const aiClient = createClient(AI_GATEWAY_URL);
+/** ai-gateway 客户端（URL 从 localStorage 配置动态读取） */
+export const aiClient = createClient(() => getAIConfig().gatewayUrl);

@@ -7,6 +7,7 @@ export interface PomodoroSession {
   actualDuration: number;        // 实际专注时长（秒）
   completedAt: Date;             // 完成时间
   interrupted: boolean;          // 是否中断
+  goal?: string;                 // 本次番茄目标（可选）
 }
 
 // 番茄钟配置
@@ -70,6 +71,7 @@ export interface Flashcard {
   easeFactor: number;            // 难度因子，初始 2.5
   interval: number;              // 当前间隔（天）
   repetitions: number;           // 连续正确次数
+  lapses: number;                // 累计失误次数
   dueDate: Date;                 // 下次复习日期
   lastReviewDate?: Date;         // 上次复习日期
   createdAt: Date;
@@ -170,4 +172,67 @@ export interface OfflineQueueItem {
   deviceId: string;
   createdAt: Date;
   retryCount: number;
+  /** 下次可重试的时间戳（ms），未设置或已过期表示可立即重试 */
+  nextRetryAt?: number;
+}
+
+// 学习打卡记录
+export interface StudyCheckIn {
+  id: string;
+  date: string;           // YYYY-MM-DD
+  checkInTime: Date;
+  modulesUsed: string[];  // 当日使用的模块名称列表
+  streakDays: number;     // 连续打卡天数
+}
+
+// 成就解锁记录
+export interface Achievement {
+  id: string;
+  key: string;            // 成就唯一标识
+  title: string;
+  description: string;
+  icon: string;           // 图标名称或路径
+  unlockedAt: Date;
+}
+
+// 番茄目标记忆
+export interface PomodoroGoal {
+  id: string;
+  text: string;           // 目标文字
+  useCount: number;       // 使用次数（用于排序）
+  lastUsedAt: Date;
+}
+
+// 牌组分享文件格式 (.kban-deck)
+export interface KbanDeckFile {
+  version: '1.0';
+  type: 'deck';
+  exportedAt: string;       // ISO 8601
+  deck: {
+    id: string;
+    name: string;
+    description: string;
+    createdAt: string;
+  };
+  cards: Array<{
+    front: string;           // TipTap JSON 字符串
+    back: string;
+    tags: string[];
+  }>;
+}
+
+// 自由画布文本块
+export interface FreeCanvasBlock {
+  id: string;
+  type: 'text';
+  content: string;
+  position: { x: number; y: number };
+  size: { width: number; height: number | 'auto' };
+}
+
+// 自由画布数据
+export interface FreeCanvasData {
+  blocks: FreeCanvasBlock[];
+  canvasWidth: number;
+  canvasHeight: number;
 }

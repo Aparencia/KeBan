@@ -1,4 +1,6 @@
 // 存储仓库泛型接口
+import type { SyncConflict } from '@/types/models';
+
 export interface IRepository<T> {
   getAll(): Promise<T[]>;
   getById(id: string): Promise<T | undefined>;
@@ -10,18 +12,6 @@ export interface IRepository<T> {
   bulkDelete(ids: string[]): Promise<void>;
   count(): Promise<number>;
   clear(): Promise<void>;
-}
-
-// 同步冲突
-export interface SyncConflict {
-  localEntity: any;
-  remoteEntity: any;
-  entityType: string;
-  entityId: string;
-  localVersion: number;
-  remoteVersion: number;
-  resolvedAt?: Date;
-  resolution?: 'local' | 'remote' | 'manual';
 }
 
 // 同步结果

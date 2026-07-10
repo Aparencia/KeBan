@@ -3,7 +3,8 @@ import type {
   PomodoroSession, PomodoroSettings, Note, NoteFolder,
   FlashcardDeck, Flashcard, FlashcardReview,
   FeynmanNote, FeynmanSummary, FeynmanWeakPoint,
-  OperationLog, AppSettings, SyncConflict, OfflineQueueItem
+  OperationLog, AppSettings, SyncConflict, OfflineQueueItem,
+  StudyCheckIn, Achievement, PomodoroGoal
 } from '@/types/models';
 
 export class KeBanDatabase extends Dexie {
@@ -21,6 +22,9 @@ export class KeBanDatabase extends Dexie {
   appSettings!: Table<AppSettings, string>;
   syncConflicts!: Table<SyncConflict, string>;
   offlineQueue!: Table<OfflineQueueItem, string>;
+  studyCheckIns!: Table<StudyCheckIn, string>;
+  achievements!: Table<Achievement, string>;
+  pomodoroGoals!: Table<PomodoroGoal, string>;
 
   constructor() {
     super('keban');
@@ -53,7 +57,7 @@ export class KeBanDatabase extends Dexie {
       notes: 'id, title, folderId, createdAt, updatedAt, *tags, pinned',
       noteFolders: 'id, name, parentId, createdAt, order',
       flashcardDecks: 'id, name, createdAt, updatedAt, description',
-      flashcards: 'id, deckId, front, back, createdAt, dueDate, interval, easeFactor, reps, lapses',
+      flashcards: 'id, deckId, front, back, createdAt, dueDate, interval, easeFactor, repetitions, lapses',
       flashcardReviews: 'id, cardId, deckId, reviewedAt',
       feynmanNotes: 'id, status, concept, createdAt, updatedAt',
       feynmanSummaries: 'id, noteId',
@@ -130,6 +134,13 @@ export class KeBanDatabase extends Dexie {
       } catch (e) {
         console.warn('[DB] Failed to migrate operationLog:', e);
       }
+    });
+
+    // alpha.2: 新增打卡、成就、番茄目标表
+    this.version(4).stores({
+      studyCheckIns: 'id, &date, checkInTime, streakDays',
+      achievements: 'id, &key, unlockedAt',
+      pomodoroGoals: 'id, text, useCount, lastUsedAt',
     });
   }
 }

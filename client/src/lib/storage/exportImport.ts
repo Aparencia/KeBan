@@ -1,4 +1,98 @@
 import { db } from './database';
+import type { KbanDeckFile, FlashcardDeck, Flashcard } from '@/types/models';
+
+/**
+ * 导出牌组为 .kban-deck 文件结构
+ */
+export async function exportDeck(deckId: string): Promise<KbanDeckFile> {
+  const deck = await db.flashcardDecks.get(deckId);
+  if (!deck) throw new Error('牌组不存在');
+
+  const cards = await db.flashcards.where('deckId').equals(deckId).toArray();
+
+  return {
+    version: '1.0',
+    type: 'deck',
+    exportedAt: new Date().toISOString(),
+    deck: {
+      id: deck.id,
+      name: deck.name,
+      description: deck.description || '',
+      createdAt: deck.createdAt.toISOString(),
+    },
+    cards: cards.map((card) => ({
+      front: card.front,
+      back: card.back,
+      // Flashcard 类型暂无 tags 字段，使用 as any 安全降级
+      tags: (card as any).tags || [],
+    })),
+  };
+}
+
+/**
+ * 将导出数据保存为本地文件（触发浏览器下载）
+ */
+export function downloadDeckFile(data: KbanDeckFile): void {
+  const json = JSON.stringify(data, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${data.deck.name}.kban-deck`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+/**
+ * 导入 .kban-deck 文件，返回新牌组 ID 和卡片数量
+ */
+export async function importDeck(file: File): Promise<{ deckId: string; cardCount: number }> {
+  const text = await file.text();
+  const data: KbanDeckFile = JSON.parse(text);
+
+  // 校验格式
+  if (data.version !== '1.0' || data.type !== 'deck') {
+    throw new Error('无效的 .kban-deck 文件格式');
+  }
+
+  // 生成新 ID（避免与本地现有牌组冲突）
+  const newDeckId = crypto.randomUUID();
+  const now = new Date();
+
+  // 写入牌组
+  await db.flashcardDecks.add({
+    id: newDeckId,
+    name: data.deck.name + ' (导入)',
+    description: data.deck.description,
+    createdAt: now,
+    updatedAt: now,
+    order: 0,
+  } as FlashcardDeck);
+
+  // 写入卡片（需提供 SM-2 算法默认值）
+  const cardPromises = data.cards.map((card) =>
+    db.flashcards.add({
+      id: crypto.randomUUID(),
+      deckId: newDeckId,
+      front: card.front,
+      back: card.back,
+      type: 'basic',
+      easeFactor: 2.5,
+      interval: 0,
+      repetitions: 0,
+      lapses: 0,
+      dueDate: now,
+      createdAt: now,
+      updatedAt: now,
+      order: 0,
+    } as Flashcard),
+  );
+  await Promise.all(cardPromises);
+
+  return { deckId: newDeckId, cardCount: data.cards.length };
+}
 
 export interface ExportData {
   version: string;

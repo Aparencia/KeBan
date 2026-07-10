@@ -1,11 +1,13 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Clock, Target, Flame, TrendingUp } from 'lucide-react';
-import { Card, Skeleton, EmptyState } from '@/components/ui';
+import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { Card, Skeleton, EmptyState, RichTooltip } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { pomodoroSessionStore } from '@/lib/storage';
 import type { PomodoroSession } from '@/types/models';
 
 type TimeRange = 'today' | 'week' | 'month';
+type ChartRange = 7 | 14 | 30;
 
 const RANGE_LABELS: Record<TimeRange, string> = {
   today: '今日',
@@ -55,6 +57,7 @@ function computeStreak(sessions: PomodoroSession[]): number {
 
 export default function PomodoroStatsPage() {
   const [range, setRange] = useState<TimeRange>('today');
+  const [chartRange, setChartRange] = useState<ChartRange>(7);
   const [sessions, setSessions] = useState<PomodoroSession[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -112,6 +115,27 @@ export default function PomodoroStatsPage() {
   }, [sessions]);
 
   const maxHours = Math.max(...weeklyData.map((d) => d.hours), 0.1);
+
+  // 图表数据：按日期聚合番茄数量和专注时长
+  const chartData = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const days: { date: string; label: string; count: number; minutes: number }[] = [];
+    for (let i = chartRange - 1; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      const key = getDayKey(d);
+      const daySessions = sessions.filter((s) => getDayKey(new Date(s.completedAt)) === key);
+      const totalSec = daySessions.reduce((sum, s) => sum + s.actualDuration, 0);
+      days.push({
+        date: key,
+        label: `${d.getMonth() + 1}/${d.getDate()}`,
+        count: daySessions.length,
+        minutes: +(totalSec / 60).toFixed(1),
+      });
+    }
+    return days;
+  }, [sessions, chartRange]);
 
   // Heatmap: last 91 days (13 weeks x 7 days)
   const heatmap = useMemo(() => {
@@ -224,9 +248,11 @@ export default function PomodoroStatsPage() {
               <Clock className="w-icon-xs h-icon-xs" strokeWidth={1.5} />
               <span className="text-c1">专注时长</span>
             </div>
-            <span className="text-h1 font-semibold text-text-primary font-timer">
-              {focusTime}
-            </span>
+            <RichTooltip content="今日累计专注时间（分钟）" position="bottom" delay={200}>
+              <span className="text-h1 font-semibold text-text-primary font-timer cursor-help">
+                {focusTime}
+              </span>
+            </RichTooltip>
           </div>
         </Card>
 
@@ -236,9 +262,11 @@ export default function PomodoroStatsPage() {
               <Target className="w-icon-xs h-icon-xs" strokeWidth={1.5} />
               <span className="text-c1">完成番茄</span>
             </div>
-            <span className="text-h1 font-semibold text-text-primary font-timer">
-              {pomodoroCount}
-            </span>
+            <RichTooltip content="今日完成的番茄钟数量" position="bottom" delay={200}>
+              <span className="text-h1 font-semibold text-text-primary font-timer cursor-help">
+                {pomodoroCount}
+              </span>
+            </RichTooltip>
           </div>
         </Card>
 
@@ -286,7 +314,7 @@ export default function PomodoroStatsPage() {
       </Card>
 
       {/* Heatmap - focus intensity */}
-      <Card variant="default" padding="lg">
+      <Card variant="default" padding="lg" className="mb-kb-lg">
         <h2 className="text-h3 font-medium text-text-primary mb-kb-md">专注热力图</h2>
 
         <div className="overflow-x-auto">
@@ -316,6 +344,75 @@ export default function PomodoroStatsPage() {
           <div className="w-3 h-3 rounded-[3px] bg-pomodoro" />
           <span>多</span>
         </div>
+      </Card>
+
+      {/* 每日番茄数柱状图 */}
+      <Card variant="default" padding="lg" className="mb-kb-lg">
+        <div className="flex items-center justify-between mb-kb-md">
+          <div className="flex items-center gap-2">
+            <Target className="w-icon-sm h-icon-sm text-brand-600" strokeWidth={1.5} />
+            <h2 className="text-h3 font-medium text-text-primary">每日番茄数</h2>
+          </div>
+          <div className="flex items-center gap-1 p-0.5 bg-bg-secondary rounded-kb-md border border-border/30">
+            {([7, 14, 30] as ChartRange[]).map((r) => (
+              <button
+                key={r}
+                onClick={() => setChartRange(r)}
+                className={cn(
+                  'px-2.5 py-1 rounded-kb-sm text-c1 font-medium transition-all duration-kb-fast',
+                  chartRange === r
+                    ? 'bg-bg-elevated text-text-primary shadow-kb-sm'
+                    : 'text-text-tertiary hover:text-text-secondary',
+                )}
+              >
+                {r}天
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <ResponsiveContainer width="100%" height={160}>
+          <BarChart data={chartData}>
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--kb-border, #e5e7eb)" opacity={0.4} />
+            <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'var(--kb-text-tertiary, #9ca3af)' }} tickLine={false} />
+            <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: 'var(--kb-text-tertiary, #9ca3af)' }} tickLine={false} width={28} />
+            <Tooltip
+              contentStyle={{ background: 'var(--kb-bg-elevated, #fff)', border: '1px solid var(--kb-border, #e5e7eb)', borderRadius: 8, fontSize: 12 }}
+              formatter={(value: any) => [`${value} 个`, '番茄数']}
+              labelFormatter={(label: any) => `日期: ${label}`}
+            />
+            <Bar dataKey="count" fill="#7C3AED" radius={[4, 4, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </Card>
+
+      {/* 每日专注时长折线图 */}
+      <Card variant="default" padding="lg">
+        <div className="flex items-center gap-2 mb-kb-md">
+          <Clock className="w-icon-sm h-icon-sm text-brand-600" strokeWidth={1.5} />
+          <h2 className="text-h3 font-medium text-text-primary">专注时长趋势</h2>
+        </div>
+
+        <ResponsiveContainer width="100%" height={160}>
+          <LineChart data={chartData}>
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--kb-border, #e5e7eb)" opacity={0.4} />
+            <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'var(--kb-text-tertiary, #9ca3af)' }} tickLine={false} />
+            <YAxis tick={{ fontSize: 11, fill: 'var(--kb-text-tertiary, #9ca3af)' }} tickLine={false} width={36} unit="m" />
+            <Tooltip
+              contentStyle={{ background: 'var(--kb-bg-elevated, #fff)', border: '1px solid var(--kb-border, #e5e7eb)', borderRadius: 8, fontSize: 12 }}
+              formatter={(value: any) => [`${value} 分钟`, '专注时长']}
+              labelFormatter={(label: any) => `日期: ${label}`}
+            />
+            <Line
+              type="monotone"
+              dataKey="minutes"
+              stroke="#7C3AED"
+              strokeWidth={2}
+              dot={{ r: 3, fill: '#7C3AED' }}
+              activeDot={{ r: 5, fill: '#7C3AED' }}
+            />
+          </LineChart>
+        </ResponsiveContainer>
       </Card>
     </div>
   );

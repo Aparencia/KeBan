@@ -12,8 +12,10 @@ import {
   Trash2,
   Loader2,
   Check,
+  Download,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { exportDeck, downloadDeckFile } from '@/lib/storage/exportImport';
 import { useFlashcardStore } from '../store/useFlashcardStore';
 import { useAIFlashcards } from '@/lib/ai/useAI';
 import type { Flashcard as AIFlashcard } from '@/lib/ai/types';
@@ -54,6 +56,21 @@ export default function DeckDetailPage() {
   const [aiAddingIndex, setAIAddingIndex] = useState<number | null>(null);
   const { loading: aiLoading, error: aiError, generate } = useAIFlashcards();
   const { toast } = useToast();
+  const [exporting, setExporting] = useState(false);
+
+  const handleExport = async () => {
+    if (!deckId) return;
+    setExporting(true);
+    try {
+      const data = await exportDeck(deckId);
+      downloadDeckFile(data);
+      toast({ type: 'success', message: `牌组「${deck?.name}」已导出` });
+    } catch {
+      toast({ type: 'error', message: '导出失败，请稍后重试' });
+    } finally {
+      setExporting(false);
+    }
+  };
 
   useEffect(() => {
     if (deckId) {
@@ -160,6 +177,18 @@ export default function DeckDetailPage() {
         >
           AI 生成闪卡
         </Button>
+
+        <button
+          onClick={handleExport}
+          disabled={exporting}
+          className="p-1.5 rounded-kb-full text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-kb-fast disabled:opacity-50"
+          aria-label="导出牌组"
+          title="导出牌组"
+        >
+          {exporting
+            ? <Loader2 className="w-icon-sm h-icon-sm animate-spin" strokeWidth={1.5} />
+            : <Download className="w-icon-sm h-icon-sm" strokeWidth={1.5} />}
+        </button>
       </div>
 
       {/* 统计行 */}

@@ -7,7 +7,7 @@
     <img src="https://img.shields.io/badge/build-passing-brightgreen.svg" alt="Build" />
     <img src="https://img.shields.io/badge/license-Private-lightgrey.svg" alt="License" />
     <img src="https://img.shields.io/badge/React-18-61dafb.svg" alt="React" />
-    <img src="https://img.shields.io/badge/Tauri-2.0-ffc5c5.svg" alt="Tauri" />
+    <img src="https://img.shields.io/badge/Electron-28-47848F.svg" alt="Electron" />
   </p>
 </p>
 
@@ -75,7 +75,7 @@
 |------|------|------|
 | UI 框架 | React 18 + TypeScript | 类型安全的组件化开发 |
 | 构建工具 | Vite 8 | 极速 HMR 与构建 |
-| 桌面端 | Tauri 2.0 | 轻量级跨平台桌面应用（5–15 MB 安装包） |
+| 桌面端 | Electron | 跨平台桌面应用（Electron + PWA 双模式） |
 | 样式方案 | Tailwind CSS 3.4 | 原子化 CSS + Design Tokens |
 | 状态管理 | Zustand + TanStack Query | 本地状态 + 异步数据缓存 |
 | 本地存储 | Dexie.js (IndexedDB) | 本地优先数据存储 |
@@ -84,7 +84,7 @@
 | 路由 | React Router 7 | SPA 路由管理 |
 | 图标 | Lucide React | 线性风格图标库 |
 | 测试 | Vitest + Testing Library | 单元与组件测试 |
-| 代码检查 | Oxlint | 高性能 Rust Linter |
+| 代码检查 | Oxlint | 高性能 JS/TS Linter |
 
 ### 后端服务
 
@@ -110,7 +110,7 @@
 
 ```
 KeBan/
-├── client/                     # 🖥️ 前端客户端（React + Tauri）
+├── client/                     # 🖥️ 前端客户端（React + Electron）
 │   ├── src/
 │   │   ├── features/           # 📦 业务功能模块
 │   │   │   ├── dashboard/      #    仪表盘 & 学习概览
@@ -134,7 +134,8 @@ KeBan/
 │   │   ├── store/              # 🗄️ Zustand 全局状态
 │   │   ├── styles/             # 🎨 全局样式 & Design Tokens
 │   │   └── types/              # 📐 TypeScript 类型定义
-│   ├── src-tauri/              # 🦀 Tauri Rust 后端
+│   ├── electron/               # ⚡ Electron 主进程与预加载脚本
+│   ├── src-tauri/              # ⚠️ 遗留目录，待删除
 │   └── package.json
 ├── server/                     # ⚙️ 后端服务
 │   ├── sync-service/           #    Go 数据同步服务（:8080）
@@ -158,7 +159,7 @@ KeBan/
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│                 课伴桌面端 (Tauri 2.0)                 │
+│                 课伴桌面端 (Electron)                    │
 │  ┌────────────────────────────────────────────────┐  │
 │  │           React 前端 (Vite + TypeScript)         │  │
 │  │                                                  │  │
@@ -191,7 +192,7 @@ KeBan/
 | 阶段 | 状态 | 核心交付 |
 |------|------|----------|
 | **MVP-1 Alpha** | ✅ 已完成 | 纯本地核心版 — 四大模块 + PWA 离线 + 本地存储 |
-| **MVP-2 Alpha** | 🔧 进行中 | AI 增强 + 云同步 + Tauri 桌面端 + 用户认证 |
+| **MVP-2 Alpha** | 🔧 进行中 | AI 增强 + 云同步 + Electron 桌面端 + 用户认证 |
 | **Beta 公测** | 📋 规划中 | 全功能集成，面向真实用户测试 |
 | **正式上线** | 🎯 规划中 | 生产就绪版 |
 
@@ -247,17 +248,16 @@ git push origin v0.2.0
 
 > ⚠️ 发布 Tag 前请确保：所有测试通过（`npm run test`）、构建成功（`npm run build`）、关键功能手动验证完毕。
 
-### Tauri 安装包构建
+### Electron 安装包构建
 
-桌面端安装包通过 Tauri CLI 构建：
+桌面端安装包通过 Electron Builder 构建：
 
 ```bash
 cd client
-npm run build              # 前端生产构建
-npx tauri build            # 生成 NSIS 安装包
+npm run electron:build     # 前端生产构建 + Electron 打包
 ```
 
-- 产物路径：`client/src-tauri/target/release/bundle/nsis/`
+- 产物路径：`client/release/`
 - 安装包格式：Windows NSIS（`.exe`），支持简体中文 / English
 - 安装模式：当前用户安装（`currentUser`），无需管理员权限
 
@@ -298,7 +298,7 @@ docs(phase3): 补充 API 设计规范文档
 
 | 工具 | 用途 | 命令 |
 |------|------|------|
-| Oxlint | 高性能 Rust Linter | `npm run lint` |
+| Oxlint | 高性能 JS/TS Linter | `npm run lint` |
 | Vitest | 单元与组件测试 | `npm run test` |
 | TypeScript | 静态类型检查 | `npm run build`（含 `tsc -b`） |
 

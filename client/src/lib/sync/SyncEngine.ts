@@ -194,6 +194,7 @@ export class SyncEngine {
 
   /**
    * 重放离线队列
+   * 仅处理已到达退避时间的就绪项，失败时计算指数退避
    */
   private async replayOfflineQueue(): Promise<void> {
     if (await offlineQueue.isEmpty()) return;
@@ -201,8 +202,10 @@ export class SyncEngine {
 
     offlineQueue.setProcessing(true);
     try {
-      const items = await offlineQueue.getPendingItems();
+      const items = await offlineQueue.getReadyItems();
       const successIds: string[] = [];
+      const failedIds: string[] = [];
+      const skippedCount = (await offlineQueue.getPendingItems()).length - items.length;
 
       for (const item of items) {
         try {
@@ -220,8 +223,11 @@ export class SyncEngine {
             }],
           });
           successIds.push(item.id);
-        } catch {
-          await offlineQueue.incrementRetry(item.id);
+        } catch (err: unknown) {
+          const errMsg = err instanceof Error ? err.message : String(err);
+          console.error(`[SyncEngine] 队列项重放失败 [${item.entityType}:${item.entityId}] (retryCount=${item.retryCount}): ${errMsg}`);
+          await offlineQueue.scheduleRetry(item.id);
+          failedIds.push(item.id);
         }
       }
 
@@ -229,6 +235,11 @@ export class SyncEngine {
         await offlineQueue.removeItems(successIds);
       }
       await offlineQueue.cleanupExpired(5);
+
+      // 汇总日志
+      if (successIds.length > 0 || failedIds.length > 0) {
+        console.error(`[SyncEngine] 离线队列重放完成：成功=${successIds.length}，失败=${failedIds.length}，跳过(未到退避时间)=${skippedCount}`);
+      }
     } finally {
       offlineQueue.setProcessing(false);
     }

@@ -1,6 +1,7 @@
 export { db, KeBanDatabase } from './database';
 export { StorageAdapter } from './StorageAdapter';
-export type { IRepository, SyncConflict, SyncResult } from './interfaces';
+export type { IRepository, SyncResult } from './interfaces';
+export type { SyncConflict } from '@/types/models';
 export { logOperation, getUnsyncedLogs, markLogsSynced } from './operationLog';
 
 // 预创建的存储适配器实例
@@ -21,6 +22,7 @@ export const operationLogStore = new StorageAdapter(db.operationLog, 'operationL
 export const appSettingsStore = new StorageAdapter(db.appSettings, 'appSettings');
 export const syncConflictsStore = new StorageAdapter(db.syncConflicts, 'syncConflicts');
 export const offlineQueueStore = new StorageAdapter(db.offlineQueue, 'offlineQueue');
+export const pomodoroGoalStore = new StorageAdapter(db.pomodoroGoals, 'pomodoroGoals');
 
 // 导入导出与存储管理
 export { exportAllData, downloadExport, importData, readFileAsText } from './exportImport';

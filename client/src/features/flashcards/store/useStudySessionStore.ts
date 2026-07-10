@@ -138,12 +138,13 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
       const card = sessionCards[currentIndex];
       if (!card || card.id === undefined) return;
 
-      // 调用 SM-2 算法（lapses 不在 Flashcard 接口中，传 0 兜底）
+      // 调用 SM-2 算法
       const result = sm2(
         {
           easeFactor: card.easeFactor,
           interval: card.interval,
           repetitions: card.repetitions,
+          lapses: card.lapses,
         },
         rating,
       );
@@ -154,6 +155,7 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
         easeFactor: result.easeFactor,
         interval: result.interval,
         repetitions: result.repetitions,
+        lapses: result.lapses,
         dueDate: result.dueDate,
         lastReviewDate: updatedAt,
         updatedAt,
@@ -167,6 +169,7 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
               easeFactor: result.easeFactor,
               interval: result.interval,
               repetitions: result.repetitions,
+              lapses: result.lapses,
               dueDate: result.dueDate,
               lastReviewDate: updatedAt,
               updatedAt,
@@ -197,6 +200,7 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
         easeFactor: result.easeFactor,
         interval: result.interval,
         repetitions: result.repetitions,
+        lapses: result.lapses,
         dueDate: result.dueDate,
         lastReviewDate: updatedAt,
       });

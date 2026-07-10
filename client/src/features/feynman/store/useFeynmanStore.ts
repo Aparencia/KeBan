@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { feynmanNoteStore, feynmanSummaryStore, feynmanWeakPointStore } from '@/lib/storage';
+import { createWithLog, updateWithLog, deleteWithLog } from '@/lib/storage/writeWithLog';
 import type { FeynmanNote, FeynmanSummary, FeynmanWeakPoint } from '@/types/models';
-import { generateId } from '@/lib/utils/uuid';
 
 // ── Store 内部组合视图（用于 UI 展示）─────────────────────────
 
@@ -109,17 +109,16 @@ export const useFeynmanStore = create<FeynmanState>((set, get) => {
 
     createNote: async (concept: string) => {
       const now = new Date();
-      const id = generateId();
-      const note: FeynmanNote = {
-        id,
+      const noteData = {
         concept,
         explanation: '',
-        status: 'not_started',
-        currentStep: 1,
+        status: 'not_started' as const,
+        currentStep: 1 as const,
         createdAt: now,
         updatedAt: now,
       };
-      await feynmanNoteStore.create(note);
+      const id = await createWithLog(feynmanNoteStore, 'feynmanNotes', noteData);
+      const note: FeynmanNote = { id, ...noteData };
       set((state) => ({
         notes: [note, ...state.notes],
         summaries: { ...state.summaries, [id]: null },
@@ -133,7 +132,7 @@ export const useFeynmanStore = create<FeynmanState>((set, get) => {
       const current = get().notes.find((n) => n.id === id);
       if (!current) return;
       const updated: FeynmanNote = { ...current, ...changes, updatedAt: new Date() };
-      await feynmanNoteStore.update(id, updated);
+      await updateWithLog(feynmanNoteStore, 'feynmanNotes', id, updated);
       set((state) => ({ notes: patchNote(state.notes, updated) }));
     },
 
@@ -143,9 +142,9 @@ export const useFeynmanStore = create<FeynmanState>((set, get) => {
       const weakPoints = await feynmanWeakPointStore.where('noteId', id);
 
       await Promise.all([
-        feynmanNoteStore.delete(id),
-        ...summaries.map((s: FeynmanSummary) => feynmanSummaryStore.delete(s.id!)),
-        ...weakPoints.map((w: FeynmanWeakPoint) => feynmanWeakPointStore.delete(w.id!)),
+        deleteWithLog(feynmanNoteStore, 'feynmanNotes', id),
+        ...summaries.map((s: FeynmanSummary) => deleteWithLog(feynmanSummaryStore, 'feynmanSummaries', s.id!)),
+        ...weakPoints.map((w: FeynmanWeakPoint) => deleteWithLog(feynmanWeakPointStore, 'feynmanWeakPoints', w.id!)),
       ]);
 
       set((state) => {
@@ -176,20 +175,19 @@ export const useFeynmanStore = create<FeynmanState>((set, get) => {
         updated.status = 'in_progress';
       }
 
-      await feynmanNoteStore.update(noteId, updated);
+      await updateWithLog(feynmanNoteStore, 'feynmanNotes', noteId, updated);
       set((state) => ({ notes: patchNote(state.notes, updated) }));
     },
 
     addWeakPoint: async (noteId: string, weakPoint: Omit<FeynmanWeakPoint, 'id' | 'noteId' | 'createdAt'>) => {
-      const id = generateId();
-      const record: FeynmanWeakPoint = {
+      const wpData = {
         ...weakPoint,
-        id,
         noteId,
         mastered: weakPoint.mastered ?? false,
         createdAt: new Date(),
       };
-      await feynmanWeakPointStore.create(record);
+      const id = await createWithLog(feynmanWeakPointStore, 'feynmanWeakPoints', wpData);
+      const record: FeynmanWeakPoint = { id, ...wpData };
 
       set((state) => ({
         weakPoints: {
@@ -201,7 +199,7 @@ export const useFeynmanStore = create<FeynmanState>((set, get) => {
     },
 
     removeWeakPoint: async (noteId: string, weakPointId: string) => {
-      await feynmanWeakPointStore.delete(weakPointId);
+      await deleteWithLog(feynmanWeakPointStore, 'feynmanWeakPoints', weakPointId);
       set((state) => ({
         weakPoints: {
           ...state.weakPoints,
@@ -216,7 +214,7 @@ export const useFeynmanStore = create<FeynmanState>((set, get) => {
       if (!wp) return;
 
       const updated = { ...wp, mastered: !wp.mastered };
-      await feynmanWeakPointStore.update(weakPointId, updated);
+      await updateWithLog(feynmanWeakPointStore, 'feynmanWeakPoints', weakPointId, updated);
 
       set((state) => ({
         weakPoints: {
@@ -234,22 +232,21 @@ export const useFeynmanStore = create<FeynmanState>((set, get) => {
       if (existing) {
         // 更新已有记录
         const updated: FeynmanSummary = { ...existing, summary, updatedAt: new Date() };
-        await feynmanSummaryStore.update(existing.id!, updated);
+        await updateWithLog(feynmanSummaryStore, 'feynmanSummaries', existing.id!, updated);
         set((state) => ({
           summaries: { ...state.summaries, [noteId]: updated },
         }));
       } else {
         // 新建记录
         const now = new Date();
-        const id = generateId();
-        const record: FeynmanSummary = {
-          id,
+        const summaryData = {
           noteId,
           summary,
           createdAt: now,
           updatedAt: now,
         };
-        await feynmanSummaryStore.create(record);
+        const id = await createWithLog(feynmanSummaryStore, 'feynmanSummaries', summaryData);
+        const record: FeynmanSummary = { id, ...summaryData };
         set((state) => ({
           summaries: { ...state.summaries, [noteId]: record },
         }));
@@ -281,7 +278,7 @@ export const useFeynmanStore = create<FeynmanState>((set, get) => {
         }
       }
 
-      await feynmanNoteStore.update(noteId, updated);
+      await updateWithLog(feynmanNoteStore, 'feynmanNotes', noteId, updated);
       set((state) => ({ notes: patchNote(state.notes, updated) }));
     },
 
@@ -290,7 +287,7 @@ export const useFeynmanStore = create<FeynmanState>((set, get) => {
       if (!note) return;
 
       const updated: FeynmanNote = { ...note, selfRating: rating, updatedAt: new Date() };
-      await feynmanNoteStore.update(noteId, updated);
+      await updateWithLog(feynmanNoteStore, 'feynmanNotes', noteId, updated);
       set((state) => ({ notes: patchNote(state.notes, updated) }));
     },
 
@@ -305,7 +302,7 @@ export const useFeynmanStore = create<FeynmanState>((set, get) => {
         updatedAt: new Date(),
       };
 
-      await feynmanNoteStore.update(noteId, updated);
+      await updateWithLog(feynmanNoteStore, 'feynmanNotes', noteId, updated);
       set((state) => ({ notes: patchNote(state.notes, updated) }));
     },
 

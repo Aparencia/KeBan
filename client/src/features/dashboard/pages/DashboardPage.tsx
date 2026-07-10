@@ -9,13 +9,17 @@ import {
   Activity,
   PenLine,
   Brain,
+  Flame,
 } from 'lucide-react';
-import { Card, Skeleton, EmptyState } from '@/components/ui';
+import { Card, Skeleton, EmptyState, RichTooltip } from '@/components/ui';
+import { cn } from '@/lib/utils';
 import { pomodoroSessionStore, flashcardStore, flashcardReviewStore } from '@/lib/storage';
 import { useFlashcardStore } from '@/features/flashcards/store/useFlashcardStore';
 import { useNoteStore } from '@/features/notes/store/useNoteStore';
 import { useFeynmanStore } from '@/features/feynman/store/useFeynmanStore';
-import type { PomodoroSession, Flashcard, FlashcardReview } from '@/types/models';
+import { useCheckIn } from '@/lib/checkin/useCheckIn';
+import AchievementPanel from '../components/AchievementPanel';
+import type { PomodoroSession, Flashcard, FlashcardReview, StudyCheckIn } from '@/types/models';
 
 /* ---- 工具函数 ---- */
 
@@ -83,6 +87,38 @@ const quickActions = [
 
 export default function DashboardPage() {
   const navigate = useNavigate();
+
+  // 打卡
+  const { streakDays, todayCheckIn, loading: checkInLoading, loadMonthData } = useCheckIn('dashboard');
+  const [monthRecords, setMonthRecords] = useState<StudyCheckIn[]>([]);
+
+  useEffect(() => {
+    loadMonthData().then(setMonthRecords);
+  }, [loadMonthData]);
+
+  // 月历数据
+  const calendarDays = useMemo(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const totalDays = lastDay.getDate();
+    // 周一为起始（0=周一，6=周日）
+    let startDow = firstDay.getDay() - 1;
+    if (startDow < 0) startDow = 6;
+
+    const checkedDates = new Set(monthRecords.map((r) => r.date));
+    const todayStr = now.toISOString().split('T')[0];
+
+    const cells: { day: number | null; checked: boolean; isToday: boolean }[] = [];
+    for (let i = 0; i < startDow; i++) cells.push({ day: null, checked: false, isToday: false });
+    for (let d = 1; d <= totalDays; d++) {
+      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      cells.push({ day: d, checked: checkedDates.has(dateStr), isToday: dateStr === todayStr });
+    }
+    return cells;
+  }, [monthRecords]);
 
   // 闪卡 store
   const loadDecks = useFlashcardStore((s) => s.loadDecks);
@@ -300,6 +336,63 @@ export default function DashboardPage() {
               );
             })}
       </section>
+
+      {/* ── 打卡状态 + 月历 ── */}
+      <section className="grid grid-cols-1 lg:grid-cols-3 gap-kb-md">
+        {/* 连续打卡卡片 */}
+        <Card variant="default" padding="lg" className="flex flex-col items-center justify-center gap-kb-sm">
+          {checkInLoading ? (
+            <Skeleton variant="circular" width={48} height={48} />
+          ) : (
+            <>
+              <Flame className="w-icon-lg h-icon-lg text-brand-500" strokeWidth={1.5} />
+              <RichTooltip content="连续打卡天数，断签后重置为 1" position="bottom" delay={200}>
+                <span className="text-d1 font-bold text-brand-600 tabular-nums cursor-help">{streakDays}</span>
+              </RichTooltip>
+              <span className="text-b2 text-text-tertiary">连续打卡天数</span>
+              <span className={cn(
+                'text-c1 font-medium px-2 py-0.5 rounded-kb-full',
+                todayCheckIn ? 'bg-semantic-success/10 text-semantic-success' : 'bg-bg-tertiary text-text-tertiary',
+              )}>
+                {todayCheckIn ? '✓ 今日已打卡' : '今日未打卡'}
+              </span>
+            </>
+          )}
+        </Card>
+
+        {/* 月历视图 */}
+        <Card variant="default" padding="lg" className="lg:col-span-2">
+          <h3 className="text-b1 font-medium text-text-primary mb-kb-sm">
+            {new Date().getFullYear()}年{new Date().getMonth() + 1}月 打卡日历
+          </h3>
+          {/* 星期头 */}
+          <div className="grid grid-cols-7 gap-1 mb-1">
+            {['一', '二', '三', '四', '五', '六', '日'].map((w) => (
+              <div key={w} className="text-center text-c1 text-text-tertiary font-medium">{w}</div>
+            ))}
+          </div>
+          {/* 日期格子 */}
+          <div className="grid grid-cols-7 gap-1">
+            {calendarDays.map((cell, i) => (
+              <div
+                key={i}
+                className={cn(
+                  'aspect-square flex items-center justify-center rounded-kb-sm text-c1',
+                  cell.day === null && 'invisible',
+                  cell.day !== null && cell.checked && 'bg-brand-500 text-white font-semibold',
+                  cell.day !== null && !cell.checked && 'bg-bg-tertiary/50 text-text-tertiary',
+                  cell.isToday && !cell.checked && 'ring-1 ring-brand-400',
+                )}
+              >
+                {cell.day ?? ''}
+              </div>
+            ))}
+          </div>
+        </Card>
+      </section>
+
+      {/* ── 成就墙 ── */}
+      <AchievementPanel />
 
       {/* ── 快速开始 ── */}
       <section className="flex flex-col gap-kb-md">

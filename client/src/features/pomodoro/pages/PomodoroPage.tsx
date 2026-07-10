@@ -1,9 +1,14 @@
-import { useEffect, useRef } from 'react';
-import { Play, Pause, RotateCcw, SkipForward, GraduationCap, BookOpen, Clock } from 'lucide-react';
+import { useEffect, useRef, useState, useMemo } from 'react';
+import { Play, Pause, RotateCcw, SkipForward, GraduationCap, BookOpen, Clock, Volume2, VolumeX } from 'lucide-react';
 import { Button } from '@/components/ui';
 import { cn } from '@/lib/utils';
+import { db } from '@/lib/storage';
 import TimerRing from '../components/TimerRing';
+import GoalInput from '../components/GoalInput';
 import { usePomodoroStore } from '../store/usePomodoroStore';
+import { useAudioPlayer } from '@/lib/audio/useAudioPlayer';
+import { audioTracks, loadAudioPreferences, saveAudioPreferences } from '@/lib/audio/audioConfig';
+import type { AudioPreferences } from '@/lib/audio/audioConfig';
 
 export default function PomodoroPage() {
   const {
@@ -15,16 +20,58 @@ export default function PomodoroPage() {
     completedCount,
     mode,
     settings,
+    currentGoal,
     start,
     pause,
     resume,
     reset,
     skip,
     setMode,
+    setCurrentGoal,
     tick,
   } = usePomodoroStore();
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [goalModalOpen, setGoalModalOpen] = useState(false);
+  const [rememberGoal, setRememberGoal] = useState(false);
+
+  // ── 白噪音 ──
+  const [audioPrefs, setAudioPrefs] = useState<AudioPreferences>(() => loadAudioPreferences());
+
+  const whiteNoiseTrack = useMemo(
+    () => audioTracks.find((t) => t.id === audioPrefs.whiteNoiseTrackId) ?? audioTracks[0],
+    [audioPrefs.whiteNoiseTrackId],
+  );
+
+  const whiteNoisePlayer = useAudioPlayer({
+    src: whiteNoiseTrack.src,
+    volume: audioPrefs.whiteNoiseVolume,
+    loop: true,
+    fadeInMs: 1000,
+    fadeOutMs: 1500,
+  });
+
+  // 工作阶段且白噪音开启时自动播放
+  useEffect(() => {
+    if (isRunning && phase === 'work' && audioPrefs.whiteNoiseEnabled) {
+      whiteNoisePlayer.play();
+    } else {
+      whiteNoisePlayer.pause();
+    }
+  }, [isRunning, phase, audioPrefs.whiteNoiseEnabled]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const toggleWhiteNoise = () => {
+    const next = { ...audioPrefs, whiteNoiseEnabled: !audioPrefs.whiteNoiseEnabled };
+    setAudioPrefs(next);
+    saveAudioPreferences(next);
+  };
+
+  const handleWhiteNoiseVolume = (vol: number) => {
+    const next = { ...audioPrefs, whiteNoiseVolume: vol };
+    setAudioPrefs(next);
+    saveAudioPreferences(next);
+    whiteNoisePlayer.setVolume(vol);
+  };
 
   // Timer interval
   useEffect(() => {
@@ -67,7 +114,36 @@ export default function PomodoroPage() {
     } else if (isPaused) {
       resume();
     } else {
-      start();
+      // 弹出目标输入框
+      setGoalModalOpen(true);
+    }
+  };
+
+  const handleGoalSubmit = async (goal: string) => {
+    setCurrentGoal(goal);
+    setGoalModalOpen(false);
+    start();
+
+    // 若启用了记住目标，保存到 Dexie
+    if (rememberGoal) {
+      try {
+        const existing = await db.pomodoroGoals.where('text').equals(goal).first();
+        if (existing) {
+          await db.pomodoroGoals.update(existing.id, {
+            useCount: existing.useCount + 1,
+            lastUsedAt: new Date(),
+          });
+        } else {
+          await db.pomodoroGoals.add({
+            id: crypto.randomUUID(),
+            text: goal,
+            useCount: 1,
+            lastUsedAt: new Date(),
+          });
+        }
+      } catch (e) {
+        console.error('[Pomodoro] Failed to save goal:', e);
+      }
     }
   };
 
@@ -132,6 +208,9 @@ export default function PomodoroPage() {
 
       {/* Timer Ring */}
       <div className="my-kb-xl">
+        {currentGoal && (
+          <p className="text-sm text-text-tertiary text-center mb-2 truncate">{currentGoal}</p>
+        )}
         <TimerRing
           totalSeconds={totalSeconds}
           remainingSeconds={remainingSeconds}
@@ -156,6 +235,32 @@ export default function PomodoroPage() {
         <span className="text-c1 text-text-tertiary ml-1">
           {completedCount}/{settings.longBreakInterval}
         </span>
+      </div>
+
+      {/* 白噪音控制区 */}
+      <div className="flex items-center gap-kb-sm mb-kb-xl px-kb-md py-2 bg-bg-secondary/60 rounded-kb-full border border-border/30">
+        <button
+          onClick={toggleWhiteNoise}
+          className={cn(
+            'p-1.5 rounded-kb-full transition-colors duration-kb-fast',
+            audioPrefs.whiteNoiseEnabled ? 'text-brand-500' : 'text-text-tertiary hover:text-text-secondary',
+          )}
+          title={audioPrefs.whiteNoiseEnabled ? '关闭白噪音' : '开启白噪音'}
+        >
+          {audioPrefs.whiteNoiseEnabled
+            ? <Volume2 className="w-icon-sm h-icon-sm" strokeWidth={1.5} />
+            : <VolumeX className="w-icon-sm h-icon-sm" strokeWidth={1.5} />}
+        </button>
+        <span className="text-c1 text-text-tertiary select-none">{whiteNoiseTrack.nameZh}</span>
+        <input
+          type="range"
+          min={0}
+          max={1}
+          step={0.05}
+          value={audioPrefs.whiteNoiseVolume}
+          onChange={(e) => handleWhiteNoiseVolume(parseFloat(e.target.value))}
+          className="w-16 h-1 accent-brand-500 cursor-pointer"
+        />
       </div>
 
       {/* Controls */}
@@ -191,6 +296,15 @@ export default function PomodoroPage() {
           跳过
         </Button>
       </div>
+
+      {/* Goal Input Modal */}
+      <GoalInput
+        open={goalModalOpen}
+        onClose={() => setGoalModalOpen(false)}
+        onSubmit={handleGoalSubmit}
+        rememberGoal={rememberGoal}
+        onRememberChange={setRememberGoal}
+      />
     </div>
   );
 }
