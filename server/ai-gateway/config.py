@@ -29,6 +29,8 @@ AI_PROVIDERS: dict = {
         "models": {
             "summary": "qwen-plus",         # 笔记摘要
             "flashcard": "qwen-plus",        # 闪卡生成（JSON Mode 稳定）
+            "vision": "qwen-vl-plus",        # 多模态视觉提取
+            "asr": "paraformer-v2",          # 语音转文字（Paraformer）
         },
     },
     "deepseek": {
@@ -44,6 +46,8 @@ AI_PROVIDERS: dict = {
         "api_key": os.getenv("GLM_API_KEY", ""),
         "models": {
             "free": "glm-4-flash",           # 永久免费，Alpha 验证用
+            "vision": "glm-4v-flash",        # 多模态视觉（免费）
+            "asr": "glm-4-audio",            # 语音转文字
         },
     },
 }
@@ -57,6 +61,8 @@ MODEL_ROUTING: dict[str, tuple[str, str]] = {
     "generate_cards": ("glm", "free"),
     "evaluate": ("glm", "free"),
     "recommend": ("glm", "free"),
+    "vision_extract": ("glm", "vision"),
+    "transcribe": ("qwen", "asr"),
 }
 
 # ============================================================
@@ -106,6 +112,8 @@ PROVIDER_FALLBACK_CHAIN: dict[str, list[str]] = {
     "generate_cards": ["qwen", "glm", "fallback"],       # Qwen 为主，GLM 备选
     "evaluate":       ["deepseek", "glm", "fallback"],   # DeepSeek 为主，GLM 备选
     "recommend":      ["deepseek", "glm", "fallback"],   # DeepSeek 为主，GLM 备选
+    "vision_extract": ["glm", "qwen"],                   # GLM-4V-Flash（免费）优先，Qwen-VL 备选
+    "transcribe":     ["qwen", "glm", "fallback"],       # Qwen Paraformer 优先，GLM 备选
 }
 
 
@@ -145,6 +153,14 @@ async def call_with_fallback(
         if routing and routing[0] == provider_key:
             model_slot = routing[1]
             model_name = AI_PROVIDERS.get(provider_key, {}).get("models", {}).get(model_slot, "fallback")
+        elif routing:
+            # 非主 Provider：优先使用同名 slot（如 "vision"），回退到 "free"
+            feature_slot = routing[1]
+            provider_models = AI_PROVIDERS.get(provider_key, {}).get("models", {})
+            if feature_slot in provider_models:
+                model_name = provider_models[feature_slot]
+            else:
+                model_name = provider_models.get("free", "fallback")
         elif provider_key == "glm":
             model_name = AI_PROVIDERS.get("glm", {}).get("models", {}).get("free", "glm-4-flash")
         else:
@@ -172,6 +188,8 @@ TIMEOUT_CONFIG: dict[str, int] = {
     "generate_cards": 30,
     "evaluate": 20,
     "recommend": 10,
+    "vision_extract": 20,
+    "transcribe": 30,
 }
 
 # ============================================================
@@ -184,6 +202,8 @@ RATE_LIMITS: dict[str, int] = {
     "generate_cards": 10,
     "evaluate": 10,
     "recommend": 15,
+    "vision_extract": 20,
+    "transcribe": 30,
 }
 
 # ============================================================

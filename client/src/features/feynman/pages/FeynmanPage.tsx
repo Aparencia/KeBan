@@ -1,9 +1,13 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { Card, Button, Tag, Modal, Input, EmptyState, Skeleton } from '@/components/ui';
-import { Plus, BookOpen, AlertTriangle, Trash2, CheckCircle, ArrowRight } from 'lucide-react';
+import { Card, Button, Tag, Modal, Input, EmptyState, Skeleton, ContextMenu } from '@/components/ui';
+import type { ContextMenuGroup } from '@/components/ui';
+import { Plus, BookOpen, AlertTriangle, Trash2, CheckCircle, ArrowRight, MessageCircle, Lightbulb, SearchCheck, MoreVertical } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
 import { useFeynmanStore } from '../store/useFeynmanStore';
+import { useContextMenu } from '@/lib/contextMenu';
+import { useToast } from '@/components/ui';
+import type { FeynmanNote } from '@/types/models';
 
 const stepLabels: Record<number, string> = { 1: '选择概念', 2: '讲解中', 3: '标注薄弱', 4: '简化重述' };
 
@@ -30,6 +34,16 @@ function formatRelativeDate(date: Date | string): string {
 export default function FeynmanPage() {
   const navigate = useNavigate();
   const { notes, weakPoints, isLoading, loadNotes, loadWeakPointsForNotes, createNote, deleteNote, getStats, toggleWeakPointMastered } = useFeynmanStore();
+  const { toast } = useToast();
+
+  // 右键菜单 hook
+  const {
+    isOpen: ctxMenuOpen,
+    position: ctxMenuPos,
+    context: ctxMenuNote,
+    handleContextMenu: handleNoteCtx,
+    close: closeCtxMenu,
+  } = useContextMenu<FeynmanNote>();
 
   const [modalOpen, setModalOpen] = useState(false);
   const [weakModalOpen, setWeakModalOpen] = useState(false);
@@ -87,6 +101,56 @@ export default function FeynmanPage() {
     setDeleteId(null);
   }, [deleteNote]);
 
+  const handleConfirmDelete = useCallback(async (note: FeynmanNote) => {
+    if (note.id) {
+      await deleteNote(note.id);
+      toast({ type: 'success', message: '学习会话已删除' });
+    }
+    setDeleteId(null);
+  }, [deleteNote, toast]);
+
+  // 右键菜单分组定义
+  const ctxMenuGroups = useMemo<ContextMenuGroup[]>(() => [
+    {
+      label: '会话操作',
+      items: [
+        { key: 'open', label: '打开学习', icon: <BookOpen className="w-4 h-4" strokeWidth={1.5} /> },
+      ],
+    },
+    {
+      label: 'AI 操作',
+      items: [
+        { key: 'ai-follow-up', label: 'AI 追问', icon: <MessageCircle className="w-4 h-4" strokeWidth={1.5} /> },
+        { key: 'ai-simplify', label: '通俗化解释', icon: <Lightbulb className="w-4 h-4" strokeWidth={1.5} /> },
+        { key: 'ai-gap-check', label: '查漏补缺', icon: <SearchCheck className="w-4 h-4" strokeWidth={1.5} /> },
+      ],
+    },
+    {
+      items: [
+        { key: 'delete', label: '删除', icon: <Trash2 className="w-4 h-4" strokeWidth={1.5} />, danger: true },
+      ],
+    },
+  ], []);
+
+  // 右键菜单选中回调
+  const handleCtxMenuSelect = useCallback((itemKey: string, noteCtx: FeynmanNote) => {
+    switch (itemKey) {
+      case 'open':
+        navigate(`/feynman/${noteCtx.id}`);
+        break;
+      case 'delete':
+        handleConfirmDelete(noteCtx);
+        break;
+      case 'ai-follow-up':
+      case 'ai-simplify':
+      case 'ai-gap-check':
+        // TODO: beta 阶段对接 AI 功能
+        console.warn(`[Feynman ContextMenu] action=${itemKey}`, { noteId: noteCtx.id });
+        toast({ type: 'info', message: 'AI 功能即将上线' });
+        break;
+    }
+  }, [navigate, handleConfirmDelete, toast]);
+
   const stats = getStats();
 
   return (
@@ -143,6 +207,7 @@ export default function FeynmanPage() {
                 hoverable
                 padding="md"
                 onClick={() => navigate(`/feynman/${n.id}`)}
+                onContextMenu={(e) => handleNoteCtx(e, n)}
                 className="flex items-center gap-4 relative group"
               >
                 <div className={cn(
@@ -169,6 +234,25 @@ export default function FeynmanPage() {
                     </span>
                   </div>
                 </div>
+                {/* MoreVertical 按钮（触发右键菜单） */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    handleNoteCtx(
+                      { ...e, clientX: rect.right, clientY: rect.bottom, preventDefault: () => {}, stopPropagation: () => {} } as unknown as React.MouseEvent,
+                      n,
+                    );
+                  }}
+                  className={cn(
+                    'p-1.5 rounded-kb-full text-text-tertiary/0 group-hover:text-text-tertiary',
+                    'hover:!text-text-primary hover:bg-bg-tertiary',
+                    'transition-all duration-kb-fast',
+                  )}
+                  title="更多操作"
+                >
+                  <MoreVertical className="w-4 h-4" strokeWidth={1.5} />
+                </button>
                 {/* 删除按钮 */}
                 {deleteId === n.id ? (
                   <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
@@ -256,6 +340,17 @@ export default function FeynmanPage() {
           autoFocus
         />
       </Modal>
+
+      {/* 右键菜单 */}
+      {ctxMenuOpen && ctxMenuNote && (
+        <ContextMenu<FeynmanNote>
+          groups={ctxMenuGroups}
+          position={ctxMenuPos}
+          context={ctxMenuNote}
+          onSelect={handleCtxMenuSelect}
+          onClose={closeCtxMenu}
+        />
+      )}
 
       {/* 待补强知识点 Modal */}
       <Modal

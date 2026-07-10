@@ -1,5 +1,6 @@
 import { supabase } from '../auth/supabaseClient';
 import { getAIConfig } from '../ai/config';
+import { getActiveUserKey } from '../ai/apiKeyManager';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
 
@@ -22,6 +23,10 @@ function createClient(baseUrlOrGetter: string | (() => string)) {
     const headers = new Headers(customHeaders as HeadersInit);
     if (token) headers.set('Authorization', `Bearer ${token}`);
     headers.set('Content-Type', 'application/json');
+
+    // 用户自配置 API Key 时附加 X-User-API-Key header
+    const userKey = getActiveUserKey();
+    if (userKey) headers.set('X-User-API-Key', userKey);
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);

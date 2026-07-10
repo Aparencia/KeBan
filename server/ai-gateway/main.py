@@ -29,6 +29,8 @@ from routers import (
     generate_cards_router,
     evaluate_router,
     recommend_router,
+    vision_router,
+    transcribe_router,
 )
 from cache.redis_cache import get_cache
 
@@ -251,6 +253,8 @@ app.include_router(summarize_router)
 app.include_router(generate_cards_router)
 app.include_router(evaluate_router)
 app.include_router(recommend_router)
+app.include_router(vision_router)
+app.include_router(transcribe_router)
 
 
 # ============================================================

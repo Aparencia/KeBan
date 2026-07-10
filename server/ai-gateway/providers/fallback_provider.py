@@ -144,3 +144,26 @@ class FallbackProvider(AIProvider):
     async def health_check(self) -> dict:
         """Fallback 始终可用，无需实际请求"""
         return {"status": "healthy", "latency_ms": 0, "error": None}
+
+    async def transcribe(
+        self,
+        audio_base64: str,
+        language: str = "zh",
+        sample_rate: int = 16000,
+        channels: int = 1,
+        model: str = "",
+    ) -> dict[str, Any]:
+        """Fallback 不支持 ASR，返回友好降级结果"""
+        import time as _time
+        start = _time.monotonic()
+        logger.warning("使用 FallbackProvider 降级 ASR 响应")
+        latency_ms = int((_time.monotonic() - start) * 1000)
+        return {
+            "text": "",
+            "segments": [],
+            "language": language,
+            "confidence": 0.0,
+            "model": "fallback",
+            "latency_ms": latency_ms,
+            "warning": "ASR 服务暂时不可用，语音转文字功能暂无法使用",
+        }

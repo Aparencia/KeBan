@@ -28,11 +28,18 @@ export class ElectronAIPlugin implements AIPlugin {
     this.authToken = token;
   }
 
+  /**
+   * 离线前置检查
+   */
+  private checkOnline() {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      throw new AIError('当前处于离线状态，无法使用 AI 功能', 'offline', false);
+    }
+  }
+
   // ── invoke('ai_summarize') ──────────────────────────────────
   async summarizeNote(noteContent: string, options?: SummarizeOptions): Promise<SummarizeResult> {
-    if (!noteContent || noteContent.trim().length < 10) {
-      throw new AIError('笔记内容过短（至少 10 个字符），无法生成摘要', 'invalid_response', false);
-    }
+    this.checkOnline();
     try {
       const ipcStart = performance.now();
       console.log(`[ElectronAI] summarizeNote → IPC ai_summarize, text_length=${noteContent.length}`);
@@ -62,15 +69,17 @@ export class ElectronAIPlugin implements AIPlugin {
         tokensUsed: result.tokensUsed,
         latencyMs: result.latencyMs,
       };
-    } catch (error: any) {
-      console.error('[ElectronAI] summarizeNote failed:', error?.message || error);
-      console.error('[IPC] ai_summarize error:', error?.message || error);
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error('[ElectronAI] summarizeNote failed:', msg);
+      console.error('[IPC] ai_summarize error:', msg);
       throw this.handleError(error);
     }
   }
 
   // ── invoke('ai_generate_cards') ─────────────────────────────
   async generateFlashcards(noteContent: string, options?: FlashcardOptions): Promise<FlashcardResult> {
+    this.checkOnline();
     try {
       const ipcStart = performance.now();
       console.log(`[ElectronAI] generateFlashcards → IPC ai_generate_cards, note_length=${noteContent.length}`);
@@ -104,9 +113,10 @@ export class ElectronAIPlugin implements AIPlugin {
         model: result.model,
         tokensUsed: result.tokensUsed,
       };
-    } catch (error: any) {
-      console.error('[ElectronAI] generateFlashcards failed:', error?.message || error);
-      console.error('[IPC] ai_generate_cards error:', error?.message || error);
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error('[ElectronAI] generateFlashcards failed:', msg);
+      console.error('[IPC] ai_generate_cards error:', msg);
       throw this.handleError(error);
     }
   }
@@ -117,6 +127,7 @@ export class ElectronAIPlugin implements AIPlugin {
     explanation: string,
     _options?: EvaluateOptions,
   ): Promise<EvaluateResult> {
+    this.checkOnline();
     try {
       const ipcStart = performance.now();
       console.log(`[ElectronAI] evaluateExplanation → IPC ai_evaluate, concept=${concept}`);
@@ -156,9 +167,10 @@ export class ElectronAIPlugin implements AIPlugin {
         tokensUsed: result.tokensUsed,
         latencyMs: result.latencyMs,
       };
-    } catch (error: any) {
-      console.error('[ElectronAI] evaluateExplanation failed:', error?.message || error);
-      console.error('[IPC] ai_evaluate error:', error?.message || error);
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error('[ElectronAI] evaluateExplanation failed:', msg);
+      console.error('[IPC] ai_evaluate error:', msg);
       throw this.handleError(error);
     }
   }
@@ -168,6 +180,7 @@ export class ElectronAIPlugin implements AIPlugin {
     historyData: DurationHistoryData,
     _options?: DurationOptions,
   ): Promise<DurationResult> {
+    this.checkOnline();
     try {
       // 将前端 session 数据映射为 FocusSessionInput（camelCase）
       const history = (historyData.sessions || []).map(s => ({
@@ -209,16 +222,24 @@ export class ElectronAIPlugin implements AIPlugin {
         tokensUsed: result.tokensUsed,
         latencyMs: result.latencyMs,
       };
-    } catch (error: any) {
-      console.error('[ElectronAI] recommendDuration failed:', error?.message || error);
-      console.error('[IPC] ai_recommend_duration error:', error?.message || error);
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error('[ElectronAI] recommendDuration failed:', msg);
+      console.error('[IPC] ai_recommend_duration error:', msg);
       throw this.handleError(error);
     }
   }
 
-  private handleError(error: any): AIError {
-    console.error('[AI] ElectronAIPlugin error:', typeof error === 'string' ? error : error.message);
-    const msg = typeof error === 'string' ? error : (error.message || String(error));
+  private handleError(error: unknown): AIError {
+    if (error instanceof AIError) return error;
+
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('[AI] ElectronAIPlugin error:', msg);
+
+    // 离线检查（IPC 调用时网络断开）
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      return new AIError('当前处于离线状态', 'offline', false);
+    }
     if (msg.includes('Connection refused') || msg.includes('connection refused')
         || msg.includes('os error 10061') || msg.includes('os error 111')) {
       return new AIError(
@@ -226,7 +247,7 @@ export class ElectronAIPlugin implements AIPlugin {
         'service_unavailable', true
       );
     }
-    if (msg.includes('timeout') || msg.includes('Timeout')) {
+    if (msg.includes('timeout') || msg.includes('Timeout') || msg.includes('ETIMEDOUT')) {
       return new AIError('AI 服务响应超时，请稍后重试', 'timeout', true);
     }
     if (msg.includes('429')) {
@@ -234,6 +255,9 @@ export class ElectronAIPlugin implements AIPlugin {
     }
     if (msg.includes('503')) {
       return new AIError('AI 服务暂时不可用', 'service_unavailable', true);
+    }
+    if (msg.includes('fetch') || msg.includes('network') || msg.includes('ECONNREFUSED')) {
+      return new AIError('AI 服务不可用，请检查网络连接', 'service_unavailable', true);
     }
     return new AIError(msg || 'AI 功能暂不可用', 'service_unavailable', false);
   }

@@ -16,11 +16,18 @@ export class RemoteAIPlugin implements AIPlugin {
     this.timeout = timeout;
   }
 
+  /**
+   * 离线前置检查
+   */
+  private checkOnline() {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      throw new AIError('当前处于离线状态，无法使用 AI 功能', 'offline', false);
+    }
+  }
+
   // ── POST /api/v1/ai/summarize ──────────────────────────────
   async summarizeNote(noteContent: string, options?: SummarizeOptions): Promise<SummarizeResult> {
-    if (!noteContent || noteContent.trim().length < 10) {
-      throw new AIError('笔记内容过短（至少 10 个字符），无法生成摘要', 'invalid_response', false);
-    }
+    this.checkOnline();
     try {
       // 构建后端 SummarizeRequest: { text, options: { max_length, style, language } }
       const backendOptions: Record<string, unknown> = {};
@@ -43,13 +50,14 @@ export class RemoteAIPlugin implements AIPlugin {
         tokensUsed: result.tokens_used,
         latencyMs: result.latency_ms,
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       throw this.handleError(error);
     }
   }
 
   // ── POST /api/v1/ai/generate-cards ─────────────────────────
   async generateFlashcards(noteContent: string, options?: FlashcardOptions): Promise<FlashcardResult> {
+    this.checkOnline();
     try {
       // 构建后端 CardGenRequest: { note, options: { max_cards, difficulty, card_type } }
       const backendOptions: Record<string, unknown> = {};
@@ -77,13 +85,14 @@ export class RemoteAIPlugin implements AIPlugin {
         model: result.model,
         tokensUsed: result.tokens_used,
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       throw this.handleError(error);
     }
   }
 
   // ── POST /api/v1/ai/evaluate-explanation ───────────────────
   async evaluateExplanation(concept: string, explanation: string, _options?: EvaluateOptions): Promise<EvaluateResult> {
+    this.checkOnline();
     try {
       // 构建后端 EvaluateRequest: { concept, explanation }
       const result = await aiClient.post<{
@@ -116,13 +125,14 @@ export class RemoteAIPlugin implements AIPlugin {
         tokensUsed: result.tokens_used,
         latencyMs: result.latency_ms,
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       throw this.handleError(error);
     }
   }
 
   // ── POST /api/v1/ai/recommend-duration ─────────────────────
   async recommendDuration(historyData: DurationHistoryData, _options?: DurationOptions): Promise<DurationResult> {
+    this.checkOnline();
     try {
       // 构建后端 RecommendRequest: { history: [{ duration_minutes, completed, subject, timestamp }] }
       const history = (historyData.sessions || []).map(s => ({
@@ -156,21 +166,42 @@ export class RemoteAIPlugin implements AIPlugin {
         tokensUsed: result.tokens_used,
         latencyMs: result.latency_ms,
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       throw this.handleError(error);
     }
   }
 
-  private handleError(error: any): AIError {
-    if (error.message?.includes('timeout') || error.name === 'AbortError') {
+  private handleError(error: unknown): AIError {
+    if (error instanceof AIError) return error;
+
+    // 离线检查（fetch 调用时网络断开）
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      return new AIError('当前处于离线状态', 'offline', false);
+    }
+
+    // AbortError / 超时
+    if (error instanceof DOMException && error.name === 'AbortError') {
       return new AIError('AI 服务响应超时，请稍后重试', 'timeout', true);
     }
-    if (error.message?.includes('429')) {
+
+    const msg = error instanceof Error ? error.message : String(error);
+
+    if (msg.includes('timeout') || msg.includes('Timeout') || msg.includes('ETIMEDOUT')) {
+      return new AIError('AI 服务响应超时，请稍后重试', 'timeout', true);
+    }
+    if (msg.includes('429')) {
       return new AIError('AI 调用次数已达上限，请稍后重试', 'rate_limit', true);
     }
-    if (error.message?.includes('503')) {
+    if (msg.includes('503')) {
       return new AIError('AI 服务暂时不可用', 'service_unavailable', true);
     }
-    return new AIError(error.message || 'AI 功能暂不可用', 'service_unavailable', false);
+    // fetch 网络错误
+    if (error instanceof TypeError && msg.includes('fetch')) {
+      return new AIError('AI 服务不可用，请检查网络连接', 'service_unavailable', true);
+    }
+    if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('ECONNREFUSED')) {
+      return new AIError('AI 服务不可用，请检查网络连接', 'service_unavailable', true);
+    }
+    return new AIError(msg || 'AI 功能暂不可用', 'service_unavailable', false);
   }
 }

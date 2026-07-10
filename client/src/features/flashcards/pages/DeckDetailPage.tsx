@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Button, Card, Modal, Input, Tag, EmptyState, Skeleton, useToast } from '@/components/ui';
+import { ContextMenu, type ContextMenuGroup } from '@/components/ui/ContextMenu';
 import {
   ArrowLeft,
   BookOpen,
@@ -13,11 +14,14 @@ import {
   Loader2,
   Check,
   Download,
+  PauseCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { exportDeck, downloadDeckFile } from '@/lib/storage/exportImport';
 import { useFlashcardStore } from '../store/useFlashcardStore';
 import { useAIFlashcards } from '@/lib/ai/useAI';
+import { useContextMenu } from '@/lib/contextMenu/useContextMenu';
+import type { Flashcard } from '@/types/models';
 import type { Flashcard as AIFlashcard } from '@/lib/ai/types';
 
 export default function DeckDetailPage() {
@@ -57,6 +61,51 @@ export default function DeckDetailPage() {
   const { loading: aiLoading, error: aiError, generate } = useAIFlashcards();
   const { toast } = useToast();
   const [exporting, setExporting] = useState(false);
+
+  // Context menu
+  const {
+    isOpen: ctxOpen,
+    position: ctxPos,
+    context: ctxCard,
+    handleContextMenu: ctxHandleMenu,
+    close: ctxClose,
+  } = useContextMenu<Flashcard>();
+
+  const cardMenuGroups: ContextMenuGroup[] = [
+    {
+      label: '卡片操作',
+      items: [
+        { key: 'edit', label: '编辑卡片', icon: <Pencil className="w-4 h-4" strokeWidth={1.5} /> },
+        { key: 'suspend', label: '搁置卡片', icon: <PauseCircle className="w-4 h-4" strokeWidth={1.5} /> },
+      ],
+    },
+    {
+      label: '管理',
+      items: [
+        { key: 'delete', label: '删除卡片', icon: <Trash2 className="w-4 h-4" strokeWidth={1.5} />, danger: true },
+      ],
+    },
+  ];
+
+  const handleCardSelect = useCallback((itemKey: string, card: Flashcard) => {
+    switch (itemKey) {
+      case 'edit':
+        openEditModal(card);
+        break;
+      case 'suspend': {
+        // 搁置：将到期日设为 1 年后
+        const farFuture = new Date();
+        farFuture.setFullYear(farFuture.getFullYear() + 1);
+        updateCard(card.id, { dueDate: farFuture });
+        toast({ type: 'success', message: '卡片已搁置' });
+        break;
+      }
+      case 'delete':
+        setDeleteCardId(card.id ?? null);
+        break;
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [updateCard, toast]);
 
   const handleExport = async () => {
     if (!deckId) return;
@@ -232,6 +281,7 @@ export default function DeckDetailPage() {
                 key={card.id}
                 padding="sm"
                 className="flex items-center gap-3"
+                onContextMenu={(e) => ctxHandleMenu(e, card)}
               >
                 <div className="flex-1 min-w-0">
                   <p className="text-b2 font-medium text-text-primary truncate">{card.front}</p>
@@ -412,6 +462,17 @@ export default function DeckDetailPage() {
           )}
         </div>
       </Modal>
+
+      {/* 右键菜单 */}
+      {ctxOpen && ctxCard && (
+        <ContextMenu
+          groups={cardMenuGroups}
+          position={ctxPos}
+          context={ctxCard}
+          onSelect={handleCardSelect}
+          onClose={ctxClose}
+        />
+      )}
 
       {/* 删除卡片确认 Modal */}
       <Modal

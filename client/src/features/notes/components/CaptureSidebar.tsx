@@ -1,0 +1,880 @@
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import {
+  Monitor, Play, Pause, Square, Eye, Mic, Layers,
+  Settings2, ChevronRight, ChevronDown, Plus, ListPlus,
+  Clock, CheckCircle2, XCircle, Loader2, PanelRightOpen, PanelRightClose,
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
+import {
+  CaptureManager,
+  captureEventBus,
+} from '@/lib/capture';
+import type {
+  WindowInfo,
+  ExtractedSegment,
+  CaptureMode,
+  CaptureSidebarConfig,
+  SessionStatus,
+  ScreenshotData,
+  AudioChunkData,
+} from '@/lib/capture';
+
+// ================================================================
+// 子组件接口
+// ================================================================
+
+interface WindowSelectorProps {
+  windows: WindowInfo[];
+  selected: WindowInfo | null;
+  onSelect: (win: WindowInfo) => void;
+  onRefresh: () => void;
+  loading: boolean;
+}
+
+interface ControlBarProps {
+  status: SessionStatus;
+  mode: CaptureMode;
+  stats: { frames: number; extracted: number };
+  onStart: () => void;
+  onPause: () => void;
+  onStop: () => void;
+  onModeChange: (mode: CaptureMode) => void;
+  disabled: boolean;
+}
+
+interface SegmentListProps {
+  segments: ExtractedSegment[];
+  selectedIds: Set<string>;
+  onToggleSelect: (id: string) => void;
+  onInsertSelected: () => void;
+  onInsertAll: () => void;
+}
+
+interface SettingsPanelProps {
+  config: CaptureSidebarConfig;
+  onChange: (patch: Partial<CaptureSidebarConfig>) => void;
+}
+
+// ================================================================
+// 窗口选择器
+// ================================================================
+
+function WindowSelector({ windows, selected, onSelect, onRefresh, loading }: WindowSelectorProps) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className="border-b border-border/30">
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        className={cn(
+          'flex items-center justify-between w-full px-3 py-2.5 text-b2',
+          'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary/50',
+          'transition-colors duration-kb-fast',
+        )}
+      >
+        <div className="flex items-center gap-2">
+          <Monitor className="w-icon-sm h-icon-sm" strokeWidth={1.5} />
+          <span className="font-medium">
+            {selected ? selected.title : '选择目标窗口'}
+          </span>
+        </div>
+        {expanded ? (
+          <ChevronDown className="w-icon-sm h-icon-sm" strokeWidth={1.5} />
+        ) : (
+          <ChevronRight className="w-icon-sm h-icon-sm" strokeWidth={1.5} />
+        )}
+      </button>
+
+      {expanded && (
+        <div className="px-3 pb-3 space-y-1.5">
+          <button
+            onClick={onRefresh}
+            disabled={loading}
+            className={cn(
+              'w-full text-b3 text-brand-600 hover:text-brand-700 py-1 text-left',
+              loading && 'opacity-60 cursor-not-allowed',
+            )}
+          >
+            {loading ? '加载中...' : '↻ 刷新窗口列表'}
+          </button>
+
+          {windows.length === 0 && !loading && (
+            <p className="text-b3 text-text-tertiary py-2 text-center">
+              未检测到可捕获窗口
+            </p>
+          )}
+
+          <div className="flex flex-col gap-1 max-h-48 overflow-y-auto">
+            {windows.map((win) => (
+              <button
+                key={win.id}
+                onClick={() => { onSelect(win); setExpanded(false); }}
+                className={cn(
+                  'flex items-start gap-2 p-2 rounded-kb-sm text-left transition-colors',
+                  selected?.id === win.id
+                    ? 'bg-brand-50 text-brand-700 ring-1 ring-brand-200'
+                    : 'hover:bg-bg-tertiary text-text-secondary hover:text-text-primary',
+                )}
+              >
+                {win.thumbnail && (
+                  <img
+                    src={win.thumbnail}
+                    alt=""
+                    className="w-16 h-9 rounded-kb-xs object-cover flex-shrink-0 border border-border/30"
+                  />
+                )}
+                <span className="text-b3 leading-tight line-clamp-2">{win.title}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ================================================================
+// 采集控制栏
+// ================================================================
+
+const MODE_OPTIONS: { value: CaptureMode; label: string; icon: typeof Eye }[] = [
+  { value: 'vision', label: '视觉', icon: Eye },
+  { value: 'audio', label: '音频', icon: Mic },
+  { value: 'mixed', label: '混合', icon: Layers },
+];
+
+const STATUS_CONFIG: Record<SessionStatus, { label: string; color: string; icon: typeof Play }> = {
+  idle: { label: '空闲', color: 'text-text-tertiary', icon: Clock },
+  capturing: { label: '采集中', color: 'text-semantic-error', icon: Loader2 },
+  processing: { label: '处理中', color: 'text-brand-600', icon: Loader2 },
+  paused: { label: '已暂停', color: 'text-semantic-warning', icon: Pause },
+  error: { label: '错误', color: 'text-semantic-error', icon: XCircle },
+};
+
+function ControlBar({
+  status, mode, stats, onStart, onPause, onStop, onModeChange, disabled,
+}: ControlBarProps) {
+  const statusCfg = STATUS_CONFIG[status];
+  const StatusIcon = statusCfg.icon;
+
+  return (
+    <div className="border-b border-border/30 px-3 py-3 space-y-3">
+      {/* 状态指示 */}
+      <div className="flex items-center justify-between">
+        <div className={cn('flex items-center gap-1.5 text-b3 font-medium', statusCfg.color)}>
+          <StatusIcon
+            className={cn('w-3.5 h-3.5', status === 'capturing' && 'animate-spin')}
+            strokeWidth={1.5}
+          />
+          {statusCfg.label}
+        </div>
+        <div className="flex items-center gap-3 text-b3 text-text-tertiary">
+          <span title="已截取帧数">帧 {stats.frames}</span>
+          <span title="已提取片段数">段 {stats.extracted}</span>
+        </div>
+      </div>
+
+      {/* 控制按钮 */}
+      <div className="flex items-center gap-2">
+        {status !== 'capturing' ? (
+          <button
+            onClick={onStart}
+            disabled={disabled}
+            className={cn(
+              'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-kb-md text-b3 font-medium',
+              'bg-semantic-success/10 text-semantic-success hover:bg-semantic-success/20',
+              'active:scale-95 transition-all duration-kb-fast',
+              disabled && 'opacity-50 cursor-not-allowed',
+            )}
+          >
+            <Play className="w-3.5 h-3.5" strokeWidth={1.5} />
+            开始
+          </button>
+        ) : (
+          <button
+            onClick={onPause}
+            className={cn(
+              'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-kb-md text-b3 font-medium',
+              'bg-semantic-warning/10 text-semantic-warning hover:bg-semantic-warning/20',
+              'active:scale-95 transition-all duration-kb-fast',
+            )}
+          >
+            <Pause className="w-3.5 h-3.5" strokeWidth={1.5} />
+            暂停
+          </button>
+        )}
+
+        {status !== 'idle' && status !== 'error' && (
+          <button
+            onClick={onStop}
+            className={cn(
+              'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-kb-md text-b3 font-medium',
+              'bg-bg-secondary text-text-secondary border border-border/50',
+              'hover:bg-bg-tertiary hover:text-text-primary',
+              'active:scale-95 transition-all duration-kb-fast',
+            )}
+          >
+            <Square className="w-3.5 h-3.5" strokeWidth={1.5} />
+            停止
+          </button>
+        )}
+      </div>
+
+      {/* 模式切换 */}
+      <div className="flex items-center gap-1">
+        {MODE_OPTIONS.map(({ value, label, icon: ModeIcon }) => (
+          <button
+            key={value}
+            onClick={() => onModeChange(value)}
+            disabled={status === 'capturing' || status === 'processing'}
+            className={cn(
+              'flex-1 inline-flex items-center justify-center gap-1 py-1.5 rounded-kb-sm text-b3 font-medium',
+              'transition-all duration-kb-fast',
+              mode === value
+                ? 'bg-brand-50 text-brand-600 ring-1 ring-brand-200/50'
+                : 'text-text-tertiary hover:text-text-secondary hover:bg-bg-tertiary/50',
+              (status === 'capturing' || status === 'processing') && 'opacity-50 cursor-not-allowed',
+            )}
+          >
+            <ModeIcon className="w-3.5 h-3.5" strokeWidth={1.5} />
+            {label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ================================================================
+// 实时提取结果展示区
+// ================================================================
+
+function SegmentList({
+  segments, selectedIds, onToggleSelect, onInsertSelected, onInsertAll,
+}: SegmentListProps) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // 新片段到达时自动滚到底部
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [segments.length]);
+
+  const hasSelected = selectedIds.size > 0;
+
+  return (
+    <div className="flex-1 flex flex-col min-h-0">
+      {/* 操作栏 */}
+      <div className="flex items-center justify-between px-3 py-2 border-b border-border/20">
+        <span className="text-b3 font-medium text-text-tertiary">
+          提取结果 ({segments.length})
+        </span>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={onInsertSelected}
+            disabled={!hasSelected}
+            className={cn(
+              'inline-flex items-center gap-1 px-2 py-1 rounded-kb-sm text-b3 font-medium',
+              'transition-all duration-kb-fast',
+              hasSelected
+                ? 'bg-brand-50 text-brand-600 hover:bg-brand-100'
+                : 'text-text-tertiary cursor-not-allowed',
+            )}
+          >
+            <Plus className="w-3 h-3" strokeWidth={2} />
+            插入选中
+          </button>
+          <button
+            onClick={onInsertAll}
+            disabled={segments.length === 0}
+            className={cn(
+              'inline-flex items-center gap-1 px-2 py-1 rounded-kb-sm text-b3 font-medium',
+              'transition-all duration-kb-fast',
+              segments.length > 0
+                ? 'bg-bg-secondary text-text-secondary hover:bg-bg-tertiary'
+                : 'text-text-tertiary cursor-not-allowed',
+            )}
+          >
+            <ListPlus className="w-3 h-3" strokeWidth={2} />
+            全部插入
+          </button>
+        </div>
+      </div>
+
+      {/* 片段列表 */}
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 py-2 space-y-1.5">
+        {segments.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-8 text-text-tertiary">
+            <Eye className="w-8 h-8 mb-2 opacity-30" strokeWidth={1} />
+            <p className="text-b3">采集开始后提取结果将在此显示</p>
+          </div>
+        )}
+
+        {segments.map((seg) => {
+          const isSelected = selectedIds.has(seg.id);
+          const sourceLabel = seg.source === 'vision' ? '视觉' : seg.source === 'audio' ? '音频' : 'UI';
+          const sourceColor = seg.source === 'vision'
+            ? 'bg-blue-500/10 text-blue-600'
+            : seg.source === 'audio'
+              ? 'bg-emerald-500/10 text-emerald-600'
+              : 'bg-amber-500/10 text-amber-600';
+
+          return (
+            <div
+              key={seg.id}
+              onClick={() => onToggleSelect(seg.id)}
+              className={cn(
+                'group p-2.5 rounded-kb-sm cursor-pointer transition-all duration-kb-fast',
+                'border border-transparent',
+                isSelected
+                  ? 'bg-brand-50/50 border-brand-200/50'
+                  : 'hover:bg-bg-tertiary/50',
+              )}
+            >
+              <div className="flex items-center gap-1.5 mb-1">
+                <span className={cn('px-1.5 py-0.5 rounded-kb-xs text-[10px] font-medium', sourceColor)}>
+                  {sourceLabel}
+                </span>
+                <span className="text-[10px] text-text-tertiary">
+                  {new Date(seg.timestamp).toLocaleTimeString()}
+                </span>
+                {isSelected && (
+                  <CheckCircle2 className="ml-auto w-3.5 h-3.5 text-brand-500" strokeWidth={1.5} />
+                )}
+              </div>
+              <p className="text-b3 text-text-secondary leading-relaxed line-clamp-3">
+                {seg.text}
+              </p>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ================================================================
+// 设置区
+// ================================================================
+
+const LANGUAGE_OPTIONS: { value: CaptureSidebarConfig['language']; label: string }[] = [
+  { value: 'zh', label: '中文' },
+  { value: 'en', label: 'English' },
+  { value: 'mixed', label: '混合' },
+];
+
+function SettingsPanel({ config, onChange }: SettingsPanelProps) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="border-t border-border/30">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className={cn(
+          'flex items-center gap-2 w-full px-3 py-2.5 text-b2',
+          'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary/50',
+          'transition-colors duration-kb-fast',
+        )}
+      >
+        <Settings2 className="w-icon-sm h-icon-sm" strokeWidth={1.5} />
+        <span className="font-medium flex-1 text-left">设置</span>
+        {open ? (
+          <ChevronDown className="w-icon-sm h-icon-sm" strokeWidth={1.5} />
+        ) : (
+          <ChevronRight className="w-icon-sm h-icon-sm" strokeWidth={1.5} />
+        )}
+      </button>
+
+      {open && (
+        <div className="px-3 pb-3 space-y-3">
+          {/* 截图间隔 */}
+          <div>
+            <label className="text-b3 text-text-tertiary mb-1 block">截图间隔 (秒)</label>
+            <input
+              type="range"
+              min={1}
+              max={30}
+              value={config.screenshotInterval / 1000}
+              onChange={(e) => onChange({ screenshotInterval: Number(e.target.value) * 1000 })}
+              className="w-full accent-brand-600"
+            />
+            <span className="text-b3 text-text-secondary">{config.screenshotInterval / 1000}s</span>
+          </div>
+
+          {/* 语言选择 */}
+          <div>
+            <label className="text-b3 text-text-tertiary mb-1 block">识别语言</label>
+            <div className="flex gap-1">
+              {LANGUAGE_OPTIONS.map(({ value, label }) => (
+                <button
+                  key={value}
+                  onClick={() => onChange({ language: value })}
+                  className={cn(
+                    'flex-1 py-1.5 rounded-kb-sm text-b3 font-medium transition-all',
+                    config.language === value
+                      ? 'bg-brand-50 text-brand-600 ring-1 ring-brand-200/50'
+                      : 'text-text-tertiary hover:bg-bg-tertiary hover:text-text-secondary',
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 自动插入开关 */}
+          <div className="flex items-center justify-between">
+            <span className="text-b3 text-text-secondary">自动插入笔记</span>
+            <button
+              onClick={() => onChange({ autoInsert: !config.autoInsert })}
+              className={cn(
+                'relative w-9 h-5 rounded-kb-full transition-colors duration-kb-fast',
+                config.autoInsert ? 'bg-brand-600' : 'bg-bg-tertiary',
+              )}
+            >
+              <span
+                className={cn(
+                  'absolute top-0.5 left-0.5 w-4 h-4 rounded-kb-full bg-white shadow-sm',
+                  'transition-transform duration-kb-fast',
+                  config.autoInsert && 'translate-x-4',
+                )}
+              />
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ================================================================
+// IPC 响应类型（主进程返回值，避免 inline type assertion）
+// ================================================================
+
+interface IPCAudioStartResult {
+  success: boolean;
+  error?: string;
+}
+
+interface IPCStopResult {
+  success: boolean;
+}
+
+// ================================================================
+// CaptureSidebar 主组件
+// ================================================================
+
+export interface CaptureSidebarProps {
+  /** 将提取的文本插入到笔记编辑器 */
+  onInsertText?: (text: string) => void;
+}
+
+export function CaptureSidebar({ onInsertText }: CaptureSidebarProps) {
+  const [collapsed, setCollapsed] = useState(false);
+  const [windows, setWindows] = useState<WindowInfo[]>([]);
+  const [windowsLoading, setWindowsLoading] = useState(false);
+  const [selectedWindow, setSelectedWindow] = useState<WindowInfo | null>(null);
+  const [status, setStatus] = useState<SessionStatus>('idle');
+  const [mode, setMode] = useState<CaptureMode>('mixed');
+  const [segments, setSegments] = useState<ExtractedSegment[]>([]);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [stats, setStats] = useState({ frames: 0, extracted: 0 });
+  const [config, setConfig] = useState<CaptureSidebarConfig>({
+    screenshotInterval: 5000,
+    language: 'zh',
+    autoInsert: false,
+    mode: 'mixed',
+  });
+
+  // 渲染端音频资源引用（getUserMedia stream + AudioContext）
+  const audioCleanupRef = useRef<(() => void) | null>(null);
+
+  // CaptureManager 单例
+  const captureManager = useMemo(() => new CaptureManager(), []);
+
+  // 组件卸载时释放 CaptureManager
+  useEffect(() => {
+    return () => {
+      captureManager.dispose();
+    };
+  }, [captureManager]);
+
+  // ----------------------------------------------------------------
+  // 监听 captureEventBus 提取结果事件，更新 UI 片段列表
+  // ----------------------------------------------------------------
+  useEffect(() => {
+    const off = captureEventBus.on<{
+      sessionId: string | null;
+      result: { text: string; confidence: number; source: 'vision' | 'audio' | 'ui_automation' };
+      segment: { id: string; timestamp: Date };
+      extractedCount: number;
+    }>('extraction:completed', (data) => {
+      const uiSegment: ExtractedSegment = {
+        id: data.segment.id,
+        timestamp: data.segment.timestamp.getTime(),
+        source: data.result.source,
+        text: data.result.text,
+        confidence: data.result.confidence,
+      };
+      setSegments((prev) => [...prev, uiSegment]);
+      setStats((prev) => ({ ...prev, extracted: data.extractedCount }));
+    });
+    return off;
+  }, []);
+
+  // ----------------------------------------------------------------
+  // 监听截图帧（主进程 → 渲染进程）
+  // ----------------------------------------------------------------
+  useEffect(() => {
+    if (!window.electronAPI || status !== 'capturing') return;
+
+    const off = window.electronAPI.on('screen_capture_frame', (...args: unknown[]) => {
+      const frameData = args[0] as ScreenshotData;
+      captureManager.pushFrame(frameData);
+      setStats((prev) => ({ ...prev, frames: prev.frames + 1 }));
+    });
+    return off;
+  }, [status, captureManager]);
+
+  // ----------------------------------------------------------------
+  // 监听音频块（主进程 → 渲染进程）
+  // ----------------------------------------------------------------
+  useEffect(() => {
+    if (!window.electronAPI || status !== 'capturing') return;
+
+    const off = window.electronAPI.on('audio_capture_chunk', (...args: unknown[]) => {
+      const chunk = args[0] as AudioChunkData;
+      captureManager.pushAudioChunk(chunk);
+    });
+    return off;
+  }, [status, captureManager]);
+
+  // ----------------------------------------------------------------
+  // 监听音频采集生命周期指令（主进程 → 渲染进程）
+  // audio_capture_do_start: 启动 getUserMedia + Web Audio 切片
+  // audio_capture_do_stop:  停止渲染端音频管道
+  // ----------------------------------------------------------------
+  useEffect(() => {
+    if (!window.electronAPI) return;
+
+    const offStart = window.electronAPI.on(
+      'audio_capture_do_start',
+      (...args: unknown[]) => {
+        // 如果渲染端已主动启动了音频管道，忽略重复指令
+        if (audioCleanupRef.current) return;
+
+        const payload = args[0] as {
+          sourceId: string;
+          options: { sampleRate: number; channels: number; chunkDurationMs: number };
+        };
+
+        (async () => {
+          try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+              audio: {
+                // Electron 扩展约束：从 desktopCapturer source 捕获系统音频
+                chromeMediaSource: 'desktop',
+                chromeMediaSourceId: payload.sourceId,
+              } as MediaTrackConstraintSet,
+            });
+
+            const audioCtx = new AudioContext({ sampleRate: payload.options.sampleRate });
+            const sourceNode = audioCtx.createMediaStreamSource(stream);
+            const bufferSize = Math.ceil(
+              (payload.options.sampleRate * payload.options.chunkDurationMs) / 1000,
+            );
+            const processor = audioCtx.createScriptProcessor(bufferSize, payload.options.channels, 1);
+
+            processor.onaudioprocess = (e) => {
+              const inputData = e.inputBuffer.getChannelData(0);
+              const pcmData = new Float32Array(inputData).buffer;
+              window.electronAPI?.send('audio_capture_chunk', {
+                audioBuffer: pcmData,
+                sampleRate: payload.options.sampleRate,
+                channels: payload.options.channels,
+                durationMs: payload.options.chunkDurationMs,
+              });
+            };
+
+            sourceNode.connect(processor);
+            processor.connect(audioCtx.destination);
+
+            audioCleanupRef.current = () => {
+              processor.disconnect();
+              sourceNode.disconnect();
+              stream.getTracks().forEach((t) => t.stop());
+              void audioCtx.close();
+            };
+          } catch (err) {
+            console.error('[CaptureSidebar] Renderer audio pipeline start failed:', err);
+          }
+        })();
+      },
+    );
+
+    const offStop = window.electronAPI.on('audio_capture_do_stop', () => {
+      audioCleanupRef.current?.();
+      audioCleanupRef.current = null;
+    });
+
+    return () => {
+      offStart();
+      offStop();
+      audioCleanupRef.current?.();
+      audioCleanupRef.current = null;
+    };
+  }, []);
+
+  // ----------------------------------------------------------------
+  // 获取窗口列表
+  // ----------------------------------------------------------------
+  const refreshWindows = useCallback(async () => {
+    if (!window.electronAPI) return;
+    setWindowsLoading(true);
+    try {
+      const result = await window.electronAPI.invoke('screen_list_windows');
+      setWindows(result as WindowInfo[]);
+    } catch {
+      console.error('[CaptureSidebar] Failed to list windows');
+    } finally {
+      setWindowsLoading(false);
+    }
+  }, []);
+
+  // 挂载时自动加载窗口列表
+  useEffect(() => {
+    refreshWindows();
+  }, [refreshWindows]);
+
+  // ----------------------------------------------------------------
+  // 开始采集
+  // ----------------------------------------------------------------
+  const handleStart = useCallback(async () => {
+    if (!selectedWindow || !window.electronAPI) return;
+
+    try {
+      setStatus('capturing');
+      setStats({ frames: 0, extracted: 0 });
+      setSegments([]);
+      setSelectedIds(new Set());
+
+      const audioEnabled = mode === 'audio' || mode === 'mixed';
+
+      // 通过 IPC 启动主进程截图采集
+      await window.electronAPI.invoke('screen_capture_start', {
+        windowId: selectedWindow.id,
+        interval: config.screenshotInterval,
+      });
+
+      // 启动前端 CaptureManager 会话（流水线 + Workers + CrossFusion）
+      await captureManager.startSession({
+        windowId: selectedWindow.id,
+        windowTitle: selectedWindow.title,
+        screenshotInterval: config.screenshotInterval,
+        audioEnabled,
+        language: config.language,
+        autoInsert: config.autoInsert,
+      });
+
+      // 按需启动音频采集（IPC → 主进程 → do_start → 渲染端 getUserMedia）
+      if (audioEnabled) {
+        try {
+          const audioResult = await window.electronAPI.invoke('audio_capture_start', {
+            chunkDurationMs: 5000,
+            sampleRate: 16000,
+            channels: 1,
+          }) as IPCAudioStartResult;
+          if (!audioResult.success) {
+            console.warn('[CaptureSidebar] Audio capture start failed:', audioResult.error);
+          }
+        } catch (audioErr) {
+          console.warn('[CaptureSidebar] Audio capture unavailable:', audioErr);
+          // 音频失败不阻断视觉采集，继续运行
+        }
+      }
+    } catch (err) {
+      setStatus('error');
+      console.error('[CaptureSidebar] Start capture failed:', err);
+    }
+  }, [selectedWindow, config, mode, captureManager]);
+
+  // ----------------------------------------------------------------
+  // 暂停采集（停止推送帧到流水线，主进程继续截图）
+  // ----------------------------------------------------------------
+  const handlePause = useCallback(() => {
+    if (status === 'capturing') {
+      setStatus('paused');
+      captureManager.pauseSession();
+    } else if (status === 'paused') {
+      setStatus('capturing');
+      captureManager.resumeSession();
+    }
+  }, [status, captureManager]);
+
+  // ----------------------------------------------------------------
+  // 停止采集
+  // ----------------------------------------------------------------
+  const handleStop = useCallback(async () => {
+    if (!window.electronAPI) return;
+
+    try {
+      // 停止主进程截图和音频
+      await window.electronAPI.invoke('screen_capture_stop');
+      await window.electronAPI.invoke('audio_capture_stop');
+
+      // 清理渲染端音频管道（如有）
+      audioCleanupRef.current?.();
+      audioCleanupRef.current = null;
+
+      // 停止 CaptureManager 会话
+      await captureManager.stopSession();
+
+      setStatus('idle');
+    } catch (err) {
+      setStatus('error');
+      console.error('[CaptureSidebar] Stop capture failed:', err);
+    }
+  }, [captureManager]);
+
+  // ----------------------------------------------------------------
+  // 模式切换
+  // ----------------------------------------------------------------
+  const handleModeChange = useCallback((newMode: CaptureMode) => {
+    setMode(newMode);
+    setConfig((prev) => ({ ...prev, mode: newMode }));
+  }, []);
+
+  // ----------------------------------------------------------------
+  // 片段选择
+  // ----------------------------------------------------------------
+  const handleToggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
+
+  // ----------------------------------------------------------------
+  // 插入片段到笔记
+  // ----------------------------------------------------------------
+  const handleInsertSelected = useCallback(() => {
+    const texts = segments
+      .filter((s) => selectedIds.has(s.id))
+      .map((s) => s.text)
+      .join('\n\n');
+    if (texts && onInsertText) {
+      onInsertText(texts);
+    }
+    setSelectedIds(new Set());
+  }, [segments, selectedIds, onInsertText]);
+
+  const handleInsertAll = useCallback(() => {
+    const texts = segments.map((s) => s.text).join('\n\n');
+    if (texts && onInsertText) {
+      onInsertText(texts);
+    }
+    setSelectedIds(new Set());
+    setSegments([]);
+  }, [segments, onInsertText]);
+
+  // ----------------------------------------------------------------
+  // 配置变更
+  // ----------------------------------------------------------------
+  const handleConfigChange = useCallback((patch: Partial<CaptureSidebarConfig>) => {
+    setConfig((prev) => ({ ...prev, ...patch }));
+  }, []);
+
+  const canStart = !!selectedWindow;
+
+  return (
+    <aside
+      className={cn(
+        'relative flex-shrink-0 h-full bg-bg-elevated border-l border-border/50',
+        'transition-all duration-300 ease-kb-default',
+        collapsed ? 'w-10' : 'w-80',
+      )}
+    >
+      {/* 折叠/展开按钮 */}
+      <button
+        onClick={() => setCollapsed((v) => !v)}
+        className={cn(
+          'absolute -left-3 top-3 z-10',
+          'w-6 h-6 rounded-kb-full bg-bg-elevated border border-border/50',
+          'flex items-center justify-center',
+          'text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary',
+          'transition-all duration-kb-fast shadow-kb-sm',
+        )}
+        title={collapsed ? '展开课堂助手' : '收起课堂助手'}
+      >
+        {collapsed ? (
+          <PanelRightOpen className="w-3.5 h-3.5" strokeWidth={1.5} />
+        ) : (
+          <PanelRightClose className="w-3.5 h-3.5" strokeWidth={1.5} />
+        )}
+      </button>
+
+      {collapsed ? (
+        // 折叠态：仅显示图标
+        <div className="flex flex-col items-center gap-3 pt-12">
+          <Monitor className="w-5 h-5 text-text-tertiary" strokeWidth={1.5} />
+          {status === 'capturing' && (
+            <span className="w-2 h-2 rounded-kb-full bg-semantic-error animate-pulse" />
+          )}
+        </div>
+      ) : (
+        // 展开态：完整 UI
+        <div className="flex flex-col h-full">
+          {/* 标题栏 */}
+          <div className="flex items-center gap-2 px-3 py-3 border-b border-border/30">
+            <Monitor className="w-icon-md h-icon-md text-brand-500" strokeWidth={1.5} />
+            <span className="text-b2 font-semibold text-text-primary flex-1">课堂助手</span>
+            {status === 'capturing' && (
+              <span className="w-2 h-2 rounded-kb-full bg-semantic-error animate-pulse" />
+            )}
+          </div>
+
+          {/* 窗口选择器 */}
+          <WindowSelector
+            windows={windows}
+            selected={selectedWindow}
+            onSelect={setSelectedWindow}
+            onRefresh={refreshWindows}
+            loading={windowsLoading}
+          />
+
+          {/* 采集控制栏 */}
+          <ControlBar
+            status={status}
+            mode={mode}
+            stats={stats}
+            onStart={handleStart}
+            onPause={handlePause}
+            onStop={handleStop}
+            onModeChange={handleModeChange}
+            disabled={!canStart}
+          />
+
+          {/* 实时提取结果 */}
+          <SegmentList
+            segments={segments}
+            selectedIds={selectedIds}
+            onToggleSelect={handleToggleSelect}
+            onInsertSelected={handleInsertSelected}
+            onInsertAll={handleInsertAll}
+          />
+
+          {/* 设置区 */}
+          <SettingsPanel config={config} onChange={handleConfigChange} />
+        </div>
+      )}
+    </aside>
+  );
+}
+
+export default CaptureSidebar;

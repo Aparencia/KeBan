@@ -4,7 +4,7 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://your-project.s
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'your-anon-key';
 
 /** 检测 Supabase 凭证是否为占位符（未配置） */
-const isPlaceholder = !supabaseUrl ||
+export const isPlaceholder = !supabaseUrl ||
   supabaseUrl.includes('your-project') ||
   !supabaseAnonKey ||
   supabaseAnonKey === 'your-anon-key';

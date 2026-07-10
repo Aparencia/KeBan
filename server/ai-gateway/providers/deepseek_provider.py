@@ -137,3 +137,14 @@ class DeepSeekProvider(AIProvider):
                 raise ModelResponseError(model, "内容未通过安全审核") from e
 
             raise ModelResponseError(model, str(e)) from e
+
+    async def transcribe(
+        self,
+        audio_base64: str,
+        language: str = "zh",
+        sample_rate: int = 16000,
+        channels: int = 1,
+        model: str = "",
+    ) -> dict[str, Any]:
+        """DeepSeek 不支持 ASR，始终抛出 NotImplementedError"""
+        raise NotImplementedError("DeepSeekProvider 不支持语音转文字，请使用 Qwen 或 GLM Provider")

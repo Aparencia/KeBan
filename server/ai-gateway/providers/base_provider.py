@@ -106,6 +106,72 @@ class AIProvider(ABC):
         """
         ...
 
+    async def generate_vision(
+        self,
+        image_base64: str,
+        prompt: str,
+        system_prompt: str = "",
+        model: str = "",
+        temperature: float = 0.3,
+        max_tokens: int = 2048,
+        response_format: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """
+        调用多模态视觉模型处理图片
+
+        默认实现抛出 NotImplementedError，由支持视觉的 Provider 子类覆盖。
+
+        Args:
+            image_base64: 图片 base64 编码（不含 data: 前缀）
+            prompt: 文本提示词
+            system_prompt: 系统提示词
+            model: 模型名称
+            temperature: 温度参数
+            max_tokens: 最大生成 token 数
+            response_format: 响应格式约束
+
+        Returns:
+            dict: 与 generate 相同的统一返回格式
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} 不支持多模态视觉调用"
+        )
+
+    @abstractmethod
+    async def transcribe(
+        self,
+        audio_base64: str,
+        language: str = "zh",
+        sample_rate: int = 16000,
+        channels: int = 1,
+        model: str = "",
+    ) -> dict[str, Any]:
+        """
+        语音转文字
+
+        默认实现抛出 NotImplementedError，由支持 ASR 的 Provider 子类覆盖。
+
+        Args:
+            audio_base64: PCM/WAV 音频 base64 编码
+            language: 语言代码（zh/en/auto）
+            sample_rate: 采样率
+            channels: 声道数
+            model: 模型名称
+
+        Returns:
+            dict: {
+                "text": str,             # 转写文本
+                "segments": list[dict],   # [{start, end, text}]
+                "language": str,          # 检测到的语言
+                "confidence": float,      # 置信度 0-1
+                "model": str,             # 实际使用的模型名
+                "latency_ms": int,        # 请求耗时（毫秒）
+            }
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} 不支持语音转文字"
+        )
+
     async def health_check(self) -> dict:
         """
         检查 Provider 实际可用性

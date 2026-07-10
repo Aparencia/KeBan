@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react';
 import { createHashRouter } from 'react-router-dom';
 import type { RouteObject } from 'react-router-dom';
 import AppLayout from '@/components/layout/AppLayout';
+import { AuthGuard } from '@/lib/auth/AuthGuard';
 
 // Lazy-loaded pages
 const Dashboard = lazy(() => import('@/features/dashboard/pages/DashboardPage'));
@@ -38,7 +39,11 @@ function SuspenseWrapper({ children }: { children: React.ReactNode }) {
 
 const routes: RouteObject[] = [
   {
-    element: <AppLayout />,
+    element: (
+      <AuthGuard>
+        <AppLayout />
+      </AuthGuard>
+    ),
     children: [
       { path: '/', element: <SuspenseWrapper><Dashboard /></SuspenseWrapper> },
       { path: '/pomodoro', element: <SuspenseWrapper><PomodoroPage /></SuspenseWrapper> },

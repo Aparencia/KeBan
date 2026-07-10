@@ -56,9 +56,9 @@ export const Modal: React.FC<ModalProps> = ({
         'transition-all duration-kb-normal',
       )}
     >
-      {/* Backdrop with blur */}
+      {/* Backdrop with blur + fade-in */}
       <div
-        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/40 backdrop-blur-sm animate-fade-in-up"
         onClick={onClose}
         aria-hidden
       />
@@ -109,21 +109,6 @@ export const Modal: React.FC<ModalProps> = ({
         )}
       </div>
 
-      <style>{`
-        @keyframes modal-enter {
-          from {
-            opacity: 0;
-            transform: scale(0.95) translateY(8px);
-          }
-          to {
-            opacity: 1;
-            transform: scale(1) translateY(0);
-          }
-        }
-        .animate-modal-enter {
-          animation: modal-enter var(--kb-duration-normal) var(--kb-ease-out) forwards;
-        }
-      `}</style>
     </div>
   );
 };

@@ -101,6 +101,13 @@ const TEMPLATE_CONTENT: Record<Note['template'], string> = {
   }),
   free: '',
   blank: '',
+  video: JSON.stringify({
+    type: 'doc',
+    content: [
+      { type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: '视频笔记' }] },
+      { type: 'paragraph', content: [{ type: 'text', text: '在此记录视频学习内容，可使用时间戳标记关联视频进度。' }] },
+    ],
+  }),
 };
 
 const TEMPLATE_TITLES: Record<Note['template'], string> = {
@@ -110,6 +117,7 @@ const TEMPLATE_TITLES: Record<Note['template'], string> = {
   mindmap: '思维导图笔记',
   free: '自由笔记',
   blank: '空白笔记',
+  video: '视频笔记',
 };
 
 export const useNoteStore = create<NoteState>((set, get) => {

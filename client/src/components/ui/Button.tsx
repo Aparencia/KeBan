@@ -17,25 +17,25 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
 const variantStyles: Record<ButtonVariant, string> = {
   primary: [
     'bg-brand-600 text-white',
-    'hover:bg-brand-700 hover:shadow-kb-md',
-    'active:bg-brand-800 active:scale-95',
+    'hover:bg-brand-700 hover:shadow-md hover:shadow-brand-600/20',
+    'active:bg-brand-800 active:scale-95 active:ease-kb-bounce',
     'shadow-kb-sm',
   ].join(' '),
   secondary: [
     'bg-bg-tertiary text-text-primary',
-    'hover:bg-border hover:shadow-kb-sm',
-    'active:bg-border-strong active:scale-95',
+    'hover:bg-border hover:shadow-md',
+    'active:bg-border-strong active:scale-95 active:ease-kb-bounce',
     'border border-white/10',
   ].join(' '),
   ghost: [
     'bg-transparent text-text-secondary',
     'hover:bg-bg-tertiary hover:text-text-primary',
-    'active:bg-bg-secondary active:scale-95',
+    'active:bg-bg-secondary active:scale-95 active:ease-kb-bounce',
   ].join(' '),
   danger: [
     'bg-[#F43F5E] text-white',
-    'hover:bg-rose-700 hover:shadow-kb-md',
-    'active:bg-rose-800 active:scale-95',
+    'hover:bg-rose-700 hover:shadow-md hover:shadow-rose-600/20',
+    'active:bg-rose-800 active:scale-95 active:ease-kb-bounce',
     'shadow-kb-sm',
   ].join(' '),
 };
@@ -70,7 +70,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         className={cn(
           // Base
           'inline-flex items-center justify-center font-medium',
-          'transition-all duration-kb-fast ease-kb-default',
+          'transition-all duration-kb-fast ease-kb-smooth',
           'select-none whitespace-nowrap',
           // Variant
           variantStyles[variant],

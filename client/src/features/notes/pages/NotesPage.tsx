@@ -1,15 +1,18 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { Button, Card, Input, Tag, EmptyState, Modal } from '@/components/ui';
 import { useToast } from '@/components/ui';
+import { ContextMenu } from '@/components/ui/ContextMenu';
+import type { ContextMenuGroup } from '@/components/ui/ContextMenu';
 import {
-  Search, Plus, FolderPlus, ChevronRight, FileText, PanelLeftClose, PanelLeft, Pin, PinOff,
-  MoreVertical, Trash2, Copy, Download,
+  Search, Plus, FolderPlus, ChevronRight, FileText, PanelLeftClose, PanelLeft, Pin,
+  MoreVertical, Trash2, Copy, Download, BookOpen, Sparkles,
 } from 'lucide-react';
 import { TemplateSelector } from '../components/TemplateSelector';
 import type { NoteTemplate } from '../components/TemplateSelector';
 import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
 import { useNoteStore } from '../store/useNoteStore';
+import { useContextMenu } from '@/lib/contextMenu';
 import type { Note } from '@/types/models';
 
 const templateLabels: Record<NoteTemplate | 'qa', string> = {
@@ -58,9 +61,14 @@ export default function NotesPage() {
 
   const { toast } = useToast();
 
-  // 菜单与操作状态
-  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
-  const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null);
+  // 右键菜单 hook
+  const {
+    isOpen: ctxMenuOpen,
+    position: ctxMenuPos,
+    context: ctxMenuNote,
+    handleContextMenu: handleNoteContextMenu,
+    close: closeCtxMenu,
+  } = useContextMenu<Note>();
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
 
   // 初始化加载
@@ -103,7 +111,6 @@ export default function NotesPage() {
   };
 
   // === 卡片操作函数 ===
-  const currentMenuNote = filteredNotes.find((n) => n.id === menuOpenId) ?? null;
 
   const handleTogglePin = useCallback((noteId: string) => {
     togglePin(noteId);
@@ -112,8 +119,6 @@ export default function NotesPage() {
 
   const handleDeleteNote = useCallback((id: string) => {
     setDeleteTargetId(id);
-    setMenuOpenId(null);
-    setMenuPos(null);
   }, []);
 
   const handleConfirmDelete = useCallback(async () => {
@@ -133,8 +138,6 @@ export default function NotesPage() {
       template: note.template,
     });
     toast({ type: 'success', message: '笔记已复制' });
-    setMenuOpenId(null);
-    setMenuPos(null);
   }, [createNote, toast]);
 
   const handleExportNote = useCallback((note: Note) => {
@@ -164,33 +167,63 @@ export default function NotesPage() {
     a.click();
     URL.revokeObjectURL(url);
     toast({ type: 'success', message: '笔记已导出' });
-    setMenuOpenId(null);
-    setMenuPos(null);
   }, [toast]);
 
-  // 外部关闭菜单
-  useEffect(() => {
-    if (!menuOpenId) return;
-    const handleMouseDown = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      if (!target.closest('[data-note-menu]')) {
-        setMenuOpenId(null);
-        setMenuPos(null);
-      }
-    };
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setMenuOpenId(null);
-        setMenuPos(null);
-      }
-    };
-    document.addEventListener('mousedown', handleMouseDown);
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('mousedown', handleMouseDown);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [menuOpenId]);
+  // 右键菜单分组定义
+  const ctxMenuGroups = useMemo<ContextMenuGroup[]>(() => [
+    {
+      label: '笔记操作',
+      items: [
+        { key: 'open', label: '打开编辑', icon: <BookOpen className="w-4 h-4" strokeWidth={1.5} /> },
+        { key: 'pin', label: '置顶/取消置顶', icon: <Pin className="w-4 h-4" strokeWidth={1.5} /> },
+        { key: 'duplicate', label: '复制', icon: <Copy className="w-4 h-4" strokeWidth={1.5} /> },
+        { key: 'export', label: '导出', icon: <Download className="w-4 h-4" strokeWidth={1.5} /> },
+      ],
+    },
+    {
+      label: 'AI 操作',
+      items: [
+        { key: 'ai-summary', label: '生成摘要', icon: <Sparkles className="w-4 h-4" strokeWidth={1.5} /> },
+        { key: 'ai-flashcard', label: '生成闪卡', icon: <BookOpen className="w-4 h-4" strokeWidth={1.5} /> },
+      ],
+    },
+    {
+      items: [
+        { key: 'delete', label: '删除', icon: <Trash2 className="w-4 h-4" strokeWidth={1.5} />, danger: true },
+      ],
+    },
+  ], []);
+
+  // 右键菜单选中回调
+  const handleCtxMenuSelect = useCallback((itemKey: string, noteCtx: Note) => {
+    switch (itemKey) {
+      case 'open':
+        handleSelectNote(noteCtx.id!);
+        break;
+      case 'pin':
+        handleTogglePin(noteCtx.id!);
+        break;
+      case 'duplicate':
+        handleDuplicateNote(noteCtx);
+        break;
+      case 'export':
+        handleExportNote(noteCtx);
+        break;
+      case 'delete':
+        handleDeleteNote(noteCtx.id!);
+        break;
+      case 'ai-summary':
+        // TODO: 集成 AI 摘要（需在编辑页内触发）
+        console.warn('[ContextMenu] AI 摘要功能待集成', noteCtx.id);
+        toast({ type: 'info', message: 'AI 摘要功能即将上线' });
+        break;
+      case 'ai-flashcard':
+        // TODO: 集成 AI 闪卡生成
+        console.warn('[ContextMenu] AI 闪卡功能待集成', noteCtx.id);
+        toast({ type: 'info', message: 'AI 闪卡生成功能即将上线' });
+        break;
+    }
+  }, [handleSelectNote, handleTogglePin, handleDuplicateNote, handleExportNote, handleDeleteNote, toast]);
 
   return (
     <div className="flex h-[calc(100vh-4rem)] overflow-hidden">
@@ -336,6 +369,7 @@ export default function NotesPage() {
                 hoverable
                 padding="md"
                 onClick={() => handleSelectNote(note.id!)}
+                onContextMenu={(e) => handleNoteContextMenu(e, note)}
                 className={cn(
                   'group relative',
                   selectedNoteId === note.id && 'border-brand-400 bg-brand-50/30',
@@ -358,14 +392,16 @@ export default function NotesPage() {
                       <span className="text-c1 text-text-tertiary ml-auto">{formatDate(note.updatedAt)}</span>
                     </div>
                   </div>
-                  {/* MoreVertical 按钮 */}
+                  {/* MoreVertical 按钮（触发同一右键菜单） */}
                   <button
-                    data-note-menu
                     onClick={(e) => {
                       e.stopPropagation();
+                      // 模拟右键菜单，位置在按钮右下方
                       const rect = e.currentTarget.getBoundingClientRect();
-                      setMenuPos({ x: rect.right, y: rect.bottom });
-                      setMenuOpenId(menuOpenId === note.id ? null : note.id);
+                      handleNoteContextMenu(
+                        { ...e, clientX: rect.right, clientY: rect.bottom, preventDefault: () => {}, stopPropagation: () => {} } as unknown as React.MouseEvent,
+                        note,
+                      );
                     }}
                     className="p-1 rounded hover:bg-bg-tertiary opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
                   >
@@ -377,47 +413,15 @@ export default function NotesPage() {
           )}
         </div>
 
-        {/* 下拉菜单 */}
-        {menuOpenId && menuPos && currentMenuNote && (
-          <div
-            data-note-menu
-            className="fixed z-50 bg-bg-elevated border border-border/50 rounded-kb-md shadow-lg py-1 min-w-[160px]"
-            style={{ left: menuPos.x - 160, top: menuPos.y }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* 置顶/取消置顶 */}
-            <button
-              onClick={() => { handleTogglePin(menuOpenId); setMenuOpenId(null); setMenuPos(null); }}
-              className="w-full flex items-center gap-2 px-3 py-2 text-b2 text-text-secondary hover:bg-bg-tertiary hover:text-text-primary transition-colors"
-            >
-              {currentMenuNote.pinned
-                ? <><PinOff className="w-4 h-4" strokeWidth={1.5} /> 取消置顶</>
-                : <><Pin className="w-4 h-4" strokeWidth={1.5} /> 置顶</>}
-            </button>
-            {/* 复制 */}
-            <button
-              onClick={() => handleDuplicateNote(currentMenuNote)}
-              className="w-full flex items-center gap-2 px-3 py-2 text-b2 text-text-secondary hover:bg-bg-tertiary hover:text-text-primary transition-colors"
-            >
-              <Copy className="w-4 h-4" strokeWidth={1.5} /> 复制
-            </button>
-            {/* 导出 */}
-            <button
-              onClick={() => handleExportNote(currentMenuNote)}
-              className="w-full flex items-center gap-2 px-3 py-2 text-b2 text-text-secondary hover:bg-bg-tertiary hover:text-text-primary transition-colors"
-            >
-              <Download className="w-4 h-4" strokeWidth={1.5} /> 导出
-            </button>
-            {/* 分隔线 */}
-            <div className="border-t border-border/40 my-1" />
-            {/* 删除 */}
-            <button
-              onClick={() => handleDeleteNote(menuOpenId)}
-              className="w-full flex items-center gap-2 px-3 py-2 text-b2 text-semantic-error hover:bg-semantic-error/10 transition-colors"
-            >
-              <Trash2 className="w-4 h-4" strokeWidth={1.5} /> 删除
-            </button>
-          </div>
+        {/* 右键菜单 */}
+        {ctxMenuOpen && ctxMenuNote && (
+          <ContextMenu<Note>
+            groups={ctxMenuGroups}
+            position={ctxMenuPos}
+            context={ctxMenuNote}
+            onSelect={handleCtxMenuSelect}
+            onClose={closeCtxMenu}
+          />
         )}
       </main>
 

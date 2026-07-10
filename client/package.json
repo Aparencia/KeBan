@@ -1,7 +1,7 @@
 {
   "name": "client",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.4.0-alpha.1",
   "description": "课伴 - 跨端学习平台",
   "author": "KeBan Team",
   "type": "module",
@@ -11,7 +11,7 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "electron:dev": "cross-env ELECTRON_BUILD=1 vite build && tsc -p electron/tsconfig.json && electron .",
+    "electron:dev": "concurrently -k -n vite,electron \"cross-env ELECTRON_BUILD=1 vite\" \"wait-on http://localhost:5173 && tsc -p electron/tsconfig.json && cross-env ELECTRON_BUILD=1 electron .\"",
     "electron:build": "cross-env ELECTRON_BUILD=1 vite build && tsc -p electron/tsconfig.json && electron-builder",
     "test": "vitest run",
     "test:watch": "vitest"
@@ -38,6 +38,8 @@
     "clsx": "^2.1.1",
     "dexie": "^4.4.4",
     "lucide-react": "^1.23.0",
+    "pixelmatch": "^7.2.0",
+    "pngjs": "^7.0.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^7.18.1",
@@ -50,11 +52,13 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@types/node": "^24.13.2",
+    "@types/pngjs": "^6.0.5",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
     "@types/uuid": "^10.0.0",
     "@vitejs/plugin-react": "^6.0.3",
     "autoprefixer": "^10.5.2",
+    "concurrently": "^10.0.3",
     "cross-env": "^10.1.0",
     "electron": "^35.7.5",
     "electron-builder": "^25.1.8",
@@ -66,6 +70,7 @@
     "vite": "^8.1.1",
     "vite-plugin-pwa": "^1.3.0",
     "vitest": "^4.1.10",
+    "wait-on": "^9.0.10",
     "workbox-window": "^7.4.1"
   }
 }

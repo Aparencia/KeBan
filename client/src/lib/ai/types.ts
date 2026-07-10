@@ -6,6 +6,7 @@ export interface AIPlugin {
   generateFlashcards(noteContent: string, options?: FlashcardOptions): Promise<FlashcardResult>;
   evaluateExplanation(concept: string, explanation: string, options?: EvaluateOptions): Promise<EvaluateResult>;
   recommendDuration(historyData: DurationHistoryData, options?: DurationOptions): Promise<DurationResult>;
+  extractScreenContent?(imageBase64: string, language?: string): Promise<VisionExtractResult>;
 }
 
 // === Summarize ===
@@ -100,11 +101,30 @@ export interface DurationResult {
   latencyMs?: number;
 }
 
+// === Vision Extract ===
+export interface VisionExtractResult {
+  text: string;
+  formulas: string[];
+  diagrams: string[];
+  keyPoints: string[];
+  confidence: number;
+}
+
 // === Error types ===
+export type AIErrorCode =
+  | 'timeout'
+  | 'rate_limit'
+  | 'service_unavailable'
+  | 'content_filter'
+  | 'invalid_response'
+  | 'content_too_short'
+  | 'no_api_key'
+  | 'offline';
+
 export class AIError extends Error {
   constructor(
     message: string,
-    public code: 'timeout' | 'rate_limit' | 'service_unavailable' | 'content_filter' | 'invalid_response',
+    public code: AIErrorCode,
     public retryable: boolean = false
   ) {
     super(message);

@@ -60,10 +60,14 @@
   --kb-duration-fast: 150ms;
   --kb-duration-normal: 250ms;
   --kb-duration-slow: 400ms;
+  --kb-duration-stagger: 75ms;  /* stagger 项间延迟 */
   --kb-ease-default: cubic-bezier(0.4, 0, 0.2, 1);
   --kb-ease-in: cubic-bezier(0.4, 0, 1, 1);
   --kb-ease-out: cubic-bezier(0, 0, 0.2, 1);
   --kb-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --kb-ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);  /* 物理回弹 */
+  --kb-ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);         /* 平滑过渡 */
+  --kb-ease-spring: cubic-bezier(0.175, 0.885, 0.32, 1.275); /* 弹性 */
 
   /* 图标系统 (Lucide Icons, 线性风格) */
   --kb-icon-default: currentColor;
@@ -82,6 +86,58 @@
   /* 阴影令牌 */
   --shadow-hover: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
   --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+}
+
+/* ========== 动画 @keyframes ========== */
+
+/* 按钮按压回弹 */
+@keyframes scale-bounce {
+  0% { transform: scale(1); }
+  40% { transform: scale(0.92); }
+  70% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
+/* 错落入场 */
+@keyframes stagger-in {
+  0% { opacity: 0; transform: translateY(8px) scale(0.95); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* 卡片退出（缩小飞出） */
+@keyframes card-exit {
+  0% { opacity: 1; transform: scale(1) translateY(0); }
+  100% { opacity: 0; transform: scale(0.85) translateY(-24px); }
+}
+
+/* 骨架屏脉动 */
+@keyframes pulse-skeleton {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.8; }
+}
+
+/* Shimmer 效果（AI 加载） */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* 淡入上移 */
+@keyframes fade-in-up {
+  0% { opacity: 0; transform: translateY(12px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+/* 卡片退出（缩小+淡出） */
+@keyframes card-exit {
+  0% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(0.92); }
+}
+
+/* Modal 入场 */
+@keyframes modal-enter {
+  0% { opacity: 0; transform: scale(0.95) translateY(8px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
 }
 
 /* ---- 亮色主题 ---- */

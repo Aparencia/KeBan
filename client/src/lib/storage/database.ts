@@ -4,7 +4,7 @@ import type {
   FlashcardDeck, Flashcard, FlashcardReview,
   FeynmanNote, FeynmanSummary, FeynmanWeakPoint,
   OperationLog, AppSettings, SyncConflict, OfflineQueueItem,
-  StudyCheckIn, Achievement, PomodoroGoal
+  StudyCheckIn, Achievement, PomodoroGoal, WindowCapture
 } from '@/types/models';
 
 export class KeBanDatabase extends Dexie {
@@ -25,6 +25,7 @@ export class KeBanDatabase extends Dexie {
   studyCheckIns!: Table<StudyCheckIn, string>;
   achievements!: Table<Achievement, string>;
   pomodoroGoals!: Table<PomodoroGoal, string>;
+  windowCaptures!: Table<WindowCapture, string>;
 
   constructor() {
     super('keban');
@@ -142,7 +143,13 @@ export class KeBanDatabase extends Dexie {
       achievements: 'id, &key, unlockedAt',
       pomodoroGoals: 'id, text, useCount, lastUsedAt',
     });
+
+    // v0.4.0-alpha.1: 混合方案 — 新增窗口捕获表
+    this.version(5).stores({
+      windowCaptures: 'id, noteId, status, startedAt',
+    });
   }
 }
 
 export const db = new KeBanDatabase();
+export { captureStore } from './captureStore';

@@ -92,6 +92,18 @@ export default {
         'kb-in': 'var(--kb-ease-in)',
         'kb-out': 'var(--kb-ease-out)',
         'kb-in-out': 'var(--kb-ease-in-out)',
+        'kb-bounce': 'var(--kb-ease-bounce)',
+        'kb-smooth': 'var(--kb-ease-smooth)',
+        'kb-spring': 'var(--kb-ease-spring)',
+      },
+      animation: {
+        'scale-bounce': 'scale-bounce var(--kb-duration-normal) var(--kb-ease-bounce)',
+        'stagger-in': 'stagger-in var(--kb-duration-normal) var(--kb-ease-smooth)',
+        'pulse-skeleton': 'pulse-skeleton 1.5s ease-in-out infinite',
+        'shimmer': 'shimmer 2s linear infinite',
+        'fade-in-up': 'fade-in-up var(--kb-duration-normal) var(--kb-ease-smooth)',
+        'modal-enter': 'modal-enter var(--kb-duration-slow) var(--kb-ease-spring)',
+        'card-exit': 'card-exit 350ms var(--kb-ease-in) forwards',
       },
       width: {
         'icon-xs': 'var(--kb-icon-size-xs)',

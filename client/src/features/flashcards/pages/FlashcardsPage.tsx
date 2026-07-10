@@ -1,11 +1,13 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { Card, Button, Tag, Modal, Input, EmptyState, Skeleton, useToast } from '@/components/ui';
-import { Plus, Layers, Clock, Trash2, Layers3, Upload } from 'lucide-react';
+import { ContextMenu, type ContextMenuGroup } from '@/components/ui/ContextMenu';
+import { Plus, Layers, Clock, Trash2, Layers3, Upload, BookOpen, Pencil, Share2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useFlashcardStore } from '../store/useFlashcardStore';
 import { flashcardStore } from '@/lib/storage';
-import { importDeck } from '@/lib/storage/exportImport';
-import type { Flashcard } from '@/types/models';
+import { importDeck, exportDeck, downloadDeckFile } from '@/lib/storage/exportImport';
+import { useContextMenu } from '@/lib/contextMenu/useContextMenu';
+import type { Flashcard, FlashcardDeck } from '@/types/models';
 
 interface DeckLocalStats {
   total: number;
@@ -24,12 +26,62 @@ export default function FlashcardsPage() {
   const [newName, setNewName] = useState('');
   const [newDesc, setNewDesc] = useState('');
   const [creating, setCreating] = useState(false);
-  // Context menu / long-press delete
+  // Delete confirm target
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState(false);
   const { toast } = useToast();
+
+  // Context menu
+  const {
+    isOpen: ctxOpen,
+    position: ctxPos,
+    context: ctxDeck,
+    handleContextMenu: ctxHandleMenu,
+    close: ctxClose,
+  } = useContextMenu<FlashcardDeck>();
+
+  const deckMenuGroups: ContextMenuGroup[] = [
+    {
+      label: '牌组操作',
+      items: [
+        { key: 'study', label: '开始学习', icon: <BookOpen className="w-4 h-4" strokeWidth={1.5} /> },
+        { key: 'edit', label: '编辑牌组', icon: <Pencil className="w-4 h-4" strokeWidth={1.5} /> },
+        { key: 'share', label: '导出分享', icon: <Share2 className="w-4 h-4" strokeWidth={1.5} /> },
+      ],
+    },
+    {
+      label: '管理',
+      items: [
+        { key: 'delete', label: '删除牌组', icon: <Trash2 className="w-4 h-4" strokeWidth={1.5} />, danger: true },
+      ],
+    },
+  ];
+
+  const handleDeckSelect = useCallback(async (itemKey: string, deck: FlashcardDeck) => {
+    switch (itemKey) {
+      case 'study':
+        navigate(`/flashcards/${deck.id}`);
+        break;
+      case 'edit':
+        navigate(`/flashcards/${deck.id}`);
+        break;
+      case 'share': {
+        try {
+          const data = await exportDeck(deck.id);
+          downloadDeckFile(data);
+          toast({ type: 'success', message: `牌组「${deck.name}」已导出` });
+        } catch {
+          toast({ type: 'error', message: '导出失败，请稍后重试' });
+        }
+        break;
+      }
+      case 'delete':
+        setDeleteTarget(deck.id);
+        break;
+    }
+  }, [navigate, toast]);
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -109,14 +161,6 @@ export default function FlashcardsPage() {
     }
   };
 
-  // Right-click handler
-  const handleContextMenu = (e: React.MouseEvent, id: string) => {
-    e.preventDefault();
-    setDeleteTarget(id);
-  };
-
-  const targetDeck = decks.find((d) => d.id === deleteTarget);
-
   return (
     <div className="flex flex-col h-full">
       {/* 顶部 */}
@@ -193,7 +237,7 @@ export default function FlashcardsPage() {
                   hoverable
                   padding="md"
                   onClick={() => navigate(`/flashcards/${deck.id}`)}
-                  onContextMenu={(e) => handleContextMenu(e, deck.id!)}
+                  onContextMenu={(e) => ctxHandleMenu(e, deck)}
                   onPointerDown={() => handlePointerDown(deck.id!)}
                   onPointerUp={handlePointerUp}
                   onPointerLeave={handlePointerUp}
@@ -295,12 +339,23 @@ export default function FlashcardsPage() {
         </div>
       </Modal>
 
+      {/* 右键菜单 */}
+      {ctxOpen && ctxDeck && (
+        <ContextMenu
+          groups={deckMenuGroups}
+          position={ctxPos}
+          context={ctxDeck}
+          onSelect={handleDeckSelect}
+          onClose={ctxClose}
+        />
+      )}
+
       {/* 删除确认 Modal */}
       <Modal
         open={deleteTarget !== null}
         onClose={() => setDeleteTarget(null)}
         title="删除牌组"
-        description={`确定要删除「${targetDeck?.name ?? ''}」吗？该操作将同时删除牌组中的所有卡片，且无法撤销。`}
+        description={`确定要删除「${decks.find((d) => d.id === deleteTarget)?.name ?? ''}」吗？该操作将同时删除牌组中的所有卡片，且无法撤销。`}
         footer={
           <>
             <Button variant="secondary" onClick={() => setDeleteTarget(null)}>

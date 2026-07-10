@@ -38,12 +38,12 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(
       <div
         ref={ref}
         className={cn(
-          'transition-all duration-kb-normal ease-kb-default',
+          'transition-all duration-kb-normal ease-kb-smooth',
           variantStyles[variant],
           paddingStyles[padding],
           hoverable && [
             'cursor-pointer',
-            'hover:-translate-y-0.5 hover:shadow-kb-lg',
+            'hover:-translate-y-0.5 hover:shadow-lg',
             'hover:border-brand-200/50',
           ],
           className,

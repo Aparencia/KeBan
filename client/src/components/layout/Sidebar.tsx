@@ -1,7 +1,10 @@
-import { NavLink } from 'react-router-dom';
-import { Timer, FileText, Layers, Lightbulb, Settings, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useState } from 'react';
+import { NavLink, useNavigate, useLocation } from 'react-router-dom';
+import { Home, Timer, FileText, Layers, Lightbulb, Settings, ChevronLeft, ChevronRight, MessageSquare, Clapperboard } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSidebarStore } from '@/stores/useSidebarStore';
+import { useCaptureStore } from '@/stores/useCaptureStore';
+import FeedbackPanel from './FeedbackPanel';
 
 const navItems = [
   { to: '/pomodoro', label: '番茄钟', icon: Timer },
@@ -13,8 +16,23 @@ const navItems = [
 export default function Sidebar() {
   const collapsed = useSidebarStore((s) => s.collapsed);
   const toggle = useSidebarStore((s) => s.toggle);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const navigate = useNavigate();
+  const location = useLocation();
+  const captureOpen = useCaptureStore((s) => s.open);
+  const setCaptureOpen = useCaptureStore((s) => s.setOpen);
+
+  const isOnNotes = location.pathname.startsWith('/notes');
+
+  const handleCaptureClick = () => {
+    if (!isOnNotes) {
+      navigate('/notes');
+    }
+    setCaptureOpen(true);
+  };
 
   return (
+    <>
     <aside
       className={cn(
         'hidden md:flex flex-col',
@@ -30,16 +48,49 @@ export default function Sidebar() {
         'flex items-center gap-kb-sm px-kb-lg h-14 flex-shrink-0',
         collapsed && 'justify-center px-0',
       )}>
-        <div className="w-8 h-8 rounded-kb-md bg-brand-600 flex items-center justify-center flex-shrink-0">
-          <span className="text-white text-b2 font-bold">课</span>
+        <div className="w-7 h-7 rounded-kb-md bg-brand-600 flex items-center justify-center flex-shrink-0">
+          <span className="text-white text-c1 font-bold">课</span>
         </div>
         <span className={cn(
-          'text-h3 font-semibold text-text-primary',
+          'text-b1 font-semibold text-text-primary',
           collapsed && 'hidden',
         )}>
           课伴
         </span>
       </div>
+
+      {/* Home — standalone, slightly larger */}
+      <div className={cn('px-kb-sm pb-kb-xs', collapsed && 'px-1')}>
+        <NavLink
+          to="/"
+          end
+          title={collapsed ? '主页' : undefined}
+          className={({ isActive }) =>
+            cn(
+              'flex items-center gap-kb-sm px-kb-md py-kb-sm rounded-kb-md',
+              'text-b2 transition-all duration-kb-normal ease-kb-default',
+              'relative group',
+              collapsed && 'justify-center px-0',
+              isActive
+                ? 'bg-brand-50 text-brand-600 dark:bg-brand-900/20 dark:text-brand-400'
+                : 'text-text-secondary hover:text-text-primary hover:bg-bg-secondary',
+            )
+          }
+        >
+          {({ isActive }) => (
+            <>
+              {isActive && (
+                <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-brand-600 rounded-kb-full" />
+              )}
+              <Home className="w-6 h-6 flex-shrink-0" strokeWidth={1.5} />
+              <span className={cn(collapsed && 'hidden')}>主页</span>
+            </>
+          )}
+        </NavLink>
+      </div>
+
+      {/* Divider */}
+      <div className={cn('mx-kb-sm border-t border-border/30', collapsed && 'mx-1')} />
 
       {/* Nav items */}
       <nav className={cn(
@@ -75,6 +126,27 @@ export default function Sidebar() {
             )}
           </NavLink>
         ))}
+
+        {/* 课堂助手快捷入口 */}
+        <button
+          onClick={handleCaptureClick}
+          title={collapsed ? '课堂助手' : undefined}
+          className={cn(
+            'flex items-center gap-kb-sm px-kb-md py-kb-sm rounded-kb-md w-full',
+            'text-b2 transition-all duration-kb-normal ease-kb-default',
+            'relative group',
+            collapsed && 'justify-center px-0',
+            captureOpen && isOnNotes
+              ? 'bg-brand-50 text-brand-600 dark:bg-brand-900/20 dark:text-brand-400'
+              : 'text-text-secondary hover:text-text-primary hover:bg-bg-secondary',
+          )}
+        >
+          {captureOpen && isOnNotes && (
+            <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-brand-600 rounded-kb-full" />
+          )}
+          <Clapperboard className="w-icon-md h-icon-md flex-shrink-0" strokeWidth={1.5} />
+          <span className={cn(collapsed && 'hidden')}>课堂助手</span>
+        </button>
       </nav>
 
       {/* Collapse toggle button */}
@@ -100,6 +172,26 @@ export default function Sidebar() {
               <span>收起</span>
             </>
           )}
+        </button>
+      </div>
+
+      {/* Feedback button */}
+      <div className={cn(
+        'px-kb-sm pt-kb-sm',
+        collapsed && 'px-1',
+      )}>
+        <button
+          onClick={() => setFeedbackOpen(true)}
+          title={collapsed ? '反馈' : undefined}
+          className={cn(
+            'flex items-center gap-kb-sm px-kb-md py-kb-sm rounded-kb-md w-full',
+            'text-b2 transition-all duration-kb-normal ease-kb-default',
+            'text-text-secondary hover:text-text-primary hover:bg-bg-secondary',
+            collapsed && 'justify-center px-0',
+          )}
+        >
+          <MessageSquare className="w-icon-md h-icon-md flex-shrink-0" />
+          <span className={cn(collapsed && 'hidden')}>反馈</span>
         </button>
       </div>
 
@@ -135,5 +227,7 @@ export default function Sidebar() {
         </NavLink>
       </div>
     </aside>
+      <FeedbackPanel isOpen={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
+    </>
   );
 }

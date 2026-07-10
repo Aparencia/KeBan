@@ -1,12 +1,15 @@
-import { useEffect } from 'react';
+import { useEffect, useCallback, useState, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Button, EmptyState } from '@/components/ui';
+import { Button, EmptyState, useToast } from '@/components/ui';
+import { ContextMenu, type ContextMenuGroup } from '@/components/ui/ContextMenu';
 import { FlipCard } from '../components/FlipCard';
-import { X, RotateCcw, BookOpen } from 'lucide-react';
+import { X, RotateCcw, BookOpen, PauseCircle, AlertTriangle, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useStudySessionStore } from '../store/useStudySessionStore';
 import { useFlashcardStore } from '../store/useFlashcardStore';
+import { useContextMenu } from '@/lib/contextMenu/useContextMenu';
 import { Rating, calculateIntervals } from '@/lib/sm2';
+import type { Flashcard } from '@/types/models';
 
 function formatInterval(days: number): string {
   if (days === 0) return '<1d';
@@ -38,7 +41,86 @@ export default function StudySessionPage() {
     endSession,
   } = useStudySessionStore();
 
-  const { selectDeck, loadCards } = useFlashcardStore();
+  const { selectDeck, loadCards, updateCard } = useFlashcardStore();
+  const { toast } = useToast();
+
+  // Flip-completion gate: 翻转动画结束后才显示评分按钮（stagger 入场）
+  const [flipDone, setFlipDone] = useState(false);
+  // Card exit animation flag
+  const [exiting, setExiting] = useState(false);
+  // Hovered rating for interval preview
+  const [hoveredRating, setHoveredRating] = useState<number | null>(null);
+  // New card entrance animation
+  const [entering, setEntering] = useState(true);
+  // Track previous index for entrance animation
+  const prevIndexRef = useRef(currentIndex);
+  // Ref to current button DOM nodes for bounce class
+  const btnRefs = useRef<(HTMLButtonElement | null)[]>([]);
+
+  // 当 isFlipped 变为 false 时重置 flipDone
+  useEffect(() => {
+    if (!isFlipped) setFlipDone(false);
+  }, [isFlipped]);
+
+  // 新卡片入场动画：currentIndex 变化时触发
+  useEffect(() => {
+    if (prevIndexRef.current !== currentIndex) {
+      setEntering(true);
+      prevIndexRef.current = currentIndex;
+      const timer = setTimeout(() => setEntering(false), 300);
+      return () => clearTimeout(timer);
+    }
+  }, [currentIndex]);
+
+  // Context menu
+  const {
+    isOpen: ctxOpen,
+    position: ctxPos,
+    context: ctxCard,
+    handleContextMenu: ctxHandleMenu,
+    close: ctxClose,
+  } = useContextMenu<Flashcard>();
+
+  const sessionMenuGroups: ContextMenuGroup[] = [
+    {
+      label: '学习操作',
+      items: [
+        { key: 'suspend', label: '搁置当前卡', icon: <PauseCircle className="w-4 h-4" strokeWidth={1.5} /> },
+        { key: 'mark-hard', label: '标记困难', icon: <AlertTriangle className="w-4 h-4" strokeWidth={1.5} /> },
+      ],
+    },
+    {
+      label: 'AI 操作',
+      items: [
+        { key: 'ai-optimize', label: 'AI 优化卡片内容', icon: <Sparkles className="w-4 h-4" strokeWidth={1.5} /> },
+      ],
+    },
+  ];
+
+  const handleSessionSelect = useCallback((itemKey: string, card: Flashcard) => {
+    switch (itemKey) {
+      case 'suspend': {
+        // 搁置：将到期日设为 1 年后
+        const farFuture = new Date();
+        farFuture.setFullYear(farFuture.getFullYear() + 1);
+        updateCard(card.id, { dueDate: farFuture });
+        toast({ type: 'success', message: '卡片已搁置，请继续学习其他卡片' });
+        break;
+      }
+      case 'mark-hard': {
+        // 标记困难：增加失误次数，降低难度因子
+        const newEaseFactor = Math.max(1.3, card.easeFactor - 0.2);
+        updateCard(card.id, { lapses: card.lapses + 1, easeFactor: newEaseFactor });
+        toast({ type: 'success', message: '已标记为困难卡片，后续会更频繁复习' });
+        break;
+      }
+      case 'ai-optimize':
+        // TODO: 接入 AI 优化卡片内容功能
+        console.warn('[StudySessionPage] AI 优化卡片内容功能待实现');
+        toast({ type: 'info', message: 'AI 优化功能正在开发中' });
+        break;
+    }
+  }, [updateCard, toast]);
 
   // Initialize session on mount
   useEffect(() => {
@@ -73,7 +155,23 @@ export default function StudySessionPage() {
   const progress = total > 0 ? Math.round((completedCount / total) * 100) : 0;
 
   const handleRate = (rating: Rating) => {
-    rateCard(rating);
+    setExiting(true);
+    // 等待卡片退出动画完成后再执行评分（350ms）
+    setTimeout(() => {
+      setExiting(false);
+      rateCard(rating);
+    }, 350);
+  };
+
+  /** 按钮点击回弹效果 */
+  const handleBtnClick = (index: number) => {
+    const el = btnRefs.current[index];
+    if (el) {
+      el.classList.add('animate-scale-bounce');
+      el.addEventListener('animationend', () => {
+        el.classList.remove('animate-scale-bounce');
+      }, { once: true });
+    }
   };
 
   const handleRestart = () => {
@@ -144,14 +242,24 @@ export default function StudySessionPage() {
       </div>
 
       {/* 卡片主体 */}
-      <div className="flex-1 flex items-center justify-center px-kb-md overflow-hidden">
+      <div
+        className="flex-1 flex items-center justify-center px-kb-md overflow-hidden"
+        onContextMenu={(e) => {
+          if (current) ctxHandleMenu(e, current);
+        }}
+      >
         {!isComplete && current ? (
-          <div className="w-full max-w-xl">
+          <div className={cn(
+            'w-full max-w-xl',
+            entering && 'animate-fade-in-up',
+          )}>
             <FlipCard
               front={current.front}
               back={current.back}
               isFlipped={isFlipped}
               onFlip={flipCard}
+              onFlipEnd={() => setFlipDone(true)}
+              exiting={exiting}
             />
           </div>
         ) : (
@@ -177,13 +285,62 @@ export default function StudySessionPage() {
         )}
       </div>
 
+      {/* 右键菜单 */}
+      {ctxOpen && ctxCard && (
+        <ContextMenu
+          groups={sessionMenuGroups}
+          position={ctxPos}
+          context={ctxCard}
+          onSelect={handleSessionSelect}
+          onClose={ctxClose}
+        />
+      )}
+
       {/* 底部评分区 */}
       {!isComplete && current && (
         <div className={cn(
           'flex-shrink-0 px-kb-md py-4 border-t border-border/50',
           'bg-bg-elevated',
         )}>
-          {!isFlipped ? (
+          {flipDone ? (
+            <div className="flex flex-col gap-2">
+              {/* 间隔预览 tooltip */}
+              {hoveredRating !== null && (
+                <div className="flex justify-center animate-fade-in-up">
+                  <span className="text-c2 text-text-secondary px-2 py-0.5 rounded-kb-sm bg-bg-tertiary">
+                    下次复习：{formatInterval(intervalValues[hoveredRating])} 后
+                  </span>
+                </div>
+              )}
+              <div className="grid grid-cols-4 gap-2">
+                {ratingStyles.map(({ label, rating, color }, i) => (
+                  <button
+                    ref={(el) => { btnRefs.current[i] = el; }}
+                    key={label}
+                    onClick={() => { handleBtnClick(i); handleRate(rating); }}
+                    onMouseEnter={() => setHoveredRating(i)}
+                    onMouseLeave={() => setHoveredRating(null)}
+                    className={cn(
+                      'flex flex-col items-center gap-0.5 py-3 rounded-kb-lg',
+                      'text-white font-semibold text-b2',
+                      'opacity-0 animate-stagger-in',
+                      'transition-[background-color,box-shadow] duration-kb-fast',
+                      'hover:scale-[1.04] active:scale-[0.96]',
+                      'shadow-kb-sm',
+                      color,
+                    )}
+                    style={{
+                      animationDelay: `${i * 75}ms`,
+                      animationFillMode: 'forwards',
+                    }}
+                  >
+                    <span className="text-c1 opacity-75">{formatInterval(intervalValues[i])}</span>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
             <div className="flex justify-center">
               <Button
                 variant="secondary"
@@ -194,26 +351,6 @@ export default function StudySessionPage() {
               >
                 翻转查看
               </Button>
-            </div>
-          ) : (
-            <div className="grid grid-cols-4 gap-2">
-              {ratingStyles.map(({ label, rating, color }, i) => (
-                <button
-                  key={label}
-                  onClick={() => handleRate(rating)}
-                  className={cn(
-                    'flex flex-col items-center gap-0.5 py-3 rounded-kb-lg',
-                    'text-white font-semibold text-b2',
-                    'transition-all duration-kb-fast',
-                    'hover:scale-[1.03] active:scale-[0.97]',
-                    'shadow-kb-sm',
-                    color,
-                  )}
-                >
-                  <span className="text-c1 opacity-75">{formatInterval(intervalValues[i])}</span>
-                  {label}
-                </button>
-              ))}
             </div>
           )}
         </div>

@@ -34,13 +34,25 @@ export type { AvatarProps, AvatarSize } from './Avatar';
 export { Skeleton } from './Skeleton';
 export type { SkeletonProps, SkeletonVariant } from './Skeleton';
 
+// TypewriterText
+export { TypewriterText } from './TypewriterText';
+export type { TypewriterTextProps } from './TypewriterText';
+
 // EmptyState
 export { EmptyState } from './EmptyState';
 export type { EmptyStateProps } from './EmptyState';
 
 // ContextMenu
 export { ContextMenu } from './ContextMenu';
-export type { ContextMenuProps, ContextMenuItem } from './ContextMenu';
+export type { ContextMenuProps, ContextMenuItem, ContextMenuGroup } from './ContextMenu';
 
 // RichTooltip
 export { RichTooltip } from './RichTooltip';
+
+// ComingSoonBadge
+export { ComingSoonBadge } from './ComingSoonBadge';
+export type { ComingSoonBadgeProps } from './ComingSoonBadge';
+
+// ComingSoonPlaceholder
+export { ComingSoonPlaceholder } from './ComingSoonPlaceholder';
+export type { ComingSoonPlaceholderProps } from './ComingSoonPlaceholder';

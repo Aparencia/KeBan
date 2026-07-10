@@ -30,6 +30,11 @@ import type { FreeCanvasData } from '@/types/models';
 import { useFlashcardStore } from '@/features/flashcards/store/useFlashcardStore';
 import { useAISummarize, useAIFlashcards } from '@/lib/ai/useAI';
 import { useToast } from '@/components/ui';
+import { ContextMenu } from '@/components/ui/ContextMenu';
+import type { ContextMenuGroup } from '@/components/ui/ContextMenu';
+import { useContextMenu } from '@/lib/contextMenu';
+import { CaptureSidebar } from '../components/CaptureSidebar';
+import { useCaptureStore } from '@/stores/useCaptureStore';
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'failed';
 
@@ -67,6 +72,7 @@ export default function NoteEditPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const noteId = id ?? null;
+  const captureOpen = useCaptureStore((s) => s.open);
 
   const { notes, updateNote, selectNote, loadNotes } = useNoteStore();
   const note = notes.find((n) => n.id === noteId) || null;
@@ -92,6 +98,15 @@ export default function NoteEditPage() {
   const [summaryModalOpen, setSummaryModalOpen] = useState(false);
   const { loading: aiLoading, data: aiData, error: aiError, summarize } = useAISummarize();
   const { toast } = useToast();
+
+  // 选中文本右键菜单 hook
+  const {
+    isOpen: editorCtxOpen,
+    position: editorCtxPos,
+    context: editorSelectedText,
+    handleContextMenu: handleEditorContextMenu,
+    close: closeEditorCtx,
+  } = useContextMenu<string>();
 
   // AI 摘要后续操作 hooks
   const { loading: flashcardLoading, generate: generateFlashcards } = useAIFlashcards();
@@ -186,6 +201,56 @@ export default function NoteEditPage() {
       debouncedSave(contentStr);
     },
   });
+
+  // 选中文本右键菜单分组
+  const editorCtxGroups = useMemo<ContextMenuGroup[]>(() => [
+    {
+      label: 'AI 操作',
+      items: [
+        { key: 'ai-flashcard', label: '生成闪卡', icon: <Sparkles className="w-4 h-4" strokeWidth={1.5} /> },
+        { key: 'ai-explain', label: '解释概念' },
+        { key: 'ai-distill', label: '提炼要点' },
+        { key: 'ai-highlight', label: '高亮标记' },
+      ],
+    },
+  ], []);
+
+  // 选中文本菜单回调
+  const handleEditorCtxSelect = useCallback((itemKey: string, selectedText: string) => {
+    if (!editor || !selectedText) return;
+
+    switch (itemKey) {
+      case 'ai-flashcard':
+        // 复用现有 generateFlashcards 逻辑
+        generateFlashcards(selectedText)
+          .then(async (result) => {
+            if (!result) throw new Error('generate failed');
+            const targetDeckId = await ensureDefaultDeck();
+            await Promise.all(
+              result.cards.map((card) =>
+                createCard({ deckId: targetDeckId, front: card.front, back: card.back, type: 'basic' }),
+              ),
+            );
+            toast({ type: 'success', message: `已生成 ${result.cards.length} 张闪卡` });
+          })
+          .catch(() => toast({ type: 'error', message: '闪卡生成失败，请稍后重试' }));
+        break;
+      case 'ai-explain':
+        // TODO: 调用 AI 解释选中概念
+        console.warn('[EditorCtx] AI 解释功能待集成', selectedText);
+        toast({ type: 'info', message: 'AI 解释功能即将上线' });
+        break;
+      case 'ai-distill':
+        // TODO: 调用 AI 提炼要点
+        console.warn('[EditorCtx] AI 提炼功能待集成', selectedText);
+        toast({ type: 'info', message: 'AI 提炼功能即将上线' });
+        break;
+      case 'ai-highlight':
+        // 使用 TipTap 高亮命令直接标记选中文本
+        editor.chain().focus().toggleHighlight().run();
+        break;
+    }
+  }, [editor, generateFlashcards, ensureDefaultDeck, createCard, toast]);
 
   // 图片上传处理
   const handleImageSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -330,7 +395,8 @@ export default function NoteEditPage() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-4rem)]">
+    <div className="flex h-[calc(100vh-4rem)]">
+    <div className="flex flex-col flex-1 min-w-0">
       {/* 顶部栏 */}
       <div className="flex items-center gap-kb-sm px-kb-md py-3 border-b border-border/50 flex-shrink-0">
         <button
@@ -575,7 +641,18 @@ export default function NoteEditPage() {
         </div>
       ) : (
       <div className="flex-1 overflow-y-auto px-kb-md py-kb-lg">
-        <div className="max-w-3xl mx-auto">
+        <div
+          className="max-w-3xl mx-auto"
+          onContextMenu={(e) => {
+            // 仅当 TipTap 编辑器有文本选中时显示自定义菜单
+            if (!editor || note?.template === 'cornell') return;
+            const { from, to } = editor.state.selection;
+            if (from === to) return; // 无选中，fallthrough 到默认右键
+            const selected = editor.state.doc.textBetween(from, to, ' ');
+            if (!selected.trim()) return;
+            handleEditorContextMenu(e, selected);
+          }}
+        >
           {note?.template === 'cornell' ? (
             <CornellLayout
               content={(() => { try { return JSON.parse(note.content || '{}'); } catch { return {}; } })()}
@@ -591,6 +668,30 @@ export default function NoteEditPage() {
           )}
         </div>
       </div>
+      )}
+
+      {/* 选中文本右键菜单 */}
+      {editorCtxOpen && editorSelectedText && (
+        <ContextMenu<string>
+          groups={editorCtxGroups}
+          position={editorCtxPos}
+          context={editorSelectedText}
+          onSelect={handleEditorCtxSelect}
+          onClose={closeEditorCtx}
+        />
+      )}
+
+      {/* 课堂助手侧边栏 */}
+      </div>
+      {captureOpen && (
+        <CaptureSidebar
+          onInsertText={(text) => {
+            if (!editor) return;
+            const htmlContent = text.split('\n').map((line) => `<p>${line || '<br>'}</p>`).join('');
+            const docSize = editor.state.doc.content.size;
+            editor.chain().focus().insertContentAt(docSize, htmlContent).run();
+          }}
+        />
       )}
 
       {/* AI 摘要结果弹窗 */}

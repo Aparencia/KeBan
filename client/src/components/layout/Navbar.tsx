@@ -1,6 +1,7 @@
-import { Sun, Moon, Wifi, WifiOff, Signal, RefreshCw, CheckCircle2, HardDrive, Cloud, Globe } from 'lucide-react';
+import { ArrowLeft, Sun, Moon, Wifi, WifiOff, Signal, RefreshCw, CheckCircle2, HardDrive, Cloud, Globe, ChevronRight } from 'lucide-react';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useTheme } from '@/hooks/useTheme';
-import { usePageTitle } from '@/hooks/usePageTitle';
+import { useBreadcrumb } from '@/hooks/usePageTitle';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { useSync } from '@/lib/sync/SyncContext';
 import { useModeState } from '@/hooks/useMode';
@@ -27,17 +28,25 @@ const modeIndicatorConfig = {
   full: { label: '云端', icon: Globe, color: 'text-brand-600', bg: 'bg-brand-50' },
 } as const;
 
+/** 根路由（无返回按钮） */
+const ROOT_PATHS = new Set(['/', '/pomodoro', '/notes', '/flashcards', '/feynman', '/settings']);
+
 export default function Navbar() {
   const { theme, toggleTheme } = useTheme();
-  const pageTitle = usePageTitle();
+  const { crumbs } = useBreadcrumb();
   const { status: netStatus } = useNetworkStatus();
   const { isSyncing, lastSyncAt, pendingCount } = useSync();
   const { mode } = useModeState();
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
 
   const netConfig = networkStatusConfig[netStatus];
   const NetIcon = netConfig.icon;
   const modeConfig = modeIndicatorConfig[mode];
   const ModeIcon = modeConfig.icon;
+
+  // 仅在子页面显示返回按钮（不在根路由上）
+  const showBack = !ROOT_PATHS.has(pathname) && pathname !== '/';
 
   return (
     <header
@@ -48,13 +57,59 @@ export default function Navbar() {
         'h-14 flex items-center justify-between px-kb-lg',
       )}
     >
-      {/* Left: Page title */}
-      <h1 className="text-h3 font-semibold text-text-primary truncate">
-        {pageTitle}
-      </h1>
+      {/* Left: Back button + Breadcrumb */}
+      <div className="flex items-center gap-kb-sm min-w-0">
+        {/* Back button — only shown on sub-pages */}
+        {showBack && (
+          <button
+            onClick={() => navigate(-1)}
+            className={cn(
+              'flex items-center justify-center',
+              'w-8 h-8 rounded-kb-md flex-shrink-0',
+              'text-text-secondary hover:text-text-primary',
+              'hover:bg-bg-secondary',
+              'transition-all duration-kb-normal ease-kb-default',
+              'active:scale-95',
+            )}
+            aria-label="返回上一页"
+            title="返回上一页"
+          >
+            <ArrowLeft className="w-icon-md h-icon-md" />
+          </button>
+        )}
+
+        {/* Breadcrumb */}
+        <nav className="flex items-center gap-1 min-w-0" aria-label="面包屑导航">
+          {crumbs.map((crumb, index) => {
+            const isLast = index === crumbs.length - 1;
+            return (
+              <span key={index} className="flex items-center gap-1 min-w-0">
+                {index > 0 && (
+                  <ChevronRight className="w-icon-xs h-icon-xs text-text-tertiary flex-shrink-0" />
+                )}
+                {crumb.path && !isLast ? (
+                  <Link
+                    to={crumb.path}
+                    className={cn(
+                      'text-b2 text-text-secondary hover:text-text-primary',
+                      'transition-colors duration-kb-fast truncate',
+                    )}
+                  >
+                    {crumb.label}
+                  </Link>
+                ) : (
+                  <span className="text-b2 text-text-primary font-medium truncate">
+                    {crumb.label}
+                  </span>
+                )}
+              </span>
+            );
+          })}
+        </nav>
+      </div>
 
       {/* Right: Mode + Sync + Network + Theme toggle */}
-      <div className="flex items-center gap-kb-md">
+      <div className="flex items-center gap-kb-md flex-shrink-0 ml-kb-md">
         {/* Mode indicator */}
         <div
           className={cn(

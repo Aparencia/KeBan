@@ -1,12 +1,15 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Button, Skeleton, EmptyState, useToast } from '@/components/ui';
+import { Button, Skeleton, EmptyState, useToast, ContextMenu } from '@/components/ui';
+import type { ContextMenuGroup } from '@/components/ui';
+import { useContextMenu } from '@/lib/contextMenu';
 import { StepIndicator } from '../components/StepIndicator';
 import { useFeynmanStore } from '../store/useFeynmanStore';
 import type { FeynmanWeakPoint } from '@/types/models';
 import {
   ArrowLeft, ArrowRight, Check, Highlighter, X,
   Star, Trash2, CheckCircle2, Circle, Sparkles, Loader2,
+  MessageCircle, Lightbulb, SearchCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAIEvaluate } from '@/lib/ai/useAI';
@@ -134,6 +137,66 @@ export default function FeynmanSessionPage() {
     setRating(r);
     await setSelfRating(noteId, r);
   }, [noteId, setSelfRating]);
+
+  // ── Right-click context menu (AI operations) ──
+  const {
+    isOpen: menuOpen,
+    position: menuPosition,
+    context: menuContext,
+    handleContextMenu,
+    close: closeMenu,
+  } = useContextMenu<string>();
+
+  const aiMenuGroups = useMemo<ContextMenuGroup[]>(() => [
+    {
+      label: 'AI 操作',
+      items: [
+        { key: 'ai-follow-up', label: 'AI 追问', icon: <MessageCircle className="w-4 h-4" strokeWidth={1.5} /> },
+        { key: 'ai-simplify', label: '通俗化解释', icon: <Lightbulb className="w-4 h-4" strokeWidth={1.5} /> },
+        { key: 'ai-gap-check', label: '查漏补缺', icon: <SearchCheck className="w-4 h-4" strokeWidth={1.5} /> },
+      ],
+    },
+  ], []);
+
+  const handleMenuSelect = useCallback((itemKey: string, text: string) => {
+    // TODO: beta 阶段对接 AI 功能
+    console.warn(`[Feynman ContextMenu] action=${itemKey}`, { text: text.slice(0, 120) });
+  }, []);
+
+  /**
+   * 从 textarea 或 window selection 中提取选中文本，若无选中则回退到整体内容。
+   */
+  const getContextMenuText = useCallback(
+    (fallback: string): string => {
+      // 尝试从 textarea 获取
+      const activeEl = document.activeElement;
+      if (activeEl instanceof HTMLTextAreaElement) {
+        const start = activeEl.selectionStart;
+        const end = activeEl.selectionEnd;
+        if (start !== end) {
+          return activeEl.value.slice(start, end).trim();
+        }
+        return activeEl.value.trim() || fallback;
+      }
+      // 尝试从 window selection 获取（step 3 div）
+      const sel = window.getSelection();
+      if (sel && !sel.isCollapsed) {
+        const text = sel.toString().trim();
+        if (text) return text;
+      }
+      return fallback;
+    },
+    [],
+  );
+
+  const handleNoteContextMenu = useCallback(
+    (e: React.MouseEvent, fallback: string) => {
+      const text = getContextMenuText(fallback);
+      if (!text) return;
+      handleContextMenu(e, text);
+    },
+    [getContextMenuText, handleContextMenu],
+  );
 
   // ── Step 3: Text selection for weak points ──
 
@@ -384,6 +447,7 @@ export default function FeynmanSessionPage() {
                     value={localExplanation}
                     onChange={(e) => setLocalExplanation(e.target.value)}
                     onBlur={handleStep2Blur}
+                    onContextMenu={(e) => handleNoteContextMenu(e, localExplanation)}
                     placeholder="在这里写下你的讲解... 尽量用通俗易懂的语言，避免直接引用教科书定义。"
                     className={cn(
                       'flex-1 p-kb-md bg-transparent outline-none resize-none',
@@ -432,6 +496,7 @@ export default function FeynmanSessionPage() {
                   ref={explanationRef}
                   onMouseUp={handleTextSelect}
                   onKeyUp={handleTextSelect}
+                  onContextMenu={(e) => handleNoteContextMenu(e, note?.explanation ?? '')}
                   className={cn(
                     'min-h-[200px] p-kb-md select-text',
                     'border border-border/50 rounded-kb-lg',
@@ -485,6 +550,7 @@ export default function FeynmanSessionPage() {
                     value={localSummary}
                     onChange={(e) => setLocalSummary(e.target.value)}
                     onBlur={handleSummaryBlur}
+                    onContextMenu={(e) => handleNoteContextMenu(e, localSummary)}
                     placeholder="用最简单的话重新解释这个概念，就像在和一个朋友聊天..."
                     className={cn(
                       'flex-1 p-kb-md bg-transparent outline-none resize-none',
@@ -769,6 +835,17 @@ export default function FeynmanSessionPage() {
           </Button>
         )}
       </div>
+
+      {/* 右键菜单 */}
+      {menuOpen && menuContext && (
+        <ContextMenu<string>
+          groups={aiMenuGroups}
+          position={menuPosition}
+          context={menuContext}
+          onSelect={handleMenuSelect}
+          onClose={closeMenu}
+        />
+      )}
 
       {/* 动画样式 */}
       <style>{`

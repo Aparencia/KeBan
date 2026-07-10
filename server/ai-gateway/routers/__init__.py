@@ -4,10 +4,14 @@ from routers.summarize import router as summarize_router
 from routers.generate_cards import router as generate_cards_router
 from routers.evaluate import router as evaluate_router
 from routers.recommend import router as recommend_router
+from routers.vision import router as vision_router
+from routers.transcribe import router as transcribe_router
 
 __all__ = [
     "summarize_router",
     "generate_cards_router",
     "evaluate_router",
     "recommend_router",
+    "vision_router",
+    "transcribe_router",
 ]

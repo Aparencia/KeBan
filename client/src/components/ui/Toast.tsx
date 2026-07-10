@@ -27,6 +27,14 @@ export function useToast(): ToastContextValue {
   return ctx;
 }
 
+// Default duration per type (ms)
+const defaultDuration: Record<ToastType, number> = {
+  error: 3000,
+  success: 2000,
+  warning: 3000,
+  info: 3000,
+};
+
 // Config per type
 const typeConfig: Record<
   ToastType,
@@ -68,9 +76,10 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const idRef = useRef(0);
 
-  const toast = useCallback(({ type, message, duration = 3000 }: { type: ToastType; message: string; duration?: number }) => {
+  const toast = useCallback(({ type, message, duration }: { type: ToastType; message: string; duration?: number }) => {
     const id = ++idRef.current;
-    setToasts((prev) => [...prev, { id, type, message, duration }]);
+    const d = duration ?? defaultDuration[type];
+    setToasts((prev) => [...prev, { id, type, message, duration: d }]);
   }, []);
 
   // Auto-dismiss

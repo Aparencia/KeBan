@@ -5,13 +5,20 @@ interface FlipCardProps {
   back: string;
   isFlipped: boolean;
   onFlip: () => void;
+  /** 翻转动效完成后回调（用于触发评分按钮 stagger 入场） */
+  onFlipEnd?: () => void;
+  /** 卡片正在执行退出动画 */
+  exiting?: boolean;
 }
 
-export function FlipCard({ front, back, isFlipped, onFlip }: FlipCardProps) {
+export function FlipCard({ front, back, isFlipped, onFlip, onFlipEnd, exiting }: FlipCardProps) {
   return (
     <div
-      className="w-full cursor-pointer select-none"
-      style={{ perspective: '1000px' }}
+      className={cn(
+        'w-full cursor-pointer select-none',
+        exiting && 'animate-card-exit',
+      )}
+      style={{ perspective: '1200px' }}
       onClick={onFlip}
       role="button"
       tabIndex={0}
@@ -19,11 +26,19 @@ export function FlipCard({ front, back, isFlipped, onFlip }: FlipCardProps) {
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onFlip(); } }}
     >
       <div
-        className="relative w-full transition-transform duration-300 ease-in-out"
+        className="relative w-full"
         style={{
           transformStyle: 'preserve-3d',
           transform: isFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)',
+          transition: `transform 450ms var(--kb-ease-spring)`,
+          willChange: 'transform',
           minHeight: '200px',
+        }}
+        onTransitionEnd={(e) => {
+          // 仅在翻转 transition 结束时触发（排除退出动画）
+          if (e.propertyName === 'transform' && !exiting) {
+            onFlipEnd?.();
+          }
         }}
       >
         {/* 正面 */}

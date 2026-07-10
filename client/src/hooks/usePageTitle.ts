@@ -26,3 +26,61 @@ export function usePageTitle(): string {
 
   return '课伴';
 }
+
+// ---------------------------------------------------------------------------
+// Breadcrumb
+// ---------------------------------------------------------------------------
+
+export interface BreadcrumbItem {
+  label: string;
+  path?: string;
+}
+
+/** 将路径段映射为可读标签 */
+const segmentLabels: Record<string, string> = {
+  pomodoro: '番茄钟',
+  stats: '专注统计',
+  settings: '设置',
+  notes: '笔记',
+  flashcards: '闪卡',
+  study: '学习会话',
+  feynman: '费曼',
+};
+
+/**
+ * 根据当前路由路径生成面包屑。
+ * 例如 `/notes/edit/xxx` → `['首页', '笔记', '编辑']`
+ */
+export function useBreadcrumb(): { crumbs: BreadcrumbItem[]; title: string } {
+  const { pathname } = useLocation();
+  const title = usePageTitle();
+
+  // 首页无需面包屑
+  if (pathname === '/') {
+    return { crumbs: [{ label: '首页' }], title };
+  }
+
+  const segments = pathname.split('/').filter(Boolean);
+
+  const crumbs: BreadcrumbItem[] = [{ label: '首页', path: '/' }];
+
+  let accumulated = '';
+  for (const segment of segments) {
+    accumulated += `/${segment}`;
+
+    // 跳过纯 ID 段（UUID / 数字 ID）
+    const isId =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(segment) ||
+      /^\d+$/.test(segment);
+
+    if (isId) continue;
+
+    const label = segmentLabels[segment] ?? segment;
+
+    // 最后一段不加 path（当前页）
+    const isLast = accumulated === pathname || accumulated + '/' === pathname;
+    crumbs.push({ label, path: isLast ? undefined : accumulated });
+  }
+
+  return { crumbs, title };
+}
