@@ -2,8 +2,8 @@
   <h1 align="center">📚 课伴 KeBan</h1>
   <p align="center"><strong>你的 AI 智能学习伙伴 — 让每一分钟网课都高效有价值</strong></p>
   <p align="center">
-    <img src="https://img.shields.io/badge/status-alpha-orange.svg" alt="Status" />
-    <img src="https://img.shields.io/badge/version-v0.3.0-blue.svg" alt="Version" />
+    <img src="https://img.shields.io/badge/status-beta-green.svg" alt="Status" />
+    <img src="https://img.shields.io/badge/version-v0.4.0-blue.svg" alt="Version" />
     <img src="https://img.shields.io/badge/license-Private-lightgrey.svg" alt="License" />
   </p>
 </p>
@@ -19,6 +19,7 @@
 | 痛点 | 课伴方案 |
 |------|----------|
 | 网课时容易走神、效率低 | 番茄钟双模式强制专注 + 后台不中断计时 |
+| 网课内容记不下来 | 网课笔记提取：自动截屏 + AI 视觉识别 + ASR 语音转写 |
 | 笔记零散、复习时找不到重点 | 结构化模板 + 标签系统 + 全文搜索 |
 | 学完就忘、缺少科学复习节奏 | 间隔重复算法自动安排复习时间 |
 | 以为懂了但说不清楚 | 费曼学习法四步引导 + AI 评估反馈 |
@@ -31,7 +32,7 @@
 
 ## ✨ 核心功能
 
-课伴围绕 **"学 → 记 → 练 → 悟"** 学习闭环，提供四大模块：
+课伴围绕 **"学 → 记 → 练 → 悟"** 学习闭环，提供五大模块：
 
 ### 🍅 番茄钟 — 时间管理
 
@@ -47,7 +48,15 @@
 - 多种模板：大纲式、康奈尔笔记法、自由画布等
 - 3 级嵌套文件夹 + 自由标签系统，灵活组织笔记
 - 本地全文搜索，自动保存，数据不丢失
-- 右键菜单与富提示组件，提升编辑效率
+- 右键菜单 2.0：声明式注册，支持自定义上下文操作
+
+### 📹 网课笔记提取 — 智能记录
+
+- **屏幕捕获**：自动截取网课窗口关键帧
+- **语音转写**：系统音频采集 + ASR 语音识别
+- **AI 视觉提取**：多模态大模型识别画面中的关键知识点
+- **智能路由**：根据环境自动选择最优提取策略，支持降级方案
+- **异步流水线**：事件驱动架构，不阻塞主界面操作
 
 ### 🃏 闪卡 — 记忆巩固
 
@@ -72,6 +81,9 @@
 | AI 自动生成闪卡 | 从笔记内容智能生成记忆卡片 |
 | 费曼学习评估 | AI 评估解释质量，给出改进建议 |
 | 智能时长推荐 | 根据学习数据推荐最佳番茄钟时长 |
+| AI 视觉提取 | 多模态模型识别网课画面中的关键信息 |
+| 语音转写 | ASR 自动识别网课语音内容 |
+| API Key 自配置 | 用户可在设置中自行配置 AI 服务商密钥 |
 
 > 基于国产大模型：**通义千问（Qwen）** / **DeepSeek** / **智谱 GLM**，按需选择，灵活切换。
 
@@ -122,14 +134,14 @@ npm run electron:build
 KeBan/
 ├── client/              # 前端客户端（React + Electron 桌面应用）
 │   ├── src/features/    #    业务功能模块（番茄钟、笔记、闪卡、费曼、仪表盘）
-│   ├── src/lib/         #    核心库（AI、存储、同步、加密、网络等）
+│   ├── src/lib/         #    核心库（AI、存储、同步、加密、网络、捕获等）
 │   ├── src/components/  #    共享 UI 组件（基础组件、布局、主题）
 │   ├── src/hooks/       #    自定义 React Hooks
-│   └── electron/        #    Electron 主进程与预加载脚本
+│   └── electron/        #    Electron 主进程（含屏幕/音频捕获）
 ├── server/              # 后端服务（AI 网关 + 数据同步）
-│   ├── ai-gateway/      #    Python AI 增强网关服务
+│   ├── ai-gateway/      #    Python AI 增强网关（含视觉提取、语音转写）
 │   └── sync-service/    #    Go 数据同步服务
-├── docs/                # 项目文档（按阶段组织，phase0 ~ phase3）
+├── docs/                # 项目文档（phase0 ~ phase6 + 版本迭代文档）
 ├── scripts/             # 脚本工具
 ├── .env.example         # 环境变量模板
 └── README.md
@@ -138,8 +150,8 @@ KeBan/
 | 目录 | 说明 |
 |------|------|
 | `client/` | 前端应用与 Electron 桌面端，包含所有 UI 和业务逻辑 |
-| `server/` | 后端微服务，包括 AI 增强网关和数据同步服务 |
-| `docs/` | 按项目生命周期组织的开发文档（phase0 ~ phase3） |
+| `server/` | 后端微服务，包括 AI 增强网关（视觉提取、语音转写）和数据同步服务 |
+| `docs/` | 按项目生命周期组织的开发文档（phase0 ~ phase6）及版本迭代文档 |
 | `scripts/` | 构建、部署等辅助脚本 |
 
 ---
@@ -150,7 +162,7 @@ KeBan/
 |------|------|----------|
 | **MVP-1 Alpha** | ✅ 已完成 | 纯本地核心版 — 四大模块 + 离线支持 + 本地存储 |
 | **MVP-2 Alpha** | ✅ 已完成 | AI 增强 + 云同步 + Electron 桌面端 + 用户认证 |
-| **Beta 公测** | 🔧 进行中 | 全功能集成，面向真实用户测试 |
+| **v0.4.0 Beta** | ✅ 已完成 | 网课笔记提取 + ContextMenu 2.0 + AuthGuard + 动效系统 + 反馈面板 |
 | **正式上线** | 🎯 规划中 | 生产就绪版 |
 
 ### 🔮 未来方向
@@ -169,8 +181,8 @@ KeBan/
 | 组成部分 | 含义 | 示例 |
 |----------|------|------|
 | `MAJOR` | 不兼容的 API 变更 | `1.0.0` |
-| `MINOR` | 向后兼容的功能新增 | `0.3.0` |
-| `PATCH` | 向后兼容的缺陷修复 | `0.3.1` |
+| `MINOR` | 向后兼容的功能新增 | `0.4.0` |
+| `PATCH` | 向后兼容的缺陷修复 | `0.4.1` |
 
 发布 Tag 前请确保：`npm run lint` / `npm run test` / `npm run build` 全部通过。
 
