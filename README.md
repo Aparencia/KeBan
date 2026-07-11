@@ -4,7 +4,7 @@
   <p align="center">
     <img src="https://img.shields.io/badge/status-beta-green.svg" alt="Status" />
     <img src="https://img.shields.io/badge/version-v0.4.0-blue.svg" alt="Version" />
-    <img src="https://img.shields.io/badge/license-Private-lightgrey.svg" alt="License" />
+    <img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License" />
   </p>
 </p>
 
@@ -223,6 +223,4 @@ npm run build   # 构建验证（TypeScript）
 
 ## 📄 许可证
 
-**Private — All Rights Reserved.**
-
-本项目为私有项目，所有权利保留。未经书面许可，不得复制、修改或分发本项目的任何部分。
+本项目基于 [Apache License 2.0](./LICENSE) 开源协议发布。
