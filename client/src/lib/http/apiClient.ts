@@ -2,7 +2,7 @@ import { supabase } from '../auth/supabaseClient';
 import { getAIConfig } from '../ai/config';
 import { getActiveUserKey } from '../ai/apiKeyManager';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://121.40.24.242:8080';
 
 interface RequestOptions extends RequestInit {
   timeout?: number;

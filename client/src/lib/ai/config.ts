@@ -14,7 +14,7 @@ export const AI_CONFIG_STORAGE_KEY = 'kb_ai_config';
 const DEFAULT_AI_CONFIG: AIConfig = {
   provider: 'qwen',
   apiKey: '',
-  gatewayUrl: 'http://localhost:8000',
+  gatewayUrl: 'http://121.40.24.242:8000',
 };
 
 /** 从 localStorage 读取 AI 配置，不存在则返回默认值 */

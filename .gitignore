@@ -33,6 +33,7 @@ Thumbs.db
 .env
 .env.local
 .env.*.local
+.env.production
 
 # Documentation (local only, not version controlled)
 docs/

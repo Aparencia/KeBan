@@ -31,7 +31,7 @@ let tray: Tray | null = null;
 /** 主窗口引用 */
 let mainWindow: BrowserWindow | null = null;
 
-const DEFAULT_GATEWAY_URL = 'http://127.0.0.1:8000';
+const DEFAULT_GATEWAY_URL = 'http://121.40.24.242:8000';
 
 /** 获取 AI 网关地址，优先读取环境变量 VITE_AI_GATEWAY_URL */
 function gatewayUrl(): string {

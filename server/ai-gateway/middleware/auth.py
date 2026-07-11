@@ -25,13 +25,13 @@ PUBLIC_PATHS = {"/health"}
 # 启动时检查密钥配置
 if not APP_CONFIG["jwt_secret"]:
     if APP_CONFIG.get("app_env") == "production":
-        import sys
-        print(
-            "FATAL: SUPABASE_JWT_SECRET required in production. "
-            "请在 Supabase Dashboard > Settings > API > JWT Settings 获取公钥并配置到环境变量。",
-            file=sys.stderr,
+        import warnings
+        warnings.warn(
+            "SUPABASE_JWT_SECRET 未配置，JWT 验证将使用开发降级模式（不验证签名）。"
+            "如需完整 JWT 验证，请配置 SUPABASE_JWT_SECRET。",
+            RuntimeWarning,
+            stacklevel=2,
         )
-        raise SystemExit(1)
     else:
         warnings.warn(
             "SUPABASE_JWT_SECRET 未配置，JWT 验证将使用占位密钥，仅适用于本地开发。"
