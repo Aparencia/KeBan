@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Button, Skeleton, EmptyState, useToast, ContextMenu } from '@/components/ui';
+import { AIButton } from '@/components/ui/AIButton';
 import type { ContextMenuGroup } from '@/components/ui';
 import { useContextMenu } from '@/lib/contextMenu';
 import { StepIndicator } from '../components/StepIndicator';
@@ -188,7 +189,6 @@ export default function FeynmanSessionPage() {
         .catch(() => toast({ type: 'error', message: 'AI 追问生成失败，请稍后重试' }));
     } else {
       // 其他 AI 操作待后续实现
-      console.warn(`[Feynman ContextMenu] action=${itemKey}`, { text: text.slice(0, 120) });
     }
   }, [note, generateQuestions, toast]);
 
@@ -360,7 +360,11 @@ export default function FeynmanSessionPage() {
           {note?.concept || '费曼学习'}
         </h1>
         {note?.explanation && (
-          <button
+          <AIButton
+            size="sm"
+            loading={aiEvalLoading}
+            disabled={aiEvalLoading}
+            tooltip="请先完成讲解内容"
             onClick={() => {
               if (!note?.concept || !note?.explanation) {
                 toast({ type: 'warning', message: '请先完成讲解内容' });
@@ -370,22 +374,10 @@ export default function FeynmanSessionPage() {
               aiEvaluate(note.concept, note.explanation)
                 .catch(() => toast({ type: 'error', message: 'AI 评估失败，请稍后重试' }));
             }}
-            disabled={aiEvalLoading}
             title={aiEvalLoading ? 'AI 评估中…' : 'AI 评估讲解质量'}
-            className={cn(
-              'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-kb-md text-b2 font-medium',
-              'bg-brand-600 text-white',
-              'hover:bg-brand-700 active:scale-95 transition-all duration-kb-fast',
-              aiEvalLoading && 'opacity-60 cursor-not-allowed',
-            )}
           >
-            {aiEvalLoading ? (
-              <Loader2 className="w-icon-sm h-icon-sm animate-spin" />
-            ) : (
-              <Sparkles className="w-icon-sm h-icon-sm" strokeWidth={1.5} />
-            )}
             AI 评估
-          </button>
+          </AIButton>
         )}
         {isCompleted && (
           <span className="text-c1 font-medium text-semantic-success flex items-center gap-1">
@@ -866,7 +858,10 @@ export default function FeynmanSessionPage() {
 
                             {/* 提交回答按钮 */}
                             {aiQuestionData.questions.length > 0 && (
-                              <button
+                              <Button
+                                variant="ai"
+                                size="md"
+                                className="w-full"
                                 onClick={async () => {
                                   if (!note?.concept) return;
                                   const questions = aiQuestionData.questions.map(q => q.question);
@@ -879,20 +874,11 @@ export default function FeynmanSessionPage() {
                                     .catch(() => toast({ type: 'error', message: 'AI 评估失败，请稍后重试' }));
                                 }}
                                 disabled={aiAnswerEvalLoading || localAnswers.every(a => !a?.trim())}
-                                className={cn(
-                                  'w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-kb-md text-b2 font-medium',
-                                  'bg-brand-600 text-white',
-                                  'hover:bg-brand-700 active:scale-[0.98] transition-all duration-kb-fast',
-                                  (aiAnswerEvalLoading || localAnswers.every(a => !a?.trim())) && 'opacity-60 cursor-not-allowed',
-                                )}
+                                loading={aiAnswerEvalLoading}
+                                icon={!aiAnswerEvalLoading ? <Check className="w-4 h-4" strokeWidth={2} /> : undefined}
                               >
-                                {aiAnswerEvalLoading ? (
-                                  <Loader2 className="w-4 h-4 animate-spin" />
-                                ) : (
-                                  <Check className="w-4 h-4" strokeWidth={2} />
-                                )}
                                 提交回答，查看理解度评估
-                              </button>
+                              </Button>
                             )}
 
                             {/* 评估结果 */}

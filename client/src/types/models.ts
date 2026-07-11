@@ -312,3 +312,11 @@ export interface CaptureEvent {
   data: unknown;                // 事件数据（具体类型由 type 决定）
   sessionId: string;
 }
+
+// 隐私合规同意记录
+export interface Consent {
+  id: string;
+  type: 'privacy' | 'terms';
+  version: string;
+  acceptedAt: Date;
+}

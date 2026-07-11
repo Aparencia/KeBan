@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
-import { CheckCircle, XCircle, AlertTriangle, Info } from 'lucide-react';
+import React, { createContext, useContext, useState, useCallback, useRef } from 'react';
+import { CheckCircle, XCircle, AlertTriangle, Info, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 // Types
@@ -9,7 +9,6 @@ interface ToastItem {
   id: number;
   type: ToastType;
   message: string;
-  duration: number;
   exiting?: boolean;
 }
 
@@ -29,10 +28,10 @@ export function useToast(): ToastContextValue {
 
 // Default duration per type (ms)
 const defaultDuration: Record<ToastType, number> = {
-  error: 3000,
-  success: 2000,
-  warning: 3000,
+  success: 3000,
   info: 3000,
+  error: 5000,
+  warning: 5000,
 };
 
 // Config per type
@@ -47,7 +46,7 @@ const typeConfig: Record<
 };
 
 // ToastItem component
-const ToastItemCard: React.FC<{ item: ToastItem }> = ({ item }) => {
+const ToastItemCard: React.FC<{ item: ToastItem; onClose: (id: number) => void }> = ({ item, onClose }) => {
   const { icon: Icon, color, bg } = typeConfig[item.type];
 
   return (
@@ -67,6 +66,14 @@ const ToastItemCard: React.FC<{ item: ToastItem }> = ({ item }) => {
       <Icon className={cn('w-icon-md h-icon-md flex-shrink-0', color)} />
       {/* Message */}
       <span className="text-b2 text-text-primary flex-1">{item.message}</span>
+      {/* Close button */}
+      <button
+        onClick={() => onClose(item.id)}
+        className="flex-shrink-0 p-0.5 rounded hover:bg-bg-secondary/60 transition-colors"
+        aria-label="关闭"
+      >
+        <X className="w-3.5 h-3.5 text-text-tertiary hover:text-text-secondary" strokeWidth={2} />
+      </button>
     </div>
   );
 };
@@ -75,34 +82,35 @@ const ToastItemCard: React.FC<{ item: ToastItem }> = ({ item }) => {
 export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const idRef = useRef(0);
+  const timersRef = useRef<Map<number, ReturnType<typeof setTimeout>[]>>(new Map());
+
+  const dismiss = useCallback((id: number) => {
+    // Clear any pending timers for this toast
+    const timers = timersRef.current.get(id);
+    if (timers) {
+      timers.forEach(clearTimeout);
+      timersRef.current.delete(id);
+    }
+    // Start exit animation
+    setToasts((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, exiting: true } : t)),
+    );
+    // Remove after animation
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 300);
+  }, []);
 
   const toast = useCallback(({ type, message, duration }: { type: ToastType; message: string; duration?: number }) => {
     const id = ++idRef.current;
     const d = duration ?? defaultDuration[type];
-    setToasts((prev) => [...prev, { id, type, message, duration: d }]);
-  }, []);
 
-  // Auto-dismiss
-  useEffect(() => {
-    if (toasts.length === 0) return;
-    const latest = toasts[toasts.length - 1];
-    if (latest.exiting) return;
+    setToasts((prev) => [...prev, { id, type, message }]);
 
-    const exitTimer = setTimeout(() => {
-      setToasts((prev) =>
-        prev.map((t) => (t.id === latest.id ? { ...t, exiting: true } : t)),
-      );
-    }, latest.duration);
-
-    const removeTimer = setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== latest.id));
-    }, latest.duration + 300);
-
-    return () => {
-      clearTimeout(exitTimer);
-      clearTimeout(removeTimer);
-    };
-  }, [toasts]);
+    // Schedule auto-dismiss
+    const exitTimer = setTimeout(() => dismiss(id), d);
+    timersRef.current.set(id, [exitTimer]);
+  }, [dismiss]);
 
   return (
     <ToastContext.Provider value={{ toast }}>
@@ -110,7 +118,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       {/* Toast container */}
       <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-kb-sm items-center">
         {toasts.map((t) => (
-          <ToastItemCard key={t.id} item={t} />
+          <ToastItemCard key={t.id} item={t} onClose={dismiss} />
         ))}
       </div>
 

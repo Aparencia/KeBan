@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { X, WifiOff, Signal, RefreshCw, CheckCircle2 } from 'lucide-react';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { useSync } from '@/lib/sync/SyncContext';
@@ -87,38 +88,47 @@ export default function SyncStatusBar() {
 
   const banner = getBanner();
 
-  if (!banner || (dismissed && banner.dismissible)) return null;
-
   return (
-    <div
-      role="status"
-      aria-live="polite"
-      className={cn(
-        'flex items-center justify-between gap-kb-sm',
-        'px-kb-md py-kb-xs',
-        'border-b text-caption',
-        'transition-all duration-kb-normal',
-        banner.bgClass,
-        banner.textClass,
-      )}
-    >
-      <div className="flex items-center gap-kb-xs">
-        {banner.icon}
-        <span>{banner.message}</span>
-      </div>
-      {banner.dismissible && (
-        <button
-          onClick={() => setDismissed(true)}
-          className={cn(
-            'p-kb-xs rounded-kb-sm',
-            'hover:bg-white/10',
-            'transition-colors',
-          )}
-          aria-label="关闭提示"
+    <AnimatePresence initial={false}>
+      {banner && !(dismissed && banner.dismissible) && (
+        <motion.div
+          role="status"
+          aria-live="polite"
+          initial={{ height: 0, opacity: 0 }}
+          animate={{ height: 'auto', opacity: 1 }}
+          exit={{ height: 0, opacity: 0 }}
+          transition={{ duration: 0.25, ease: 'easeInOut' }}
+          className="sticky top-14 z-10 overflow-hidden"
         >
-          <X className="w-3.5 h-3.5" />
-        </button>
+          <div
+            className={cn(
+              'flex items-center justify-between gap-kb-sm',
+              'px-kb-md py-kb-xs',
+              'border-b text-caption',
+              banner.bgClass,
+              banner.textClass,
+            )}
+          >
+            <div className="flex items-center gap-kb-xs">
+              {banner.icon}
+              <span>{banner.message}</span>
+            </div>
+            {banner.dismissible && (
+              <button
+                onClick={() => setDismissed(true)}
+                className={cn(
+                  'p-kb-xs rounded-kb-sm',
+                  'hover:bg-white/10',
+                  'transition-colors',
+                )}
+                aria-label="关闭提示"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        </motion.div>
       )}
-    </div>
+    </AnimatePresence>
   );
 }

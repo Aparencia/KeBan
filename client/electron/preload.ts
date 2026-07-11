@@ -21,6 +21,11 @@ const ALLOWED_CHANNELS = [
   'audio_list_sources',
   'audio_capture_start',
   'audio_capture_stop',
+  'get-app-version',
+  'dialog:selectDirectory',
+  'update:check',
+  'update:download',
+  'update:install',
 ] as const;
 
 /** 允许渲染进程监听的事件 channel 白名单（主进程 → 渲染进程推送） */
@@ -29,6 +34,7 @@ const ALLOWED_EVENT_CHANNELS = [
   'audio_capture_chunk',
   'audio_capture_do_start',
   'audio_capture_do_stop',
+  'update-status',
 ] as const;
 
 /** 允许渲染进程单向发送的 channel 白名单（渲染进程 → 主进程，fire-and-forget） */

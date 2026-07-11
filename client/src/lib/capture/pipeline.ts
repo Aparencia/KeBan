@@ -35,7 +35,8 @@ export class Pipeline {
    */
   registerWorker(worker: PipelineWorker): void {
     this.workers.push(worker);
-    console.warn(`[Pipeline] Worker registered: ${worker.name} (total: ${this.workers.length})`);
+    // eslint-disable-next-line no-console -- Worker 注册日志（debug 级别，非警告）
+    console.debug(`[Pipeline] Worker registered: ${worker.name} (total: ${this.workers.length})`);
   }
 
   /**
@@ -55,6 +56,7 @@ export class Pipeline {
    */
   push(message: PipelineMessage): boolean {
     if (this.queue.length >= this.options.maxQueueSize) {
+      // eslint-disable-next-line no-console -- 队列满丢消息需警告
       console.warn(`[Pipeline] Queue full (${this.options.maxQueueSize}), dropping message: ${message.id}`);
       return false;
     }
@@ -108,6 +110,7 @@ export class Pipeline {
   private async processMessage(message: PipelineMessage): Promise<void> {
     const eligibleWorkers = this.workers.filter(w => w.canProcess(message));
     if (eligibleWorkers.length === 0) {
+      // eslint-disable-next-line no-console -- 无 Worker 能处理该消息
       console.warn(`[Pipeline] No worker can process message type: ${message.type}`);
       return;
     }
@@ -122,6 +125,7 @@ export class Pipeline {
           this.options.onResult(result, message);
         }
       } catch (error) {
+        // eslint-disable-next-line no-console -- Worker 处理失败需记录
         console.error(`[Pipeline] Worker "${worker.name}" failed:`, error);
         if (this.options.onError) {
           this.options.onError(error as Error, message);

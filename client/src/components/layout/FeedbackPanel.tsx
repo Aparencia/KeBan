@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { X, Bug, Lightbulb, Star, Send, CheckCircle, Mail } from 'lucide-react';
+import { X, Bug, Lightbulb, Star, Send, CheckCircle, Copy, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -24,7 +24,6 @@ interface FeedbackPanelProps {
 // ─── Constants ──────────────────────────────────────────────────
 
 const STORAGE_KEY = 'keban_feedback';
-const FEEDBACK_EMAIL = 'x3508634878@163.com';
 const MAX_LENGTH = 500;
 const MAX_HISTORY = 20;
 
@@ -33,6 +32,18 @@ const TYPE_OPTIONS: { value: FeedbackType; label: string; icon: typeof Bug; emoj
   { value: 'suggestion', label: '建议', icon: Lightbulb, emoji: '💡' },
   { value: 'experience', label: '体验', icon: Star, emoji: '⭐' },
 ];
+
+const TYPE_ICON_MAP: Record<FeedbackType, string> = {
+  bug: '🐛',
+  suggestion: '💡',
+  experience: '⭐',
+};
+
+const TYPE_LABEL_MAP: Record<FeedbackType, string> = {
+  bug: 'Bug',
+  suggestion: '建议',
+  experience: '体验',
+};
 
 // ─── Helpers ────────────────────────────────────────────────────
 
@@ -50,23 +61,6 @@ function saveFeedback(items: FeedbackItem[]): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
 }
 
-function feedbackTypeLabel(type: FeedbackType): string {
-  return TYPE_LABEL_MAP[type] ?? type;
-}
-
-function sendFeedbackByEmail(feedback: FeedbackItem): void {
-  const subject = encodeURIComponent(
-    `[课伴反馈] ${feedbackTypeLabel(feedback.type)} - ${new Date().toLocaleDateString('zh-CN')}`,
-  );
-  const body = encodeURIComponent(
-    `反馈类型: ${feedbackTypeLabel(feedback.type)}\n` +
-    `描述: ${feedback.description}\n` +
-    (feedback.rating ? `评分: ${feedback.rating}/5\n` : '') +
-    `提交时间: ${new Date().toISOString()}\n`,
-  );
-  window.open(`mailto:${FEEDBACK_EMAIL}?subject=${subject}&body=${body}`, '_blank');
-}
-
 function formatTime(iso: string): string {
   const d = new Date(iso);
   const now = new Date();
@@ -79,6 +73,45 @@ function formatTime(iso: string): string {
   const diffDay = Math.floor(diffHour / 24);
   if (diffDay < 7) return `${diffDay}天前`;
   return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+}
+
+/** 生成短反馈编号 */
+function shortId(id: string): string {
+  return id.replace(/-/g, '').slice(0, 8).toUpperCase();
+}
+
+/** 将反馈内容格式化为纯文本，便于复制 */
+function formatFeedbackText(item: FeedbackItem): string {
+  const lines = [
+    `[课伴反馈] ${TYPE_LABEL_MAP[item.type]}`,
+    `编号: ${shortId(item.id)}`,
+    `时间: ${new Date(item.createdAt).toLocaleString('zh-CN')}`,
+    '',
+    item.description,
+  ];
+  if (item.rating) {
+    lines.push(`\n评分: ${item.rating}/5`);
+  }
+  return lines.join('\n');
+}
+
+/** 复制文本到剪贴板 */
+async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    // fallback for non-HTTPS environments
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(textarea);
+    return ok;
+  }
 }
 
 // ─── Star Rating ────────────────────────────────────────────────
@@ -124,59 +157,41 @@ function StarRating({ value, onChange }: StarRatingProps) {
 
 interface FeedbackFormProps {
   onSubmit: (item: FeedbackItem) => void;
-  onSendEmail: (item: FeedbackItem) => void;
 }
 
-function FeedbackForm({ onSubmit, onSendEmail }: FeedbackFormProps) {
+function FeedbackForm({ onSubmit }: FeedbackFormProps) {
   const [type, setType] = useState<FeedbackType>('bug');
   const [description, setDescription] = useState('');
   const [rating, setRating] = useState(0);
-  const [submitted, setSubmitted] = useState(false);
-  const [emailSent, setEmailSent] = useState(false);
+  const [successInfo, setSuccessInfo] = useState<{ id: string; time: string } | null>(null);
 
   const charCount = description.length;
   const isValid = description.trim().length > 0 && (type !== 'experience' || rating > 0);
 
   const handleSubmit = useCallback(() => {
     if (!isValid) return;
+    const now = new Date();
     const item: FeedbackItem = {
       id: crypto.randomUUID(),
       type,
       description: description.trim(),
       rating: type === 'experience' ? rating : undefined,
-      createdAt: new Date().toISOString(),
+      createdAt: now.toISOString(),
       status: 'sent',
     };
     onSubmit(item);
     setDescription('');
     setRating(0);
-    setSubmitted(true);
-    setTimeout(() => setSubmitted(false), 2000);
+    setSuccessInfo({ id: shortId(item.id), time: now.toLocaleString('zh-CN') });
+    // 成功提示 4 秒后消失
+    setTimeout(() => setSuccessInfo(null), 4000);
   }, [type, description, rating, isValid, onSubmit]);
-
-  const handleSendEmail = useCallback(() => {
-    if (!isValid) return;
-    const item: FeedbackItem = {
-      id: crypto.randomUUID(),
-      type,
-      description: description.trim(),
-      rating: type === 'experience' ? rating : undefined,
-      createdAt: new Date().toISOString(),
-      status: 'sent',
-    };
-    onSubmit(item);
-    onSendEmail(item);
-    setDescription('');
-    setRating(0);
-    setEmailSent(true);
-    setTimeout(() => setEmailSent(false), 2000);
-  }, [type, description, rating, isValid, onSubmit, onSendEmail]);
 
   return (
     <div className="space-y-kb-md">
       {/* Type selector */}
       <div className="flex gap-kb-xs">
-        {TYPE_OPTIONS.map(({ value, label, icon: Icon, emoji }) => (
+        {TYPE_OPTIONS.map(({ value, label, icon: _icon, emoji }) => (
           <button
             key={value}
             type="button"
@@ -238,59 +253,48 @@ function FeedbackForm({ onSubmit, onSendEmail }: FeedbackFormProps) {
         </div>
       )}
 
-      {/* Action buttons */}
-      <div className="flex gap-kb-xs">
-        {/* Submit button */}
-        <button
-          type="button"
-          onClick={handleSubmit}
-          disabled={!isValid || submitted}
-          className={cn(
-            'flex-1 flex items-center justify-center gap-kb-xs py-kb-sm rounded-kb-md',
-            'text-b2 font-medium transition-all duration-kb-fast',
-            submitted
-              ? 'bg-semantic-success text-white'
-              : isValid
-                ? 'bg-brand-600 text-white hover:bg-brand-700 active:scale-[0.98]'
-                : 'bg-bg-tertiary text-text-tertiary cursor-not-allowed',
-          )}
-        >
-          {submitted ? (
-            <>
-              <CheckCircle className="w-icon-sm h-icon-sm" />
-              <span>已提交</span>
-            </>
-          ) : (
-            <>
-              <Send className="w-icon-sm h-icon-sm" />
-              <span>提交反馈</span>
-            </>
-          )}
-        </button>
+      {/* Success confirmation */}
+      {successInfo && (
+        <div className={cn(
+          'flex items-start gap-2.5 p-3 rounded-kb-md',
+          'bg-semantic-success/8 border border-semantic-success/25',
+          'animate-in fade-in slide-in-from-top-1 duration-200',
+        )}>
+          <CheckCircle className="w-icon-sm h-icon-sm text-semantic-success flex-shrink-0 mt-0.5" strokeWidth={1.5} />
+          <div className="flex-1 min-w-0">
+            <p className="text-b2 font-medium text-semantic-success">感谢你的反馈！</p>
+            <p className="text-c1 text-text-tertiary mt-0.5">
+              编号 <span className="font-mono text-text-secondary">{successInfo.id}</span>
+              {' · '}{successInfo.time}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSuccessInfo(null)}
+            className="text-text-quaternary hover:text-text-tertiary transition-colors p-0.5"
+            aria-label="关闭提示"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
-        {/* Send email button */}
-        <button
-          type="button"
-          onClick={handleSendEmail}
-          disabled={!isValid || emailSent}
-          className={cn(
-            'flex items-center justify-center gap-kb-xs py-kb-sm px-kb-md rounded-kb-md',
-            'text-b2 font-medium transition-all duration-kb-fast',
-            emailSent
-              ? 'bg-semantic-success text-white'
-              : isValid
-                ? 'bg-brand-100 text-brand-700 hover:bg-brand-200 active:scale-[0.98] dark:bg-brand-900/30 dark:text-brand-400 dark:hover:bg-brand-900/50'
-                : 'bg-bg-tertiary text-text-tertiary cursor-not-allowed',
-          )}
-          title="通过邮件发送反馈"
-        >
-          {emailSent ? (
-            <CheckCircle className="w-icon-sm h-icon-sm" />
-          ) : (
-            <Mail className="w-icon-sm h-icon-sm" strokeWidth={1.5} />
-          )}
-        </button>
-      </div>
+      {/* Submit button */}
+      <button
+        type="button"
+        onClick={handleSubmit}
+        disabled={!isValid}
+        className={cn(
+          'w-full flex items-center justify-center gap-kb-xs py-kb-sm rounded-kb-md',
+          'text-b2 font-medium transition-all duration-kb-fast',
+          isValid
+            ? 'bg-brand-600 text-white hover:bg-brand-700 active:scale-[0.98]'
+            : 'bg-bg-tertiary text-text-tertiary cursor-not-allowed',
+        )}
+      >
+        <Send className="w-icon-sm h-icon-sm" />
+        <span>提交反馈</span>
+      </button>
     </div>
   );
 }
@@ -299,21 +303,21 @@ function FeedbackForm({ onSubmit, onSendEmail }: FeedbackFormProps) {
 
 interface FeedbackHistoryProps {
   items: FeedbackItem[];
+  onDelete: (id: string) => void;
 }
 
-const TYPE_ICON_MAP: Record<FeedbackType, string> = {
-  bug: '🐛',
-  suggestion: '💡',
-  experience: '⭐',
-};
+function FeedbackHistory({ items, onDelete }: FeedbackHistoryProps) {
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
-const TYPE_LABEL_MAP: Record<FeedbackType, string> = {
-  bug: 'Bug',
-  suggestion: '建议',
-  experience: '体验',
-};
+  const handleCopy = useCallback(async (item: FeedbackItem) => {
+    const ok = await copyToClipboard(formatFeedbackText(item));
+    if (ok) {
+      setCopiedId(item.id);
+      setTimeout(() => setCopiedId(null), 2000);
+    }
+  }, []);
 
-function FeedbackHistory({ items }: FeedbackHistoryProps) {
   if (items.length === 0) {
     return (
       <p className="text-center text-b3 text-text-tertiary py-kb-lg">
@@ -324,37 +328,90 @@ function FeedbackHistory({ items }: FeedbackHistoryProps) {
 
   return (
     <ul className="space-y-kb-xs">
-      {items.map((item) => (
-        <li
-          key={item.id}
-          className={cn(
-            'flex items-start gap-kb-sm p-kb-sm rounded-kb-md',
-            'bg-bg-secondary/50 hover:bg-bg-secondary transition-colors duration-kb-fast',
-          )}
-        >
-          <span className="text-b1 flex-shrink-0 mt-0.5">
-            {TYPE_ICON_MAP[item.type]}
-          </span>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-kb-xs mb-0.5">
-              <span className="text-c1 font-medium text-text-secondary">
-                {TYPE_LABEL_MAP[item.type]}
+      {items.map((item) => {
+        const isExpanded = expandedId === item.id;
+        const isCopied = copiedId === item.id;
+        return (
+          <li
+            key={item.id}
+            className={cn(
+              'rounded-kb-md transition-colors duration-kb-fast',
+              'bg-bg-secondary/50 hover:bg-bg-secondary',
+            )}
+          >
+            <div
+              className="flex items-start gap-kb-sm p-kb-sm cursor-pointer"
+              onClick={() => setExpandedId(isExpanded ? null : item.id)}
+            >
+              <span className="text-b1 flex-shrink-0 mt-0.5">
+                {TYPE_ICON_MAP[item.type]}
               </span>
-              {item.rating && (
-                <span className="text-c2 text-brand-500">
-                  {'★'.repeat(item.rating)}
-                </span>
-              )}
-              <span className="ml-auto text-c2 text-text-tertiary flex-shrink-0">
-                {formatTime(item.createdAt)}
-              </span>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-kb-xs mb-0.5">
+                  <span className="text-c1 font-medium text-text-secondary">
+                    {TYPE_LABEL_MAP[item.type]}
+                  </span>
+                  {item.rating && (
+                    <span className="text-c2 text-brand-500">
+                      {'★'.repeat(item.rating)}
+                    </span>
+                  )}
+                  <span className="text-c2 text-text-quaternary font-mono">
+                    #{shortId(item.id)}
+                  </span>
+                  <span className="ml-auto text-c2 text-text-tertiary flex-shrink-0">
+                    {formatTime(item.createdAt)}
+                  </span>
+                </div>
+                <p className={cn(
+                  'text-b3 text-text-primary',
+                  isExpanded ? 'whitespace-pre-wrap' : 'truncate',
+                )}>
+                  {item.description}
+                </p>
+              </div>
             </div>
-            <p className="text-b3 text-text-primary truncate">
-              {item.description}
-            </p>
-          </div>
-        </li>
-      ))}
+
+            {/* Expanded action bar */}
+            {isExpanded && (
+              <div className="flex items-center gap-2 px-kb-sm pb-kb-sm pt-0">
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); handleCopy(item); }}
+                  className={cn(
+                    'inline-flex items-center gap-1 px-2 py-1 rounded-kb-sm text-c1 font-medium',
+                    'transition-all duration-kb-fast',
+                    isCopied
+                      ? 'bg-semantic-success/10 text-semantic-success'
+                      : 'bg-bg-tertiary text-text-secondary hover:text-text-primary',
+                  )}
+                >
+                  {isCopied ? (
+                    <><CheckCircle className="w-3 h-3" /> 已复制</>
+                  ) : (
+                    <><Copy className="w-3 h-3" /> 复制内容</>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete(item.id);
+                    setExpandedId(null);
+                  }}
+                  className={cn(
+                    'inline-flex items-center gap-1 px-2 py-1 rounded-kb-sm text-c1 font-medium',
+                    'bg-bg-tertiary text-text-tertiary hover:text-semantic-error',
+                    'transition-all duration-kb-fast',
+                  )}
+                >
+                  <Trash2 className="w-3 h-3" /> 删除
+                </button>
+              </div>
+            )}
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -373,8 +430,8 @@ export default function FeedbackPanel({ isOpen, onClose }: FeedbackPanelProps) {
     setItems((prev) => [item, ...prev].slice(0, MAX_HISTORY));
   }, []);
 
-  const handleSendEmail = useCallback((item: FeedbackItem) => {
-    sendFeedbackByEmail(item);
+  const handleDelete = useCallback((id: string) => {
+    setItems((prev) => prev.filter((item) => item.id !== id));
   }, []);
 
   // Close on Escape
@@ -439,7 +496,7 @@ export default function FeedbackPanel({ isOpen, onClose }: FeedbackPanelProps) {
             <h3 className="text-b2 font-medium text-text-secondary mb-kb-sm">
               提交反馈
             </h3>
-            <FeedbackForm onSubmit={handleSubmit} onSendEmail={handleSendEmail} />
+            <FeedbackForm onSubmit={handleSubmit} />
           </section>
 
           {/* Divider */}
@@ -447,17 +504,22 @@ export default function FeedbackPanel({ isOpen, onClose }: FeedbackPanelProps) {
 
           {/* History section */}
           <section>
-            <h3 className="text-b2 font-medium text-text-secondary mb-kb-sm">
-              历史记录
-            </h3>
-            <FeedbackHistory items={items} />
+            <div className="flex items-center justify-between mb-kb-sm">
+              <h3 className="text-b2 font-medium text-text-secondary">
+                历史记录
+              </h3>
+              {items.length > 0 && (
+                <span className="text-c2 text-text-quaternary">{items.length} 条</span>
+              )}
+            </div>
+            <FeedbackHistory items={items} onDelete={handleDelete} />
           </section>
         </div>
 
-        {/* Footer contact info */}
+        {/* Footer */}
         <div className="px-kb-lg py-kb-md border-t border-border-light flex-shrink-0">
           <p className="text-c2 text-text-tertiary">
-            反馈邮箱：{FEEDBACK_EMAIL}
+            点击历史反馈可展开，复制内容后通过其他渠道发送
           </p>
           <p className="text-c2 text-text-tertiary mt-0.5">
             您的反馈将帮助我们改进课伴

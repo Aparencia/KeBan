@@ -25,10 +25,10 @@ export interface EfficiencyData {
 
 // ─── Color tokens ────────────────────────────────────────────────────────────
 
-const BRAND_500 = '#3B82F6';
-const SUCCESS_500 = '#10B981';
-const WARNING_500 = '#F59E0B';
-const ERROR_500 = '#EF4444';
+const BRAND_500 = '#FF7F50';
+const SUCCESS_500 = '#66D9A0';
+const WARNING_500 = '#FFB84D';
+const ERROR_500 = '#FF6B6B';
 const PIE_COLORS = [BRAND_500, SUCCESS_500, WARNING_500, ERROR_500];
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

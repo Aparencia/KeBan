@@ -3,6 +3,7 @@ import { aiPluginLoader } from './AIPluginLoader';
 import { getLocalFallbackMessage } from './LocalFallback';
 import { AIError } from './types';
 import { hasUserKeys } from './apiKeyManager';
+import { soundPlayer } from '@/lib/audio/SoundPlayer';
 import type {
   SummarizeResult, FlashcardResult, EvaluateResult, DurationResult,
   SummarizeOptions, FlashcardOptions, EvaluateOptions, DurationHistoryData, DurationOptions,
@@ -53,6 +54,7 @@ export function useAISummarize() {
     setState(prev => ({ ...prev, loading: true, error: null, needsConfig: false }));
     try {
       const result = await aiPluginLoader.summarizeNote(content, options);
+      soundPlayer.play('ai_analysis_done');
       setState({ data: result, loading: false, error: null, isFallback: false, needsConfig: false });
       return result;
     } catch (error: unknown) {
@@ -88,6 +90,7 @@ export function useAIFlashcards() {
     setState(prev => ({ ...prev, loading: true, error: null, needsConfig: false }));
     try {
       const result = await aiPluginLoader.generateFlashcards(content, options);
+      soundPlayer.play('ai_analysis_done');
       setState({ data: result, loading: false, error: null, isFallback: false, needsConfig: false });
       return result;
     } catch (error: unknown) {
@@ -123,6 +126,7 @@ export function useAIEvaluate() {
     setState(prev => ({ ...prev, loading: true, error: null, needsConfig: false }));
     try {
       const result = await aiPluginLoader.evaluateExplanation(concept, explanation, options);
+      soundPlayer.play('ai_analysis_done');
       setState({ data: result, loading: false, error: null, isFallback: false, needsConfig: false });
       return result;
     } catch (error: unknown) {

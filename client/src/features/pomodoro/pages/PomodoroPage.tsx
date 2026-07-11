@@ -1,13 +1,18 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
-import { Play, Pause, RotateCcw, SkipForward, GraduationCap, BookOpen, Clock, Volume2, VolumeX } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { AnimatePresence, motion } from 'framer-motion';
+import { Play, Pause, RotateCcw, SkipForward, GraduationCap, BookOpen, Clock, Volume2, VolumeX, Focus } from 'lucide-react';
 import { Button } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { db } from '@/lib/storage';
 import TimerRing from '../components/TimerRing';
 import GoalInput from '../components/GoalInput';
+import ImmersiveTimer from '../components/ImmersiveTimer';
+import SlideToExit from '../components/SlideToExit';
 import { usePomodoroStore } from '../store/usePomodoroStore';
 import { useAudioPlayer } from '@/lib/audio/useAudioPlayer';
 import { audioTracks, loadAudioPreferences, saveAudioPreferences } from '@/lib/audio/audioConfig';
+import { useReducedMotion } from '@/hooks/useReducedMotion';
 import type { AudioPreferences } from '@/lib/audio/audioConfig';
 
 export default function PomodoroPage() {
@@ -21,6 +26,7 @@ export default function PomodoroPage() {
     mode,
     settings,
     currentGoal,
+    isImmersive,
     start,
     pause,
     resume,
@@ -28,6 +34,8 @@ export default function PomodoroPage() {
     skip,
     setMode,
     setCurrentGoal,
+    enterImmersive,
+    exitImmersive,
     tick,
   } = usePomodoroStore();
 
@@ -123,6 +131,7 @@ export default function PomodoroPage() {
     setCurrentGoal(goal);
     setGoalModalOpen(false);
     start();
+    enterImmersive();
 
     // 若启用了记住目标，保存到 Dexie
     if (rememberGoal) {
@@ -142,6 +151,7 @@ export default function PomodoroPage() {
           });
         }
       } catch (e) {
+        // eslint-disable-next-line no-console -- 保存目标失败错误记录
         console.error('[Pomodoro] Failed to save goal:', e);
       }
     }
@@ -154,8 +164,75 @@ export default function PomodoroPage() {
     <Play className="w-icon-md h-icon-md" />
   );
 
+  // ── 减弱动效偏好 ──
+  const prefersReduced = useReducedMotion();
+
+  // ── 过渡动画配置 ──
+  const immersiveEnter = prefersReduced
+    ? {}
+    : { opacity: 0, scale: 0.9 };
+  const immersiveAnimate = { opacity: 1, scale: 1 };
+  const immersiveExit = prefersReduced
+    ? {}
+    : { opacity: 0, scale: 0.95 };
+  const immersiveTransition = prefersReduced
+    ? { duration: 0 }
+    : { duration: 0.45, ease: [0.4, 0, 0.2, 1] };
+
+  const normalEnter = prefersReduced
+    ? {}
+    : { opacity: 0 };
+  const normalAnimate = { opacity: 1 };
+  const normalExit = prefersReduced
+    ? {}
+    : { opacity: 0 };
+  const normalTransition = prefersReduced
+    ? { duration: 0 }
+    : { duration: 0.35, ease: [0.4, 0, 0.2, 1] };
+
   return (
-    <div className="flex flex-col items-center min-h-[calc(100vh-4rem)] md:min-h-[calc(100vh-4rem)] px-kb-md py-kb-lg">
+    <AnimatePresence mode="wait">
+      {isImmersive ? (
+        /* ── 沉浸模式全屏覆盖（Portal 到 body，避免祖先 transform 破坏 fixed 定位） ── */
+        createPortal(
+          <motion.div
+            key="immersive"
+            className="fixed inset-0 z-40 flex flex-col overflow-hidden border-none outline-none ring-0 shadow-none"
+            style={{ background: '#1A1D23' }}
+            initial={immersiveEnter}
+            animate={immersiveAnimate}
+            exit={immersiveExit}
+            transition={immersiveTransition}
+          >
+            {/* 顶部滑动退出条 */}
+            <div className="pt-kb-lg">
+              <SlideToExit onExit={exitImmersive} />
+            </div>
+
+            {/* 当前目标文字 */}
+            {currentGoal && (
+              <p className="text-center text-b3 text-text-tertiary/60 mt-kb-sm truncate px-kb-xl">
+                {currentGoal}
+              </p>
+            )}
+
+            {/* 圆环居中 */}
+            <div className="flex-1 flex items-center justify-center">
+              <ImmersiveTimer />
+            </div>
+          </motion.div>,
+          document.body,
+        )
+      ) : (
+        /* ── 普通视图 ── */
+        <motion.div
+          key="normal"
+          className="flex flex-col items-center min-h-[calc(100vh-4rem)] md:min-h-[calc(100vh-4rem)] px-kb-md py-kb-lg"
+          initial={normalEnter}
+          animate={normalAnimate}
+          exit={normalExit}
+          transition={normalTransition}
+        >
       {/* Mode tabs */}
       <div className="flex items-center gap-kb-xs p-1 bg-bg-secondary rounded-kb-full border border-border/40">
         <button
@@ -251,7 +328,7 @@ export default function PomodoroPage() {
             ? <Volume2 className="w-icon-sm h-icon-sm" strokeWidth={1.5} />
             : <VolumeX className="w-icon-sm h-icon-sm" strokeWidth={1.5} />}
         </button>
-        <span className="text-c1 text-text-tertiary select-none">{whiteNoiseTrack.nameZh}</span>
+        <span className="text-c1 text-text-tertiary select-none">🎵 {whiteNoiseTrack.nameZh}</span>
         <input
           type="range"
           min={0}
@@ -297,6 +374,22 @@ export default function PomodoroPage() {
         </Button>
       </div>
 
+      {/* 沉浸模式入口：计时器运行中或暂停时均可进入 */}
+      {(isRunning || isPaused) && (
+        <button
+          onClick={() => enterImmersive()}
+          className={cn(
+            'flex items-center gap-kb-xs px-4 py-2 rounded-kb-full text-b2 font-medium',
+            'text-text-tertiary hover:text-text-primary hover:bg-bg-secondary/80',
+            'transition-all duration-kb-fast ease-kb-default',
+            'mb-kb-lg',
+          )}
+        >
+          <Focus className="w-icon-sm h-icon-sm" strokeWidth={1.5} />
+          进入专注模式
+        </button>
+      )}
+
       {/* Goal Input Modal */}
       <GoalInput
         open={goalModalOpen}
@@ -305,6 +398,8 @@ export default function PomodoroPage() {
         rememberGoal={rememberGoal}
         onRememberChange={setRememberGoal}
       />
-    </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }

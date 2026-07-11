@@ -19,6 +19,7 @@ export class EventBus {
     }
     const handlers = this.handlers.get(event)!;
     if (handlers.size >= this.maxListenersPerEvent) {
+      // eslint-disable-next-line no-console -- 监听器超限警告
       console.warn(`[EventBus] Max listeners (${this.maxListenersPerEvent}) reached for event: ${event}`);
     }
     handlers.add(handler as EventHandler);
@@ -53,6 +54,7 @@ export class EventBus {
       try {
         handler(data);
       } catch (error) {
+        // eslint-disable-next-line no-console -- 事件处理错误需记录
         console.error(`[EventBus] Error in handler for event "${event}":`, error);
       }
     }

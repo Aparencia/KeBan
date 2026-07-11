@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useId } from 'react';
 import { cn } from '@/lib/utils';
 
 interface TimerRingProps {
@@ -9,9 +9,9 @@ interface TimerRingProps {
 }
 
 const PHASE_COLORS: Record<string, string> = {
-  work: '#F43F5E',
-  short_break: '#06B6D4',
-  long_break: '#2563EB',
+  work: '#FF6B6B',
+  short_break: '#00D2D3',
+  long_break: '#4FB0FF',
 };
 
 // RGB tuples for interpolation
@@ -55,6 +55,7 @@ export default function TimerRing({
 }: TimerRingProps) {
   const circleRef = useRef<SVGCircleElement>(null);
   const rafRef = useRef<number>(0);
+  const gradientId = useId();
 
   const progress = totalSeconds > 0 ? remainingSeconds / totalSeconds : 0;
   const color = getStrokeColor(phase, remainingSeconds);
@@ -107,11 +108,20 @@ export default function TimerRing({
         }
       `}</style>
 
-      <div className="relative inline-flex items-center justify-center">
+      <div className="relative flex items-center justify-center bg-transparent border-none outline-none">
         <svg
-          className="w-[200px] h-[200px] md:w-[240px] md:h-[240px]"
+          className="block w-[200px] h-[200px] md:w-[240px] md:h-[240px] bg-transparent"
           viewBox={`0 0 ${size} ${size}`}
+          overflow="visible"
         >
+          {/* Brand gradient definition for work phase */}
+          <defs>
+            <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="#4FB0FF" />
+              <stop offset="100%" stopColor="#FF7F50" />
+            </linearGradient>
+          </defs>
+
           {/* Background ring - very faint */}
           <circle
             cx={size / 2}
@@ -130,7 +140,7 @@ export default function TimerRing({
             r={r}
             fill="none"
             strokeWidth={strokeWidth}
-            stroke={color}
+            stroke={phase === 'work' ? `url(#${gradientId})` : color}
             strokeLinecap="round"
             strokeDasharray={circumference}
             strokeDashoffset={offset}
@@ -138,8 +148,7 @@ export default function TimerRing({
             style={{
               transform: 'rotate(-90deg)',
               transformOrigin: '50% 50%',
-              stroke: color,
-              transition: 'stroke 1s ease-in-out, stroke-dashoffset 1s linear',
+              transition: 'stroke-dashoffset 1s linear',
             }}
           />
         </svg>

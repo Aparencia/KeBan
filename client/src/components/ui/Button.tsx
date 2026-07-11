@@ -2,7 +2,7 @@ import React from 'react';
 import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
+export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'ai';
 export type ButtonSize = 'sm' | 'md' | 'lg';
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -18,7 +18,7 @@ const variantStyles: Record<ButtonVariant, string> = {
   primary: [
     'bg-brand-600 text-white',
     'hover:bg-brand-700 hover:shadow-md hover:shadow-brand-600/20',
-    'active:bg-brand-800 active:scale-95 active:ease-kb-bounce',
+    'active:bg-brand-800 active:scale-[0.98] active:ease-kb-bounce',
     'shadow-kb-sm',
   ].join(' '),
   secondary: [
@@ -36,6 +36,13 @@ const variantStyles: Record<ButtonVariant, string> = {
     'bg-[#F43F5E] text-white',
     'hover:bg-rose-700 hover:shadow-md hover:shadow-rose-600/20',
     'active:bg-rose-800 active:scale-95 active:ease-kb-bounce',
+    'shadow-kb-sm',
+  ].join(' '),
+  ai: [
+    'bg-gradient-to-r from-accent-500 to-brand-500 text-white',
+    'hover:from-accent-600 hover:to-brand-600',
+    'hover:shadow-md hover:shadow-accent-500/20',
+    'active:scale-[0.98] active:ease-kb-bounce',
     'shadow-kb-sm',
   ].join(' '),
 };

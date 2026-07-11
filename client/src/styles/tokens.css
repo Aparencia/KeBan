@@ -5,23 +5,35 @@
 
 /* ---- 品牌色（全局，与主题无关） ---- */
 :root {
-  /* 品牌主色 - 蓝色系 */
-  --kb-brand-50: #EFF6FF;
-  --kb-brand-100: #DBEAFE;
-  --kb-brand-200: #BFDBFE;
-  --kb-brand-300: #93C5FD;
-  --kb-brand-400: #60A5FA;
-  --kb-brand-500: #3B82F6;
-  --kb-brand-600: #2563EB;
-  --kb-brand-700: #1D4ED8;
-  --kb-brand-800: #1E40AF;
-  --kb-brand-900: #1E3A8A;
+  /* 品牌主色 - 橙色系（活力橙） */
+  --kb-brand-50: #FFF0EB;
+  --kb-brand-100: #FFE0D4;
+  --kb-brand-200: #FFC1A8;
+  --kb-brand-300: #FFA27C;
+  --kb-brand-400: #FF8D64;
+  --kb-brand-500: #FF7F50;
+  --kb-brand-600: #FF6347;
+  --kb-brand-700: #E04E3A;
+  --kb-brand-800: #C0392B;
+  --kb-brand-900: #962D22;
+
+  /* 品牌辅色 - 青色系（智慧青） */
+  --kb-accent-50: #EBF5FF;
+  --kb-accent-100: #D6EBFF;
+  --kb-accent-200: #ADD6FF;
+  --kb-accent-300: #85C2FF;
+  --kb-accent-400: #6AB4FF;
+  --kb-accent-500: #4FB0FF;
+  --kb-accent-600: #3498DB;
+  --kb-accent-700: #2980B9;
+  --kb-accent-800: #1F6391;
+  --kb-accent-900: #164B6E;
 
   /* 语义色 */
-  --kb-color-success: #10B981;
-  --kb-color-warning: #F59E0B;
-  --kb-color-error: #F43F5E;
-  --kb-color-info: #3B82F6;
+  --kb-color-success: #66D9A0;
+  --kb-color-warning: #FFB84D;
+  --kb-color-error: #FF6B6B;
+  --kb-color-info: #4FB0FF;
 
   /* 字体系统 */
   --kb-font-sans: 'Inter', 'PingFang SC', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -86,6 +98,12 @@
   /* 阴影令牌 */
   --shadow-hover: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
   --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+
+  /* 品牌阴影 */
+  --kb-shadow-brand: 0 4px 12px rgba(255, 127, 80, 0.3);
+  --kb-shadow-accent: 0 4px 12px rgba(79, 176, 255, 0.3);
+  --kb-shadow-brand-hover: 0 6px 20px rgba(255, 127, 80, 0.4);
+  --kb-shadow-accent-hover: 0 6px 20px rgba(79, 176, 255, 0.4);
 }
 
 /* ========== 动画 @keyframes ========== */
@@ -134,10 +152,46 @@
   100% { opacity: 0; transform: scale(0.92); }
 }
 
+/* 品牌书写动画 */
+@keyframes brand-draw {
+  0% { stroke-dashoffset: 50; }
+  100% { stroke-dashoffset: 0; }
+}
+
+/* 品牌浮动动画 */
+@keyframes brand-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+
+/* 知识星河入场（opacity + scale） */
+@keyframes kb-galaxy-enter {
+  0% { opacity: 0; transform: scale(0); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+/* 知识星河呼吸闪烁 */
+@keyframes kb-galaxy-twinkle {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
 /* Modal 入场 */
 @keyframes modal-enter {
   0% { opacity: 0; transform: scale(0.95) translateY(8px); }
   100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* 呼吸动效（沉浸模式圆环） */
+@keyframes breathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* 光环呼吸（沉浸模式外圈光晕） */
+@keyframes halo-breathe {
+  0%, 100% { opacity: 0.3; transform: scale(0.98); }
+  50% { opacity: 0.6; transform: scale(1.02); }
 }
 
 /* ---- 亮色主题 ---- */
@@ -159,17 +213,51 @@
 
 /* ---- 暗色主题 ---- */
 [data-theme="dark"] {
-  --kb-bg-primary: #0F172A;
-  --kb-bg-secondary: #1E293B;
-  --kb-bg-tertiary: #334155;
-  --kb-bg-elevated: #1E293B;
-  --kb-text-primary: #F8FAFC;
-  --kb-text-secondary: #CBD5E1;
-  --kb-text-tertiary: #64748B;
-  --kb-text-inverse: #0F172A;
-  --kb-border-default: #334155;
-  --kb-border-strong: #475569;
-  --kb-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
-  --kb-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -2px rgba(0, 0, 0, 0.2);
-  --kb-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -4px rgba(0, 0, 0, 0.2);
+  /* 品牌色在深色模式下提亮 */
+  --kb-brand-50: #2D1810;
+  --kb-brand-100: #3D2118;
+  --kb-brand-200: #5A3225;
+  --kb-brand-300: #7A4835;
+  --kb-brand-400: #A0624A;
+  --kb-brand-500: #FF9070;
+  --kb-brand-600: #FF7F50;
+  --kb-brand-700: #FF6347;
+  --kb-brand-800: #E04E3A;
+  --kb-brand-900: #C0392B;
+
+  /* 辅色在深色模式下调整 */
+  --kb-accent-50: #0D2233;
+  --kb-accent-100: #153347;
+  --kb-accent-200: #1F4D6B;
+  --kb-accent-300: #2A6B95;
+  --kb-accent-400: #3690C4;
+  --kb-accent-500: #00D2D3;
+  --kb-accent-600: #4FB0FF;
+  --kb-accent-700: #3498DB;
+  --kb-accent-800: #2980B9;
+  --kb-accent-900: #1F6391;
+
+  /* 背景色 */
+  --kb-bg-primary: #1A1D23;
+  --kb-bg-secondary: #242830;
+  --kb-bg-tertiary: #2F343D;
+  --kb-bg-elevated: #242830;
+
+  /* 文字色 */
+  --kb-text-primary: #E8ECF0;
+  --kb-text-secondary: #9BA8B7;
+  --kb-text-tertiary: #6B7C93;
+  --kb-text-inverse: #1A1D23;
+
+  /* 边框 */
+  --kb-border-default: #2F343D;
+  --kb-border-strong: #3D4350;
+
+  /* 阴影 */
+  --kb-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --kb-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.3);
+  --kb-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -4px rgba(0, 0, 0, 0.3);
+
+  --kb-shadow-brand: 0 4px 12px rgba(255, 144, 112, 0.3);
+  --kb-shadow-accent: 0 4px 12px rgba(0, 210, 211, 0.3);
 }

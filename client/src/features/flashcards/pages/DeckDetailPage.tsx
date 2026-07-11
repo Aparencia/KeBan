@@ -16,6 +16,7 @@ import {
   Download,
   PauseCircle,
   ExternalLink,
+  RotateCcw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { exportDeck, downloadDeckFile } from '@/lib/storage/exportImport';
@@ -23,6 +24,7 @@ import { useFlashcardStore } from '../store/useFlashcardStore';
 import { useAIFlashcards } from '@/lib/ai/useAI';
 import { useContextMenu } from '@/lib/contextMenu/useContextMenu';
 import type { Flashcard } from '@/types/models';
+import { createNewCardState } from '@/lib/sm2';
 import type { Flashcard as AIFlashcard } from '@/lib/ai/types';
 
 export default function DeckDetailPage() {
@@ -77,6 +79,7 @@ export default function DeckDetailPage() {
       label: '卡片操作',
       items: [
         { key: 'edit', label: '编辑卡片', icon: <Pencil className="w-4 h-4" strokeWidth={1.5} /> },
+        { key: 'relearn', label: '重学此卡', icon: <RotateCcw className="w-4 h-4" strokeWidth={1.5} /> },
         { key: 'suspend', label: '搁置卡片', icon: <PauseCircle className="w-4 h-4" strokeWidth={1.5} /> },
       ],
     },
@@ -93,6 +96,19 @@ export default function DeckDetailPage() {
       case 'edit':
         openEditModal(card);
         break;
+      case 'relearn': {
+        // 重学：重置 SM-2 状态，使卡片立即变为可学习状态
+        const fresh = createNewCardState();
+        updateCard(card.id, {
+          easeFactor: fresh.easeFactor,
+          interval: fresh.interval,
+          repetitions: fresh.repetitions,
+          lapses: fresh.lapses,
+          dueDate: fresh.dueDate,
+        });
+        toast({ type: 'success', message: '卡片已重置，可立即学习' });
+        break;
+      }
       case 'suspend': {
         // 搁置：将到期日设为 1 年后
         const farFuture = new Date();

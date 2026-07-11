@@ -15,7 +15,7 @@ export interface TagProps {
 const colorStyles: Record<TagColor, string> = {
   brand: 'bg-brand-100/70 text-brand-700',
   pomodoro: 'bg-rose-100/70 text-rose-700',
-  note: 'bg-blue-100/70 text-blue-700',
+  note: 'bg-accent-100/70 text-accent-700',
   flashcard: 'bg-cyan-100/70 text-cyan-700',
   feynman: 'bg-indigo-100/70 text-indigo-700',
   default: 'bg-bg-tertiary text-text-secondary',

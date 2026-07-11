@@ -4,7 +4,8 @@ import type {
   FlashcardDeck, Flashcard, FlashcardReview,
   FeynmanNote, FeynmanSummary, FeynmanWeakPoint,
   OperationLog, AppSettings, SyncConflict, OfflineQueueItem,
-  StudyCheckIn, Achievement, PomodoroGoal, WindowCapture
+  StudyCheckIn, Achievement, PomodoroGoal, WindowCapture,
+  Consent
 } from '@/types/models';
 
 export class KeBanDatabase extends Dexie {
@@ -26,6 +27,7 @@ export class KeBanDatabase extends Dexie {
   achievements!: Table<Achievement, string>;
   pomodoroGoals!: Table<PomodoroGoal, string>;
   windowCaptures!: Table<WindowCapture, string>;
+  consent!: Table<Consent, string>;
 
   constructor() {
     super('keban');
@@ -69,6 +71,7 @@ export class KeBanDatabase extends Dexie {
       offlineQueue: 'id, entityType, entityId, createdAt, retryCount',
     }).upgrade(async (tx) => {
       // Schema v2 -> v3 迁移：自增 number ID -> UUID string
+      // eslint-disable-next-line no-console -- 数据库迁移日志，仅在 upgrade 时执行一次
       console.log('[DB] Migrating to schema v3: number IDs -> UUID strings');
 
       // 由于 Dexie upgrade 函数中无法 import uuid，
@@ -114,6 +117,7 @@ export class KeBanDatabase extends Dexie {
         try {
           await migrateTable(tableName);
         } catch (e) {
+          // eslint-disable-next-line no-console -- 迁移失败需记录警告
           console.warn(`[DB] Failed to migrate table ${tableName}:`, e);
         }
       }
@@ -133,6 +137,7 @@ export class KeBanDatabase extends Dexie {
           }
         }
       } catch (e) {
+        // eslint-disable-next-line no-console -- 迁移失败需记录警告
         console.warn('[DB] Failed to migrate operationLog:', e);
       }
     });
@@ -153,6 +158,11 @@ export class KeBanDatabase extends Dexie {
     this.version(6).stores({
       flashcards: 'id, deckId, front, back, createdAt, dueDate, interval, easeFactor, repetitions, lapses, sourceNoteId',
       notes: 'id, title, folderId, createdAt, updatedAt, *tags, pinned, videoNoteType',
+    });
+
+    // v0.6.0: 新增隐私合规 consent 表
+    this.version(7).stores({
+      consent: 'id, &type, version, acceptedAt',
     });
   }
 }

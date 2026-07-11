@@ -11,7 +11,8 @@ import {
   Brain,
   Flame,
 } from 'lucide-react';
-import { Card, Skeleton, EmptyState, RichTooltip } from '@/components/ui';
+import { Card, Skeleton, EmptyState, RichTooltip, KnowledgeGalaxy } from '@/components/ui';
+import type { StarPoint } from '@/components/ui/KnowledgeGalaxy';
 import { cn } from '@/lib/utils';
 import { pomodoroSessionStore, flashcardStore, flashcardReviewStore } from '@/lib/storage';
 import { useFlashcardStore } from '@/features/flashcards/store/useFlashcardStore';
@@ -211,6 +212,29 @@ export default function DashboardPage() {
     },
   ];
 
+  // ── 知识星河星点数据 ──
+
+  const starPoints = useMemo<StarPoint[]>(() => {
+    const noteIds = new Set(notes.map((n) => n.id));
+    const feynmanIds = new Set(feynmanNotes.map((n) => n.id));
+
+    return allCards
+      .filter((c) => c.repetitions >= 1)
+      .map((c) => {
+        let color: StarPoint['color'] = 'brand';
+        if (c.sourceNoteId) {
+          if (feynmanIds.has(c.sourceNoteId)) {
+            color = 'purple';
+          } else if (noteIds.has(c.sourceNoteId)) {
+            color = 'accent';
+          }
+        }
+        // 使用 front 内容的前 20 个字符作为标题
+        const title = c.front.replace(/<[^>]*>/g, '').slice(0, 20) || '未命名卡片';
+        return { id: c.id, title, color };
+      });
+  }, [allCards, notes, feynmanNotes]);
+
   // ── 合并最近活动 ──
 
   const recentActivities = useMemo(() => {
@@ -393,6 +417,11 @@ export default function DashboardPage() {
 
       {/* ── 成就墙 ── */}
       <AchievementPanel />
+
+      {/* ── 知识星河 ── */}
+      <Card variant="default" padding="lg">
+        <KnowledgeGalaxy points={starPoints} />
+      </Card>
 
       {/* ── 快速开始 ── */}
       <section className="flex flex-col gap-kb-md">

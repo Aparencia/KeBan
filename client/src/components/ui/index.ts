@@ -56,3 +56,19 @@ export type { ComingSoonBadgeProps } from './ComingSoonBadge';
 // ComingSoonPlaceholder
 export { ComingSoonPlaceholder } from './ComingSoonPlaceholder';
 export type { ComingSoonPlaceholderProps } from './ComingSoonPlaceholder';
+
+// ModeIndicator
+export { default as ModeIndicator } from './ModeIndicator';
+export type { ModeIndicatorProps } from './ModeIndicator';
+
+// AIButton
+export { AIButton } from './AIButton';
+export type { AIButtonProps } from './AIButton';
+
+// BrandLogo
+export { BrandLogo } from './BrandLogo';
+export type { BrandLogoProps, BrandLogoMode } from './BrandLogo';
+
+// KnowledgeGalaxy
+export { default as KnowledgeGalaxy } from './KnowledgeGalaxy';
+export type { KnowledgeGalaxyProps, StarPoint } from './KnowledgeGalaxy';

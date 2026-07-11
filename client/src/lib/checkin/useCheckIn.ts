@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { db } from '@/lib/storage/database';
 import type { StudyCheckIn } from '@/types/models';
+import { soundPlayer } from '@/lib/audio/SoundPlayer';
 
 function todayStr(): string {
   return new Date().toISOString().split('T')[0]; // YYYY-MM-DD
@@ -45,6 +46,7 @@ export function useCheckIn(moduleName: string) {
     };
 
     await db.studyCheckIns.add(record);
+    soundPlayer.play('daily_checkin');
     setTodayCheckIn(record);
     setStreakDays(newStreak);
   }, [moduleName]);

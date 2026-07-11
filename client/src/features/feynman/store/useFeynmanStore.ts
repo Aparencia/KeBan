@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { feynmanNoteStore, feynmanSummaryStore, feynmanWeakPointStore } from '@/lib/storage';
 import { createWithLog, updateWithLog, deleteWithLog } from '@/lib/storage/writeWithLog';
 import type { FeynmanNote, FeynmanSummary, FeynmanWeakPoint } from '@/types/models';
+import { soundPlayer } from '@/lib/audio/SoundPlayer';
 
 // ── Store 内部组合视图（用于 UI 展示）─────────────────────────
 
@@ -189,6 +190,8 @@ export const useFeynmanStore = create<FeynmanState>((set, get) => {
       const id = await createWithLog(feynmanWeakPointStore, 'feynmanWeakPoints', wpData);
       const record: FeynmanWeakPoint = { id, ...wpData };
 
+      soundPlayer.play('feynman_weak_point');
+
       set((state) => ({
         weakPoints: {
           ...state.weakPoints,
@@ -304,6 +307,7 @@ export const useFeynmanStore = create<FeynmanState>((set, get) => {
 
       await updateWithLog(feynmanNoteStore, 'feynmanNotes', noteId, updated);
       set((state) => ({ notes: patchNote(state.notes, updated) }));
+      soundPlayer.play('feynman_complete');
     },
 
     // ── 批量加载 ──────────────────────────────────────────────

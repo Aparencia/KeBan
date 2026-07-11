@@ -1,10 +1,10 @@
-import { ArrowLeft, Sun, Moon, Wifi, WifiOff, Signal, RefreshCw, CheckCircle2, HardDrive, Cloud, Globe, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Sun, Moon, Wifi, WifiOff, Signal, RefreshCw, CheckCircle2, ChevronRight } from 'lucide-react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useTheme } from '@/hooks/useTheme';
 import { useBreadcrumb } from '@/hooks/usePageTitle';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { useSync } from '@/lib/sync/SyncContext';
-import { useModeState } from '@/hooks/useMode';
+import ModeIndicator from '@/components/ui/ModeIndicator';
 import { cn } from '@/lib/utils';
 
 function formatLastSync(date: Date | null): string {
@@ -22,12 +22,6 @@ const networkStatusConfig = {
   offline: { color: 'bg-semantic-danger', label: '离线', icon: WifiOff, iconColor: 'text-text-tertiary' },
 } as const;
 
-const modeIndicatorConfig = {
-  local: { label: '本地', icon: HardDrive, color: 'text-text-tertiary', bg: 'bg-bg-secondary' },
-  hybrid: { label: '混合', icon: Cloud, color: 'text-brand-500', bg: 'bg-brand-50' },
-  full: { label: '云端', icon: Globe, color: 'text-brand-600', bg: 'bg-brand-50' },
-} as const;
-
 /** 根路由（无返回按钮） */
 const ROOT_PATHS = new Set(['/', '/pomodoro', '/notes', '/flashcards', '/feynman', '/settings', '/analytics', '/inspiration']);
 
@@ -36,14 +30,11 @@ export default function Navbar() {
   const { crumbs } = useBreadcrumb();
   const { status: netStatus } = useNetworkStatus();
   const { isSyncing, lastSyncAt, pendingCount } = useSync();
-  const { mode } = useModeState();
   const navigate = useNavigate();
   const { pathname } = useLocation();
 
   const netConfig = networkStatusConfig[netStatus];
   const NetIcon = netConfig.icon;
-  const modeConfig = modeIndicatorConfig[mode];
-  const ModeIcon = modeConfig.icon;
 
   // 仅在子页面显示返回按钮（不在根路由上）
   const showBack = !ROOT_PATHS.has(pathname) && pathname !== '/';
@@ -111,16 +102,7 @@ export default function Navbar() {
       {/* Right: Mode + Sync + Network + Theme toggle */}
       <div className="flex items-center gap-kb-md flex-shrink-0 ml-kb-md">
         {/* Mode indicator */}
-        <div
-          className={cn(
-            'hidden sm:flex items-center gap-1.5 px-2 py-1 rounded-kb-md',
-            modeConfig.bg,
-          )}
-          title={`当前模式：${modeConfig.label}`}
-        >
-          <ModeIcon className={cn('w-icon-xs h-icon-xs', modeConfig.color)} strokeWidth={1.5} />
-          <span className={cn('text-c1 font-medium', modeConfig.color)}>{modeConfig.label}</span>
-        </div>
+        <ModeIndicator className="hidden sm:inline-flex" />
         {/* Sync status */}
         <div
           className="flex items-center gap-kb-xs text-caption text-text-tertiary"

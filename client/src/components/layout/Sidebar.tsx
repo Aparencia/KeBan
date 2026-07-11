@@ -1,9 +1,11 @@
 import { useState } from 'react';
+import appIcon from '../../../app-icon.png';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { Home, Timer, FileText, Layers, Lightbulb, Settings, ChevronLeft, ChevronRight, MessageSquare, Clapperboard, BarChart3, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSidebarStore } from '@/stores/useSidebarStore';
 import { useCaptureStore } from '@/stores/useCaptureStore';
+
 import FeedbackPanel from './FeedbackPanel';
 
 const navItems = [
@@ -50,9 +52,7 @@ export default function Sidebar() {
         'flex items-center gap-kb-sm px-kb-lg h-14 flex-shrink-0',
         collapsed && 'justify-center px-0',
       )}>
-        <div className="w-7 h-7 rounded-kb-md bg-brand-600 flex items-center justify-center flex-shrink-0">
-          <span className="text-white text-c1 font-bold">课</span>
-        </div>
+        <img src={appIcon} alt="课伴" className="w-7 h-7 rounded-lg flex-shrink-0" />
         <span className={cn(
           'text-b1 font-semibold text-text-primary',
           collapsed && 'hidden',
@@ -199,7 +199,7 @@ export default function Sidebar() {
 
       {/* Bottom: Settings */}
       <div className={cn(
-        'px-kb-sm pb-kb-md pt-kb-sm',
+        'px-kb-sm pb-kb-sm pt-kb-sm',
         collapsed && 'px-1',
       )}>
         <NavLink
@@ -228,6 +228,13 @@ export default function Sidebar() {
           )}
         </NavLink>
       </div>
+
+      {/* Brand gradient accent line */}
+      <div className={cn(
+        'mx-kb-md mb-kb-sm h-[2px] rounded-kb-full',
+        'bg-gradient-to-r from-accent-500 to-brand-500',
+        collapsed && 'mx-2',
+      )} />
     </aside>
       <FeedbackPanel isOpen={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
     </>

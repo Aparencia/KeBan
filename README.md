@@ -3,7 +3,7 @@
   <p align="center"><strong>你的 AI 智能学习伙伴 — 让每一分钟网课都高效有价值</strong></p>
   <p align="center">
     <img src="https://img.shields.io/badge/status-beta-green.svg" alt="Status" />
-    <img src="https://img.shields.io/badge/version-v0.4.0-blue.svg" alt="Version" />
+    <img src="https://img.shields.io/badge/version-v0.6.0-blue.svg" alt="Version" />
     <img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License" />
   </p>
 </p>
@@ -163,6 +163,8 @@ KeBan/
 | **MVP-1 Alpha** | ✅ 已完成 | 纯本地核心版 — 四大模块 + 离线支持 + 本地存储 |
 | **MVP-2 Alpha** | ✅ 已完成 | AI 增强 + 云同步 + Electron 桌面端 + 用户认证 |
 | **v0.4.0 Beta** | ✅ 已完成 | 网课笔记提取 + ContextMenu 2.0 + AuthGuard + 动效系统 + 反馈面板 |
+| **v0.5.0** | ✅ 已完成 | 安全加固 + 效率分析 + 全局命令面板 + 灵感空间 + 上云部署 |
+| **v0.6.0** | ✅ 已完成 | 沉浸式计时 + 自动更新 + 音效系统 + 隐私政策 + 品牌视觉升级 |
 | **正式上线** | 🎯 规划中 | 生产就绪版 |
 
 ### 🔮 未来方向
@@ -181,8 +183,8 @@ KeBan/
 | 组成部分 | 含义 | 示例 |
 |----------|------|------|
 | `MAJOR` | 不兼容的 API 变更 | `1.0.0` |
-| `MINOR` | 向后兼容的功能新增 | `0.4.0` |
-| `PATCH` | 向后兼容的缺陷修复 | `0.4.1` |
+| `MINOR` | 向后兼容的功能新增 | `0.5.0` |
+| `PATCH` | 向后兼容的缺陷修复 | `0.5.1` |
 
 发布 Tag 前请确保：`npm run lint` / `npm run test` / `npm run build` 全部通过。
 

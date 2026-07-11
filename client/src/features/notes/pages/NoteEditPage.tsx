@@ -2,7 +2,6 @@ import { useEffect, useCallback, useRef, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
-import Underline from '@tiptap/extension-underline';
 import Highlight from '@tiptap/extension-highlight';
 import Placeholder from '@tiptap/extension-placeholder';
 import { Table } from '@tiptap/extension-table';
@@ -23,6 +22,7 @@ import {
   Table2, ListTodo, ImageIcon, AlignLeft, AlignCenter, AlignRight, AlignJustify, Palette,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { AIButton } from '@/components/ui/AIButton';
 import { useNoteStore } from '../store/useNoteStore';
 import { CornellLayout } from '../components/CornellLayout';
 import FreeCanvas from '../components/FreeCanvas';
@@ -36,6 +36,7 @@ import { useContextMenu } from '@/lib/contextMenu';
 import { CaptureSidebar } from '../components/CaptureSidebar';
 import { TodoStats } from '../components/TodoStats';
 import { useCaptureStore } from '@/stores/useCaptureStore';
+import { soundPlayer } from '@/lib/audio/SoundPlayer';
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'failed';
 
@@ -158,6 +159,7 @@ export default function NoteEditPage() {
           setSaveStatus('saving');
           try {
             await updateNote(noteId, { content });
+            soundPlayer.play('note_autosave');
             setSaveStatus('saved');
             if (saveStatusTimerRef.current) clearTimeout(saveStatusTimerRef.current);
             saveStatusTimerRef.current = setTimeout(() => setSaveStatus('idle'), 2000);
@@ -181,7 +183,7 @@ export default function NoteEditPage() {
   const editor = useEditor({
     extensions: [
       StarterKit,
-      Underline,
+      // Underline 已由 StarterKit 内置，无需重复引入
       Highlight.configure({ multicolor: false }),
       Placeholder.configure({ placeholder: '开始记录你的笔记...' }),
       Table.configure({ resizable: true }),
@@ -202,6 +204,15 @@ export default function NoteEditPage() {
       debouncedSave(contentStr);
     },
   });
+
+  // 确保编辑器在组件卸载或笔记切换时正确销毁
+  useEffect(() => {
+    return () => {
+      if (editor) {
+        editor.destroy();
+      }
+    };
+  }, [editor]);
 
   // 选中文本右键菜单分组
   const editorCtxGroups = useMemo<ContextMenuGroup[]>(() => [
@@ -435,6 +446,7 @@ export default function NoteEditPage() {
             if (editor) {
               const content = JSON.stringify(editor.getJSON());
               updateNote(noteId!, { content, title: titleRef.current?.value || note.title });
+              soundPlayer.play('note_manual_save');
             }
           }}
           className={cn(
@@ -448,7 +460,11 @@ export default function NoteEditPage() {
           保存
         </button>
 
-        <button
+        <AIButton
+          size="sm"
+          loading={aiLoading}
+          disabled={aiLoading}
+          tooltip="请先写一些笔记内容再生成摘要"
           onClick={() => {
             if (!editor) return;
             const text = editor.getText();
@@ -460,25 +476,10 @@ export default function NoteEditPage() {
               .then(() => setSummaryModalOpen(true))
               .catch(() => toast({ type: 'error', message: 'AI 摘要生成失败，请稍后重试' }));
           }}
-          disabled={aiLoading}
           title={aiLoading ? '正在生成摘要…' : 'AI 摘要'}
-          className={cn(
-            'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-kb-md text-b2 font-medium',
-            'bg-brand-600 text-white',
-            'hover:bg-brand-700 active:scale-95 transition-all duration-kb-fast',
-            aiLoading && 'opacity-60 cursor-not-allowed',
-          )}
         >
-          {aiLoading ? (
-            <svg className="w-icon-sm h-icon-sm animate-spin" viewBox="0 0 24 24" fill="none">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
-          ) : (
-            <Sparkles className="w-icon-sm h-icon-sm" strokeWidth={1.5} />
-          )}
           AI 摘要
-        </button>
+        </AIButton>
       </div>
 
       {/* 工具栏（康奈尔/自由画布模式隐藏） */}
@@ -787,23 +788,15 @@ export default function NoteEditPage() {
                     <span className="text-b2 text-brand-700">
                       💡 检测到 {aiData.keyPoints!.length} 个核心概念，适合制作复习闪卡
                     </span>
-                    <button
+                    <AIButton
+                      size="sm"
                       onClick={handleGenerateAllFlashcards}
                       disabled={flashcardLoading}
-                      className={`flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-kb-md text-b3 font-medium bg-brand-600 text-white hover:bg-brand-700 active:scale-95 transition-all duration-kb-fast ${
-                        flashcardLoading ? 'opacity-60 cursor-not-allowed' : ''
-                      }`}
+                      loading={flashcardLoading}
+                      className="flex-shrink-0"
                     >
-                      {flashcardLoading ? (
-                        <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                        </svg>
-                      ) : (
-                        <Sparkles className="w-3.5 h-3.5" strokeWidth={1.5} />
-                      )}
                       一键生成
-                    </button>
+                    </AIButton>
                   </div>
                 )}
 

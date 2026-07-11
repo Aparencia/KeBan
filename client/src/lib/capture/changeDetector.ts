@@ -70,6 +70,7 @@ export class ChangeDetector {
         changeScore,
       };
     } catch (error) {
+      // eslint-disable-next-line no-console -- 帧处理错误需记录以便调试
       console.error('[ChangeDetector] Error processing frame:', error);
       // 出错时保守认为有变化
       return { hasChanged: true, changeScore: 1.0 };

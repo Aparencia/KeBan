@@ -100,6 +100,16 @@ class ModeManager {
     };
   }
 
+  /** 当前模式下 AI 功能是否可用 */
+  isAIEnabled(): boolean {
+    return this.getConfig().aiEnabled;
+  }
+
+  /** 当前模式下同步功能是否可用 */
+  isSyncEnabled(): boolean {
+    return this.getConfig().syncEnabled;
+  }
+
   /**
    * 根据认证和网络状态自动计算推荐模式
    */

@@ -158,7 +158,6 @@ export class CrossFusionEngine {
         // 语音开始
         this.isSpeaking = true;
         this.speechStartTime = now;
-        console.log(`[CrossFusion] Speech started (energy=${rmsEnergy.toFixed(4)})`);
       }
       this.lastSpeechTime = now;
     } else if (this.isSpeaking && this.lastSpeechTime !== null) {
@@ -170,11 +169,9 @@ export class CrossFusionEngine {
         this.isSpeaking = false;
 
         if (duration >= this.vadConfig.minSpeechDuration) {
-          console.log(`[CrossFusion] Speech segment ended (duration=${duration}ms)`);
           this.completeSpeechSegment(this.speechStartTime ?? now, now);
-        } else {
-          console.log(`[CrossFusion] Speech too short (${duration}ms < ${this.vadConfig.minSpeechDuration}ms), ignoring`);
         }
+        // Speech too short — ignored
 
         this.speechStartTime = null;
         this.lastSpeechTime = null;

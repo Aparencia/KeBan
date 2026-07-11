@@ -47,8 +47,8 @@ export class CryptoManager {
 
       // 派生 AES-GCM 密钥（PBKDF2，100,000 次迭代）
       this.key = await deriveKey(deviceKey, salt);
-      console.log('[CryptoManager] Key initialized for user:', userId);
     } catch (error) {
+      // eslint-disable-next-line no-console -- 加密初始化失败需记录
       console.error('[CryptoManager] Failed to initialize key:', error);
       this.key = null;
     }
@@ -105,7 +105,6 @@ export class CryptoManager {
    */
   clear(): void {
     this.key = null;
-    console.log('[CryptoManager] Key cleared');
   }
 
   // ─── 私有辅助方法 ────────────────────────────────────────────────────────

@@ -96,7 +96,7 @@ body {
   padding: 0.125rem 0.375rem;
   font-size: 0.875em;
   font-family: var(--kb-font-mono, ui-monospace, monospace);
-  color: var(--kb-brand-600);
+  color: var(--kb-brand-400);
 }
 
 .tiptap pre {
@@ -306,8 +306,8 @@ body {
   width: 4px;
   height: 4px;
   border-radius: 50%;
-  background: var(--kb-brand-400, #60a5fa);
-  box-shadow: 0 0 6px var(--kb-brand-400, #60a5fa);
+  background: var(--kb-brand-400, #FF8D64);
+  box-shadow: 0 0 6px var(--kb-brand-400, #FF8D64);
   animation: kb-particle-glow 1s ease-out forwards;
   pointer-events: none;
 }

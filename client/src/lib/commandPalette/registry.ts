@@ -45,7 +45,8 @@ class CommandRegistry {
 
   register(command: Command): void {
     if (this.commands.has(command.id)) {
-      throw new Error(`[CommandRegistry] 命令 id "${command.id}" 已注册，不允许重复注册。`);
+      // 幂等：已注册的命令直接跳过（兼容 React Strict Mode 双重执行）
+      return;
     }
     this.commands.set(command.id, command);
   }

@@ -4,6 +4,8 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import type { Achievement } from '@/types/models';
+import { soundPlayer } from '@/lib/audio/SoundPlayer';
+import { BrandLogo } from '@/components/ui/BrandLogo';
 
 const ICON_MAP: Record<string, LucideIcon> = {
   Timer, Layers, Lightbulb, FileText, Flame, Trophy, Medal,
@@ -33,6 +35,7 @@ export default function AchievementToast() {
     const handler = (e: Event) => {
       const a = (e as CustomEvent<Achievement>).detail;
       if (!a) return;
+      soundPlayer.play('achievement_unlocked');
       const localId = ++idRef.current;
       setToasts((prev) => [...prev, { ...a, localId, exiting: false }]);
       // Auto-dismiss after 4s
@@ -66,6 +69,12 @@ export default function AchievementToast() {
               <div className="w-10 h-10 rounded-kb-lg bg-brand-500/15 flex items-center justify-center">
                 <Icon className="w-5 h-5 text-brand-500" strokeWidth={1.5} />
               </div>
+              {/* Golden brand watermark */}
+              <BrandLogo
+                mode="golden"
+                size={48}
+                className="absolute -top-1 -right-1 opacity-80"
+              />
               {/* Particles */}
               {!t.exiting &&
                 PARTICLE_DIRS.map((deg, i) => {

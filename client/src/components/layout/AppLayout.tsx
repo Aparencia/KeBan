@@ -1,10 +1,12 @@
 import { useEffect } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
+import { AnimatePresence } from 'framer-motion';
 import Sidebar from './Sidebar';
 import BottomNav from './BottomNav';
 import Navbar from './Navbar';
 import CommandPalette from '../ui/CommandPalette';
 import SyncStatusBar from '../sync/SyncStatusBar';
+import { PageTransition } from './PageTransition';
 
 const DENSITY_KEY = 'keban-density';
 
@@ -33,7 +35,11 @@ export default function AppLayout() {
   if (isStudySession) {
     return (
       <main className="min-h-screen bg-bg-primary">
-        <Outlet />
+        <AnimatePresence mode="wait">
+          <PageTransition key={pathname}>
+            <Outlet />
+          </PageTransition>
+        </AnimatePresence>
       </main>
     );
   }
@@ -48,14 +54,18 @@ export default function AppLayout() {
         {/* Top navbar */}
         <Navbar />
 
+        {/* 同步/网络状态横幅 */}
+        <SyncStatusBar />
+
         {/* Page content */}
-        <main className="flex-1 overflow-y-auto pb-16 md:pb-0">
-          <Outlet />
+        <main className="flex-1 overflow-y-auto overflow-x-hidden pb-16 md:pb-0 relative">
+          <AnimatePresence mode="wait">
+            <PageTransition key={pathname}>
+              <Outlet />
+            </PageTransition>
+          </AnimatePresence>
         </main>
       </div>
-
-      {/* 同步状态栏 */}
-      <SyncStatusBar />
 
       {/* 全局命令面板 */}
       <CommandPalette />

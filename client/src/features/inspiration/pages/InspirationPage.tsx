@@ -10,7 +10,7 @@ import { useAITagContent } from '@/lib/ai/useAI';
 // ─────────────────────────────────────────────────────────────
 
 const CONTENT_NATURE_OPTIONS: { value: InspirationTags['content_nature']; label: string; color: string; bg: string }[] = [
-  { value: 'concept',     label: '概念', color: 'text-blue-600',   bg: 'bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-700' },
+  { value: 'concept',     label: '概念', color: 'text-accent-600',   bg: 'bg-accent-50 border-accent-200 dark:bg-accent-900/20 dark:border-accent-700' },
   { value: 'question',    label: '疑问', color: 'text-orange-600', bg: 'bg-orange-50 border-orange-200 dark:bg-orange-900/20 dark:border-orange-700' },
   { value: 'inspiration', label: '灵感', color: 'text-purple-600', bg: 'bg-purple-50 border-purple-200 dark:bg-purple-900/20 dark:border-purple-700' },
   { value: 'todo',        label: '待办', color: 'text-green-600',  bg: 'bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-700' },

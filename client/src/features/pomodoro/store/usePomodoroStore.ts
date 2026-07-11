@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { loadSettings, saveSettings, recordSession, playCompletionSound, sendNotification } from './usePomodoroPersistence';
+import { soundPlayer } from '@/lib/audio/SoundPlayer';
 
 type Phase = 'work' | 'short_break' | 'long_break';
 type Mode = 'class' | 'self_study';
@@ -29,6 +30,10 @@ interface PomodoroState {
   sessionStartTime: number | null;
   /** 当前番茄目标文字 */
   currentGoal: string | null;
+  /** 是否处于沉浸专注模式 */
+  isImmersive: boolean;
+  /** 退出沉浸后标记，用于 resume 时自动重入 */
+  wasImmersive: boolean;
 
   start: () => void;
   pause: () => void;
@@ -37,6 +42,8 @@ interface PomodoroState {
   skip: () => void;
   setMode: (mode: Mode) => void;
   setCurrentGoal: (goal: string | null) => void;
+  enterImmersive: () => void;
+  exitImmersive: () => void;
   tick: () => void;
   updateSettings: (settings: Partial<PomodoroSettings>) => void;
   initialize: () => Promise<void>;
@@ -93,6 +100,8 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
     settings: defaultSettings,
     sessionStartTime: null,
     currentGoal: null,
+    isImmersive: false,
+    wasImmersive: false,
 
     initialize: async () => {
       const saved = await loadSettings();
@@ -116,19 +125,24 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
 
     start: () => {
       set({ isRunning: true, isPaused: false, sessionStartTime: Date.now() });
+      soundPlayer.play('pomodoro_start');
     },
 
     pause: () => {
       set({ isRunning: false, isPaused: true });
+      soundPlayer.play('pomodoro_pause');
     },
 
     resume: () => {
-      const { sessionStartTime } = get();
+      const { sessionStartTime, wasImmersive } = get();
       set({
         isRunning: true,
         isPaused: false,
         // 如果 sessionStartTime 为空（重置后），重新记录
         sessionStartTime: sessionStartTime ?? Date.now(),
+        // 若上次是从沉浸模式退出的，自动重新进入沉浸
+        isImmersive: wasImmersive ? true : get().isImmersive,
+        wasImmersive: false,
       });
     },
 
@@ -141,6 +155,7 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
         isRunning: false,
         isPaused: false,
         sessionStartTime: null,
+        wasImmersive: false,
       });
     },
 
@@ -170,6 +185,16 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
     },
 
     setCurrentGoal: (goal) => set({ currentGoal: goal }),
+
+    enterImmersive: () => set({ isImmersive: true }),
+    exitImmersive: () => {
+      const { isRunning } = get();
+      // 退出沉浸时自动暂停计时器（不等于结束专注）
+      if (isRunning) {
+        soundPlayer.play('pomodoro_pause');
+      }
+      set({ isImmersive: false, wasImmersive: true, isRunning: false, isPaused: true });
+    },
 
     tick: () => {
       const { remainingSeconds, isRunning, phase, completedCount, settings, mode } = get();
@@ -217,11 +242,21 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
                 });
               });
             }).catch(() => {});
-          }).catch(console.error);
+          }).catch(() => {});
         }
         // 播放提示音
         if (settings.soundEnabled) {
           playCompletionSound();
+        }
+        // 播放阶段完成音效
+        if (phase === 'work') {
+          soundPlayer.play('pomodoro_work_complete');
+        } else {
+          soundPlayer.play('pomodoro_break_end');
+          // 长休结束 = 一整轮完成
+          if (phase === 'long_break') {
+            soundPlayer.play('pomodoro_complete');
+          }
         }
         // 发送浏览器通知
         if (settings.notificationEnabled) {
@@ -243,7 +278,16 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
           sessionStartTime: null,
         });
       } else {
-        set({ remainingSeconds: remainingSeconds - 1 });
+        const nextRemaining = remainingSeconds - 1;
+        // 5 分钟预警（工作阶段）
+        if (phase === 'work' && nextRemaining === 300) {
+          soundPlayer.play('pomodoro_5min_warning');
+        }
+        // 最后 10 秒滴答
+        if (phase === 'work' && nextRemaining <= 10 && nextRemaining > 0) {
+          soundPlayer.play('pomodoro_tick_final');
+        }
+        set({ remainingSeconds: nextRemaining });
       }
     },
 
@@ -264,7 +308,7 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
       }
 
       // 持久化设置
-      saveSettings(merged).catch(console.error);
+      saveSettings(merged).catch(() => {});
     },
   };
 });

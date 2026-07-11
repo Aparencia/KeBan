@@ -1,7 +1,7 @@
 {
   "name": "client",
   "private": true,
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "课伴 - 跨端学习平台",
   "author": "KeBan Team",
   "type": "module",
@@ -37,6 +37,8 @@
     "@tiptap/starter-kit": "^3.27.3",
     "clsx": "^2.1.1",
     "dexie": "^4.4.4",
+    "electron-updater": "^6.3.9",
+    "framer-motion": "^12.42.2",
     "lucide-react": "^1.23.0",
     "pixelmatch": "^7.2.0",
     "pngjs": "^7.0.0",

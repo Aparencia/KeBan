@@ -225,6 +225,7 @@ export class SyncEngine {
           successIds.push(item.id);
         } catch (err: unknown) {
           const errMsg = err instanceof Error ? err.message : String(err);
+          // eslint-disable-next-line no-console -- 同步重放失败需记录以便排查
           console.error(`[SyncEngine] 队列项重放失败 [${item.entityType}:${item.entityId}] (retryCount=${item.retryCount}): ${errMsg}`);
           await offlineQueue.scheduleRetry(item.id);
           failedIds.push(item.id);

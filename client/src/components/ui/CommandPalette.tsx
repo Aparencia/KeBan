@@ -35,7 +35,7 @@ const categoryLabels: Record<Command['category'], string> = {
 };
 
 const categoryColors: Record<Command['category'], string> = {
-  navigation: 'bg-blue-500/15 text-blue-500',
+  navigation: 'bg-accent-500/15 text-accent-500',
   action: 'bg-emerald-500/15 text-emerald-500',
   settings: 'bg-violet-500/15 text-violet-500',
 };

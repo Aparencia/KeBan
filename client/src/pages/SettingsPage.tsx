@@ -1,4 +1,5 @@
 import AppearanceSettings from './settings/AppearanceSettings';
+import SoundSettings from './settings/SoundSettings';
 import SyncSettings from './settings/SyncSettings';
 import AIProviderSettings from './settings/AIProviderSettings';
 import DataSettings from './settings/DataSettings';
@@ -14,6 +15,7 @@ export default function SettingsPage() {
 
       <div className="flex-1 px-kb-md pb-kb-lg space-y-kb-md max-w-2xl w-full mx-auto">
         <AppearanceSettings />
+        <SoundSettings />
         <SyncSettings />
         <AIProviderSettings />
         <DataSettings />

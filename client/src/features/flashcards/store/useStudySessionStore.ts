@@ -7,6 +7,7 @@ import { sm2, Rating } from '@/lib/sm2';
 import type { Flashcard, FlashcardReview } from '@/types/models';
 import { useFlashcardStore } from './useFlashcardStore';
 import { generateId } from '@/lib/utils/uuid';
+import { soundPlayer } from '@/lib/audio/SoundPlayer';
 
 // ---------------------------------------------------------------------------
 // 常量
@@ -27,6 +28,8 @@ interface StudySessionState {
   currentIndex: number;
   isFlipped: boolean;
   completedCount: number;
+  /** 正确回答次数（Good 或 Easy） */
+  correctCount: number;
   sessionStartTime: Date | null;
   isActive: boolean;
   /** 当前卡片开始展示的时间戳（用于计算 timeSpent） */
@@ -37,6 +40,8 @@ interface StudySessionState {
   rateCard: (rating: Rating) => Promise<void>;
   flipCard: () => void;
   endSession: () => void;
+  /** 将当前卡片重新加入学习队列（不计入 completedCount） */
+  relearn: () => void;
   /** 清理指定牌组的会话数据（牌组删除时调用） */
   clearDeckSession: (deckId: string) => void;
 }
@@ -65,6 +70,7 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
     currentIndex: 0,
     isFlipped: false,
     completedCount: 0,
+    correctCount: 0,
     sessionStartTime: null,
     isActive: false,
     cardStartTime: null,
@@ -96,18 +102,29 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
         allCards.filter((c) => c.repetitions === 0),
       );
 
+      // Bug 5b: 去重保障——确保每张卡片在会话中只出现一次
+      const seenIds = new Set<string>();
+      const dedupe = (cards: Flashcard[]) =>
+        cards.filter((c) => {
+          if (!c.id || seenIds.has(c.id)) return false;
+          seenIds.add(c.id);
+          return true;
+        });
+
       // 组装会话卡片列表
       let sessionCards: Flashcard[];
       if (dueCards.length >= MIN_DUE_THRESHOLD) {
         // 到期卡充足：只用到期卡（上限 MAX_SESSION_CARDS）
-        sessionCards = dueCards.slice(0, MAX_SESSION_CARDS);
+        sessionCards = dedupe(dueCards).slice(0, MAX_SESSION_CARDS);
       } else {
         // 到期卡不足：补充新卡，总量不超过 MAX_SESSION_CARDS
+        const dedupedDue = dedupe(dueCards);
+        const dedupedNew = dedupe(newCards);
         const needNew = Math.min(
-          MAX_SESSION_CARDS - dueCards.length,
-          newCards.length,
+          MAX_SESSION_CARDS - dedupedDue.length,
+          dedupedNew.length,
         );
-        sessionCards = [...dueCards, ...newCards.slice(0, needNew)];
+        sessionCards = [...dedupedDue, ...dedupedNew.slice(0, needNew)];
       }
 
       if (sessionCards.length === 0) {
@@ -120,6 +137,7 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
         currentIndex: 0,
         isFlipped: false,
         completedCount: 0,
+        correctCount: 0,
         sessionStartTime: new Date(),
         isActive: true,
         cardStartTime: new Date(),
@@ -208,12 +226,22 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
       const nextIndex = currentIndex + 1;
       const isLastCard = nextIndex >= sessionCards.length;
 
+      // 播放评分音效
+      if (rating <= 1) soundPlayer.play('rate_forgot');
+      else if (rating === 2) soundPlayer.play('rate_fuzzy');
+      else soundPlayer.play('rate_remember');
+
+      // 正确回答：Good(2) 或 Easy(3)
+      const isCorrect = rating >= 2;
+
       if (isLastCard) {
         // 会话结束
+        soundPlayer.play('deck_complete');
         set({
           sessionCards: updatedCards,
           currentIndex: nextIndex,
           completedCount: get().completedCount + 1,
+          correctCount: get().correctCount + (isCorrect ? 1 : 0),
           isActive: false,
           isFlipped: false,
           cardStartTime: null,
@@ -224,6 +252,7 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
           sessionCards: updatedCards,
           currentIndex: nextIndex,
           completedCount: get().completedCount + 1,
+          correctCount: get().correctCount + (isCorrect ? 1 : 0),
           isFlipped: false,
           cardStartTime: new Date(),
         });
@@ -235,6 +264,20 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
     // -----------------------------------------------------------------------
     flipCard: () => {
       set((state) => ({ isFlipped: !state.isFlipped }));
+      soundPlayer.play('card_flip');
+    },
+
+    // -----------------------------------------------------------------------
+    // relearn：将当前卡片重新加入队列末尾
+    // -----------------------------------------------------------------------
+    relearn: () => {
+      const { sessionCards, currentIndex } = get();
+      const currentCard = sessionCards[currentIndex];
+      if (!currentCard) return;
+      // 将当前卡片追加到队列末尾，不递增 completedCount
+      set((state) => ({
+        sessionCards: [...state.sessionCards, currentCard],
+      }));
     },
 
     // -----------------------------------------------------------------------
@@ -246,6 +289,7 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
         currentIndex: 0,
         isFlipped: false,
         completedCount: 0,
+        correctCount: 0,
         sessionStartTime: null,
         isActive: false,
         cardStartTime: null,

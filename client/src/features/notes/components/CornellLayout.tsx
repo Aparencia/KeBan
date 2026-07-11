@@ -48,6 +48,15 @@ function useCornellEditor(
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor, JSON.stringify(initialContent)]);
 
+  // 确保编辑器在组件卸载时正确销毁
+  useEffect(() => {
+    return () => {
+      if (editor) {
+        editor.destroy();
+      }
+    };
+  }, [editor]);
+
   return editor;
 }
 

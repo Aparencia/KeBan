@@ -14,14 +14,17 @@ const variantStyles: Record<CardVariant, string> = {
   default: [
     'bg-bg-elevated rounded-kb-lg shadow-kb-sm',
     'border border-border/60',
+    'hover:shadow-kb-md',
   ].join(' '),
   elevated: [
     'bg-bg-elevated rounded-kb-lg shadow-kb-md',
     'border border-white/5',
+    'hover:shadow-lg hover:border-white/10',
   ].join(' '),
   outlined: [
     'bg-transparent rounded-kb-lg',
     'border border-border',
+    'hover:border-border-strong hover:shadow-kb-sm',
   ].join(' '),
 };
 

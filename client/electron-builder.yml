@@ -1,6 +1,10 @@
 # Electron Builder 打包配置 - 课伴桌面端
 appId: com.keban.app
 productName: "课伴"
+# publish 配置用于自动更新发布，待部署更新服务器后启用
+# publish:
+#   provider: generic
+#   url: ${env.PUBLISH_URL}
 directories:
   output: release
   buildResources: build
@@ -8,18 +12,27 @@ files:
   - dist/**/*
   - dist-electron/**/*
   - app-icon.png
+# 图标说明：
+#   app-icon.png 为统一源文件（1024x1024 方形 PNG）。
+#   electron-builder 会自动将其转换为各平台所需格式：
+#     - Windows: .ico（含多分辨率）
+#     - macOS: .icns
+#     - Linux: 多分辨率 PNG
 win:
   target:
     - target: nsis
       arch:
         - x64
-  icon: build/icon.ico
+  icon: app-icon.png
+mac:
+  icon: app-icon.png
+linux:
+  icon: app-icon.png
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
-  installerIcon: build/icon.ico
-  uninstallerIcon: build/icon.ico
-  installerHeaderIcon: build/icon.ico
+  # installerIcon/uninstallerIcon/installerHeaderIcon 省略
+  # electron-builder 会自动从 win.icon 派生 NSIS 所需的 .ico 文件
   createDesktopShortcut: true
   shortcutName: "课伴"
   perMachine: false

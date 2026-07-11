@@ -18,7 +18,7 @@ export default function GoalMemory({ onSelect }: GoalMemoryProps) {
       .limit(8)
       .toArray()
       .then(setGoals)
-      .catch(console.error);
+      .catch(() => {});
   }, []);
 
   if (goals.length === 0) return null;

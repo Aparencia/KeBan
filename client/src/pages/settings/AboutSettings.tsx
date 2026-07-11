@@ -1,11 +1,161 @@
-import { Card } from '@/components/ui';
-import { Shield, Info } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Card, Button } from '@/components/ui';
+import { useToast } from '@/components/ui/Toast';
+import { Shield, Info, RefreshCw, Download, CheckCircle, Loader2, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-// 版本号：后续应从 import.meta.env.PACKAGE_VERSION 读取
-const APP_VERSION = 'v0.5.0-alpha.2 · MVP-2';
+interface UpdateStatus {
+  status: 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error';
+  version?: string;
+  percent?: number;
+  message?: string;
+}
 
 export default function AboutSettings() {
+  const { toast } = useToast();
+  const [appVersion, setAppVersion] = useState<string>('');
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
+  const [isChecking, setIsChecking] = useState(false);
+
+  const isElectron = !!window.electronAPI;
+
+  useEffect(() => {
+    if (window.electronAPI) {
+      window.electronAPI.invoke('get-app-version').then((version) => {
+        setAppVersion(version as string);
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!window.electronAPI?.on) return;
+
+    const cleanup = window.electronAPI.on('update-status', (data: unknown) => {
+      const status = data as UpdateStatus;
+      setUpdateStatus(status);
+
+      if (status.status === 'not-available') {
+        setIsChecking(false);
+        toast({ type: 'success', message: '当前已是最新版本' });
+      } else if (status.status === 'available') {
+        setIsChecking(false);
+      } else if (status.status === 'error') {
+        setIsChecking(false);
+        toast({ type: 'error', message: `检查更新失败：${status.message || '未知错误'}` });
+      }
+    });
+
+    return cleanup;
+  }, [toast]);
+
+  const handleCheckUpdate = async () => {
+    if (!window.electronAPI) return;
+    setIsChecking(true);
+    setUpdateStatus(null);
+    try {
+      await window.electronAPI.invoke('update:check');
+    } catch {
+      setIsChecking(false);
+      toast({ type: 'error', message: '检查更新失败，请稍后重试' });
+    }
+  };
+
+  const handleDownload = () => {
+    window.electronAPI?.invoke('update:download');
+  };
+
+  const handleInstall = () => {
+    window.electronAPI?.invoke('update:install');
+  };
+
+  const displayVersion = appVersion || 'v0.6.0-alpha.1';
+
+  /** 渲染更新状态区域 */
+  const renderUpdateSection = () => {
+    if (!isElectron) return null;
+
+    // 下载中：进度条
+    if (updateStatus?.status === 'downloading') {
+      return (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <Loader2 className="w-icon-sm h-icon-sm text-brand-500 animate-spin flex-shrink-0" strokeWidth={1.5} />
+            <span className="text-b2 text-text-secondary">正在下载更新...</span>
+          </div>
+          <div className="w-full bg-bg-tertiary rounded-kb-full h-2">
+            <div
+              className="h-full bg-brand-500 rounded-kb-full transition-all duration-300"
+              style={{ width: `${updateStatus.percent || 0}%` }}
+            />
+          </div>
+          <span className="text-c1 text-text-tertiary">{updateStatus.percent || 0}%</span>
+        </div>
+      );
+    }
+
+    // 下载完成：重启安装按钮
+    if (updateStatus?.status === 'downloaded') {
+      return (
+        <div className="flex items-center gap-3">
+          <CheckCircle className="w-icon-sm h-icon-sm text-semantic-success flex-shrink-0" strokeWidth={1.5} />
+          <span className="text-b2 text-text-secondary flex-1">
+            v{updateStatus.version} 已下载完成
+          </span>
+          <Button
+            variant="primary"
+            size="sm"
+            icon={<RefreshCw className="w-icon-xs h-icon-xs" />}
+            onClick={handleInstall}
+          >
+            重启安装
+          </Button>
+        </div>
+      );
+    }
+
+    // 有新版本：显示版本号 + 下载按钮
+    if (updateStatus?.status === 'available') {
+      return (
+        <div className="flex items-center gap-3">
+          <AlertCircle className="w-icon-sm h-icon-sm text-brand-500 flex-shrink-0" strokeWidth={1.5} />
+          <span className="text-b2 text-text-secondary flex-1">
+            发现新版本 <span className="font-medium text-brand-600">v{updateStatus.version}</span>
+          </span>
+          <Button
+            variant="primary"
+            size="sm"
+            icon={<Download className="w-icon-xs h-icon-xs" />}
+            onClick={handleDownload}
+          >
+            立即下载
+          </Button>
+        </div>
+      );
+    }
+
+    // 默认 / 检查中
+    return (
+      <div className="flex items-center gap-3">
+        {isChecking ? (
+          <>
+            <Loader2 className="w-icon-sm h-icon-sm text-text-tertiary animate-spin flex-shrink-0" strokeWidth={1.5} />
+            <span className="text-b2 text-text-tertiary flex-1">正在检查...</span>
+          </>
+        ) : (
+          <span className="text-b2 text-text-tertiary flex-1">点击检查是否有新版本</span>
+        )}
+        <Button
+          variant="secondary"
+          size="sm"
+          loading={isChecking}
+          onClick={handleCheckUpdate}
+        >
+          检查更新
+        </Button>
+      </div>
+    );
+  };
+
   return (
     <Card padding="md" className="flex flex-col gap-kb-md">
       <h2 className="text-b1 font-semibold text-text-primary">关于</h2>
@@ -20,9 +170,19 @@ export default function AboutSettings() {
         </div>
         <div>
           <p className="text-b1 font-semibold text-text-primary">课伴</p>
-          <p className="text-c1 text-text-tertiary">{APP_VERSION}</p>
+          <p className="text-c1 text-text-tertiary">{displayVersion}</p>
         </div>
       </div>
+
+      {/* 检查更新区域（仅 Electron 环境显示） */}
+      {isElectron && (
+        <div className={cn(
+          'p-3 rounded-kb-md',
+          'bg-bg-secondary border border-border/40',
+        )}>
+          {renderUpdateSection()}
+        </div>
+      )}
 
       <div className={cn(
         'p-3 rounded-kb-md',

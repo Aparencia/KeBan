@@ -22,6 +22,8 @@ const InspirationPage = lazy(() => import('@/features/inspiration/pages/Inspirat
 const OnboardingPage = lazy(() => import('@/pages/OnboardingPage'));
 const LoginPage = lazy(() => import('@/pages/LoginPage'));
 const RegisterPage = lazy(() => import('@/pages/RegisterPage'));
+const PrivacyPolicy = lazy(() => import('@/pages/PrivacyPolicy'));
+const TermsOfService = lazy(() => import('@/pages/TermsOfService'));
 
 // Loading fallback
 function PageLoader() {
@@ -74,6 +76,14 @@ const routes: RouteObject[] = [
   {
     path: '/register',
     element: <SuspenseWrapper><RegisterPage /></SuspenseWrapper>,
+  },
+  {
+    path: '/privacy',
+    element: <SuspenseWrapper><PrivacyPolicy /></SuspenseWrapper>,
+  },
+  {
+    path: '/terms',
+    element: <SuspenseWrapper><TermsOfService /></SuspenseWrapper>,
   },
 ];
 

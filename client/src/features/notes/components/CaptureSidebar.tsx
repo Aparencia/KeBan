@@ -5,6 +5,7 @@ import {
   Clock, CheckCircle2, XCircle, Loader2, PanelRightOpen, PanelRightClose,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { soundPlayer } from '@/lib/audio/SoundPlayer';
 import {
   CaptureManager,
   captureEventBus,
@@ -315,7 +316,7 @@ function SegmentList({
           const isSelected = selectedIds.has(seg.id);
           const sourceLabel = seg.source === 'vision' ? '视觉' : seg.source === 'audio' ? '音频' : 'UI';
           const sourceColor = seg.source === 'vision'
-            ? 'bg-blue-500/10 text-blue-600'
+            ? 'bg-accent-500/10 text-accent-600'
             : seg.source === 'audio'
               ? 'bg-emerald-500/10 text-emerald-600'
               : 'bg-amber-500/10 text-amber-600';
@@ -607,6 +608,7 @@ export function CaptureSidebar({ onInsertText }: CaptureSidebarProps) {
               void audioCtx.close();
             };
           } catch (err) {
+            // eslint-disable-next-line no-console -- 音频管道启动失败
             console.error('[CaptureSidebar] Renderer audio pipeline start failed:', err);
           }
         })();
@@ -636,6 +638,7 @@ export function CaptureSidebar({ onInsertText }: CaptureSidebarProps) {
       const result = await window.electronAPI.invoke('screen_list_windows');
       setWindows(result as WindowInfo[]);
     } catch {
+      // eslint-disable-next-line no-console -- 窗口列表获取失败
       console.error('[CaptureSidebar] Failed to list windows');
     } finally {
       setWindowsLoading(false);
@@ -677,6 +680,8 @@ export function CaptureSidebar({ onInsertText }: CaptureSidebarProps) {
         autoInsert: config.autoInsert,
       });
 
+      soundPlayer.play('capture_start');
+
       // 按需启动音频采集（IPC → 主进程 → do_start → 渲染端 getUserMedia）
       if (audioEnabled) {
         try {
@@ -686,15 +691,18 @@ export function CaptureSidebar({ onInsertText }: CaptureSidebarProps) {
             channels: 1,
           }) as IPCAudioStartResult;
           if (!audioResult.success) {
+            // eslint-disable-next-line no-console -- 音频启动失败警告
             console.warn('[CaptureSidebar] Audio capture start failed:', audioResult.error);
           }
         } catch (audioErr) {
+          // eslint-disable-next-line no-console -- 音频不可用警告
           console.warn('[CaptureSidebar] Audio capture unavailable:', audioErr);
           // 音频失败不阻断视觉采集，继续运行
         }
       }
     } catch (err) {
       setStatus('error');
+      // eslint-disable-next-line no-console -- 采集启动失败
       console.error('[CaptureSidebar] Start capture failed:', err);
     }
   }, [selectedWindow, config, mode, captureManager]);
@@ -730,9 +738,11 @@ export function CaptureSidebar({ onInsertText }: CaptureSidebarProps) {
       // 停止 CaptureManager 会话
       await captureManager.stopSession();
 
+      soundPlayer.play('capture_stop');
       setStatus('idle');
     } catch (err) {
       setStatus('error');
+      // eslint-disable-next-line no-console -- 采集停止失败
       console.error('[CaptureSidebar] Stop capture failed:', err);
     }
   }, [captureManager]);

@@ -191,7 +191,9 @@ export const useFlashcardStore = create<FlashcardState>((set, get) => {
 
       return {
         total: deckCards.length,
-        due: deckCards.filter((c) => new Date(c.dueDate) <= now).length,
+        due: deckCards.filter(
+          (c) => c.repetitions > 0 && new Date(c.dueDate) <= now,
+        ).length,
         newCards: deckCards.filter((c) => c.repetitions === 0).length,
       };
     },

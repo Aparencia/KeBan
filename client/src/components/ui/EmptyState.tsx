@@ -1,6 +1,6 @@
 import React from 'react';
-import { Inbox } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { BrandLogo } from '@/components/ui/BrandLogo';
 
 export interface EmptyStateProps {
   icon?: React.ReactNode;
@@ -26,7 +26,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
       )}
     >
       <div className="text-text-tertiary/60 mb-kb-md">
-        {icon || <Inbox className="w-12 h-12" strokeWidth={1.2} />}
+        {icon || <BrandLogo mode="floating" size={64} className="text-brand-500/60" />}
       </div>
 
       <h3 className="text-h3 font-medium text-text-secondary">{title}</h3>
