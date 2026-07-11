@@ -79,7 +79,6 @@ export class CaptureManager {
    */
   async startSession(config: CaptureSessionConfig): Promise<string> {
     if (this.sessionId) {
-      console.warn('[CaptureManager] Session already active, stopping previous session');
       await this.stopSession();
     }
 
@@ -90,19 +89,15 @@ export class CaptureManager {
       uiAutomationAvailable: false, // Electron 环境下后续检测
     });
 
-    console.log(`[CaptureManager] Route decision: ${this.lastDecision.reason}`);
-
     // 根据决策动态注册 ASR Worker
     if (this.lastDecision.audioEnabled && !this.asrWorker) {
       this.asrWorker = new ASRWorker();
       this.pipeline.registerWorker(this.asrWorker);
       this.dispatcher.registerWorker(this.asrWorker);
-      console.log('[CaptureManager] ASR Worker registered per route decision');
     } else if (!this.lastDecision.audioEnabled && this.asrWorker) {
       this.pipeline.unregisterWorker('asr-worker');
       this.dispatcher.unregisterWorker('asr-worker');
       this.asrWorker = null;
-      console.log('[CaptureManager] ASR Worker unregistered per route decision');
     }
 
     // 创建持久化会话
@@ -131,7 +126,6 @@ export class CaptureManager {
       }
     }, 3000);
 
-    console.log(`[CaptureManager] Session started: ${this.sessionId}`);
     return this.sessionId;
   }
 
@@ -164,7 +158,6 @@ export class CaptureManager {
       extractedCount: this.extractedCount,
     });
 
-    console.log(`[CaptureManager] Session stopped: ${this.sessionId}`);
     this.sessionId = null;
     this.sessionConfig = null;
   }
@@ -174,7 +167,6 @@ export class CaptureManager {
    */
   pushFrame(frameData: ScreenshotData): void {
     if (!this.sessionId) {
-      console.warn('[CaptureManager] No active session, dropping frame');
       return;
     }
 
@@ -209,7 +201,6 @@ export class CaptureManager {
    */
   pushAudioChunk(audioData: AudioChunkData): void {
     if (!this.sessionId) {
-      console.warn('[CaptureManager] No active session, dropping audio chunk');
       return;
     }
 
@@ -244,7 +235,6 @@ export class CaptureManager {
     if (!this.sessionId || this.isPaused) return;
     this.isPaused = true;
     this.pipeline.clear();
-    console.log('[CaptureManager] Session paused');
   }
 
   /**
@@ -253,7 +243,6 @@ export class CaptureManager {
   resumeSession(): void {
     if (!this.sessionId || !this.isPaused) return;
     this.isPaused = false;
-    console.log('[CaptureManager] Session resumed');
   }
 
   /**
@@ -288,9 +277,7 @@ export class CaptureManager {
   dispose(): void {
     if (this.sessionId) {
       // 异步停止但不等待（dispose 是同步方法）
-      this.stopSession().catch(err => {
-        console.error('[CaptureManager] Error stopping session during dispose:', err);
-      });
+      this.stopSession().catch(() => {});
     }
     if (this.fusionIntervalId !== null) {
       clearInterval(this.fusionIntervalId);
@@ -305,7 +292,6 @@ export class CaptureManager {
     captureEventBus.off('frame:pushed');
     captureEventBus.off('fusion:vad_triggered');
     captureEventBus.off('fusion:segment_complete');
-    console.log('[CaptureManager] Disposed');
   }
 
   // ================================================================
@@ -341,9 +327,7 @@ export class CaptureManager {
       },
     };
 
-    captureStore.addSegment(this.sessionId, segment).catch(err => {
-      console.error('[CaptureManager] Failed to persist segment:', err);
-    });
+    captureStore.addSegment(this.sessionId, segment).catch(() => {});
 
     // 将结果送入 CrossFusionEngine 进行交叉融合
     if (result.source === 'vision') {
@@ -380,8 +364,6 @@ export class CaptureManager {
    * 向 RouteDispatcher 报告失败，触发降级逻辑
    */
   private handleError(error: Error, message: PipelineMessage): void {
-    console.error(`[CaptureManager] Pipeline error for message ${message.id}:`, error);
-
     // 根据消息类型推断失败的路由通道并报告
     const routeMap: Record<string, 'vision' | 'audio' | 'uiAutomation'> = {
       screenshot: 'vision',
@@ -392,7 +374,6 @@ export class CaptureManager {
     if (route) {
       const newDecision = this.dispatcher.handleFailure(route, error);
       this.lastDecision = newDecision;
-      console.warn(`[CaptureManager] Route decision updated after failure: ${newDecision.reason}`);
     }
 
     captureEventBus.emit('extraction:error', {

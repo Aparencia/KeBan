@@ -66,7 +66,7 @@ export class LocalDurationRecommender {
  * 本地降级提示生成器
  * 当 AI 服务不可用时，为摘要/闪卡/评估功能生成友好提示
  */
-export function getLocalFallbackMessage(feature: 'summarize' | 'flashcard' | 'evaluate'): {
+export function getLocalFallbackMessage(feature: 'summarize' | 'flashcard' | 'evaluate' | 'optimize_card'): {
   available: false;
   message: string;
   suggestion: string;
@@ -83,6 +83,10 @@ export function getLocalFallbackMessage(feature: 'summarize' | 'flashcard' | 'ev
     evaluate: {
       message: 'AI 费曼评估服务暂时不可用',
       suggestion: '您可以尝试将讲解录音后回听，自行评估理解程度',
+    },
+    optimize_card: {
+      message: 'AI 闪卡优化服务暂时不可用',
+      suggestion: '您可以尝试手动精简卡片内容，使其更易于记忆',
     },
   };
 

@@ -5,7 +5,9 @@ import { Plus, Layers, Clock, Trash2, Layers3, Upload, BookOpen, Pencil, Share2 
 import { useNavigate } from 'react-router-dom';
 import { useFlashcardStore } from '../store/useFlashcardStore';
 import { flashcardStore } from '@/lib/storage';
-import { importDeck, exportDeck, downloadDeckFile } from '@/lib/storage/exportImport';
+import { importDeck, importDeckNew, importDeckOverwrite, importDeckSkip, importDeckMerge, exportDeck, downloadDeckFile } from '@/lib/storage/exportImport';
+import ImportPreviewModal from '../components/ImportPreviewModal';
+import type { KbanDeckFile } from '@/types/models';
 import { useContextMenu } from '@/lib/contextMenu/useContextMenu';
 import type { Flashcard, FlashcardDeck } from '@/types/models';
 
@@ -31,6 +33,11 @@ export default function FlashcardsPage() {
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState(false);
+  // Import preview state
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewData, setPreviewData] = useState<KbanDeckFile | null>(null);
+  const [previewConflict, setPreviewConflict] = useState(false);
+  const [previewExistingId, setPreviewExistingId] = useState<string | undefined>();
   const { toast } = useToast();
 
   // Context menu
@@ -89,17 +96,81 @@ export default function FlashcardsPage() {
     setImporting(true);
     try {
       const result = await importDeck(file);
-      toast({ type: 'success', message: `导入成功：${result.cardCount} 张卡片` });
-      // 刷新牌组列表
-      loadDecks();
-      const cards = await flashcardStore.getAll();
-      setAllCards(cards);
+      setPreviewData(result.deckData);
+      setPreviewConflict(result.hasConflict);
+      setPreviewExistingId(result.existingDeckId);
+      setPreviewOpen(true);
     } catch {
       toast({ type: 'error', message: '导入失败，请确认文件格式正确' });
     } finally {
       setImporting(false);
-      // 重置 input 以便再次选择同一文件
       if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  /** 刷新牌组和卡片列表 */
+  const refreshAll = async () => {
+    await loadDecks();
+    const cards = await flashcardStore.getAll();
+    setAllCards(cards);
+  };
+
+  /** 无冲突确认导入 */
+  const handleConfirmNew = async () => {
+    if (!previewData) return;
+    setImporting(true);
+    try {
+      const result = await importDeckNew(previewData);
+      toast({ type: 'success', message: `导入成功：${result.cardCount} 张卡片` });
+      await refreshAll();
+    } catch {
+      toast({ type: 'error', message: '导入失败，请稍后重试' });
+    } finally {
+      setImporting(false);
+      setPreviewOpen(false);
+      setPreviewData(null);
+    }
+  };
+
+  /** 覆盖导入 */
+  const handleOverwrite = async () => {
+    if (!previewData || !previewExistingId) return;
+    setImporting(true);
+    try {
+      await importDeckOverwrite(previewData, previewExistingId);
+      toast({ type: 'success', message: `已覆盖导入：${previewData.cards.length} 张卡片` });
+      await refreshAll();
+    } catch {
+      toast({ type: 'error', message: '覆盖导入失败' });
+    } finally {
+      setImporting(false);
+      setPreviewOpen(false);
+      setPreviewData(null);
+    }
+  };
+
+  /** 跳过导入 */
+  const handleSkip = () => {
+    importDeckSkip();
+    toast({ type: 'info', message: '已跳过导入' });
+    setPreviewOpen(false);
+    setPreviewData(null);
+  };
+
+  /** 合并导入 */
+  const handleMerge = async () => {
+    if (!previewData || !previewExistingId) return;
+    setImporting(true);
+    try {
+      const count = await importDeckMerge(previewData, previewExistingId);
+      toast({ type: 'success', message: `已合并 ${count} 张新卡片到现有牌组` });
+      await refreshAll();
+    } catch {
+      toast({ type: 'error', message: '合并导入失败' });
+    } finally {
+      setImporting(false);
+      setPreviewOpen(false);
+      setPreviewData(null);
     }
   };
 
@@ -373,6 +444,20 @@ export default function FlashcardsPage() {
       >
         <div />
       </Modal>
+
+      {/* 导入预览 / 冲突处理 Modal */}
+      <ImportPreviewModal
+        open={previewOpen}
+        onClose={() => { setPreviewOpen(false); setPreviewData(null); }}
+        deckData={previewData}
+        hasConflict={previewConflict}
+        existingDeckId={previewExistingId}
+        onConfirmNew={handleConfirmNew}
+        onOverwrite={handleOverwrite}
+        onSkip={handleSkip}
+        onMerge={handleMerge}
+        loading={importing}
+      />
     </div>
   );
 }

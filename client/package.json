@@ -1,7 +1,7 @@
 {
   "name": "client",
   "private": true,
-  "version": "0.4.0-alpha.1",
+  "version": "0.5.0",
   "description": "课伴 - 跨端学习平台",
   "author": "KeBan Team",
   "type": "module",

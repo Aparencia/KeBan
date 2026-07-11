@@ -17,6 +17,8 @@ const StudySessionPage = lazy(() => import('@/features/flashcards/pages/StudySes
 const FeynmanPage = lazy(() => import('@/features/feynman/pages/FeynmanPage'));
 const FeynmanSessionPage = lazy(() => import('@/features/feynman/pages/FeynmanSessionPage'));
 const SettingsPage = lazy(() => import('@/pages/SettingsPage'));
+const AnalyticsPage = lazy(() => import('@/features/dashboard/pages/AnalyticsPage'));
+const InspirationPage = lazy(() => import('@/features/inspiration/pages/InspirationPage'));
 const OnboardingPage = lazy(() => import('@/pages/OnboardingPage'));
 const LoginPage = lazy(() => import('@/pages/LoginPage'));
 const RegisterPage = lazy(() => import('@/pages/RegisterPage'));
@@ -57,6 +59,8 @@ const routes: RouteObject[] = [
       { path: '/feynman', element: <SuspenseWrapper><FeynmanPage /></SuspenseWrapper> },
       { path: '/feynman/:sessionId', element: <SuspenseWrapper><FeynmanSessionPage /></SuspenseWrapper> },
       { path: '/settings', element: <SuspenseWrapper><SettingsPage /></SuspenseWrapper> },
+      { path: '/analytics', element: <SuspenseWrapper><AnalyticsPage /></SuspenseWrapper> },
+      { path: '/inspiration', element: <SuspenseWrapper><InspirationPage /></SuspenseWrapper> },
     ],
   },
   {

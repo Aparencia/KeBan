@@ -29,7 +29,7 @@ const modeIndicatorConfig = {
 } as const;
 
 /** 根路由（无返回按钮） */
-const ROOT_PATHS = new Set(['/', '/pomodoro', '/notes', '/flashcards', '/feynman', '/settings']);
+const ROOT_PATHS = new Set(['/', '/pomodoro', '/notes', '/flashcards', '/feynman', '/settings', '/analytics', '/inspiration']);
 
 export default function Navbar() {
   const { theme, toggleTheme } = useTheme();

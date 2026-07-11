@@ -34,6 +34,7 @@ import { ContextMenu } from '@/components/ui/ContextMenu';
 import type { ContextMenuGroup } from '@/components/ui/ContextMenu';
 import { useContextMenu } from '@/lib/contextMenu';
 import { CaptureSidebar } from '../components/CaptureSidebar';
+import { TodoStats } from '../components/TodoStats';
 import { useCaptureStore } from '@/stores/useCaptureStore';
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'failed';
@@ -188,7 +189,7 @@ export default function NoteEditPage() {
       TableCell,
       TableHeader,
       TaskList,
-      TaskItem.configure({ nested: true }),
+      TaskItem.configure({ nested: true, HTMLAttributes: { class: 'todo-item' } }),
       Image.configure({ inline: true }),
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
       Color,
@@ -228,7 +229,7 @@ export default function NoteEditPage() {
             const targetDeckId = await ensureDefaultDeck();
             await Promise.all(
               result.cards.map((card) =>
-                createCard({ deckId: targetDeckId, front: card.front, back: card.back, type: 'basic' }),
+                createCard({ deckId: targetDeckId, front: card.front, back: card.back, type: 'basic', sourceNoteId: noteId ?? undefined }),
               ),
             );
             toast({ type: 'success', message: `已生成 ${result.cards.length} 张闪卡` });
@@ -236,13 +237,11 @@ export default function NoteEditPage() {
           .catch(() => toast({ type: 'error', message: '闪卡生成失败，请稍后重试' }));
         break;
       case 'ai-explain':
-        // TODO: 调用 AI 解释选中概念
-        console.warn('[EditorCtx] AI 解释功能待集成', selectedText);
+        // TODO [v0.5.0-B1.4]: 调用 AI 解释选中概念 — 需调用 summarize API 并展示解释结果
         toast({ type: 'info', message: 'AI 解释功能即将上线' });
         break;
       case 'ai-distill':
-        // TODO: 调用 AI 提炼要点
-        console.warn('[EditorCtx] AI 提炼功能待集成', selectedText);
+        // TODO [v0.5.0-B1.4]: 调用 AI 提炼要点 — 需调用 summarize API 提取关键点
         toast({ type: 'info', message: 'AI 提炼功能即将上线' });
         break;
       case 'ai-highlight':
@@ -299,7 +298,7 @@ export default function NoteEditPage() {
       const targetDeckId = await ensureDefaultDeck();
       await Promise.all(
         result.cards.map((card) =>
-          createCard({ deckId: targetDeckId, front: card.front, back: card.back, type: 'basic' }),
+          createCard({ deckId: targetDeckId, front: card.front, back: card.back, type: 'basic', sourceNoteId: noteId ?? undefined }),
         ),
       );
       setConvertedKeys(prev => new Set(prev).add(index));
@@ -317,7 +316,7 @@ export default function NoteEditPage() {
       const targetDeckId = await ensureDefaultDeck();
       await Promise.all(
         result.cards.map((card) =>
-          createCard({ deckId: targetDeckId, front: card.front, back: card.back, type: 'basic' }),
+          createCard({ deckId: targetDeckId, front: card.front, back: card.back, type: 'basic', sourceNoteId: noteId ?? undefined }),
         ),
       );
       setConvertedKeys(new Set(aiData.keyPoints!.map((_, i) => i)));
@@ -664,7 +663,10 @@ export default function NoteEditPage() {
               }}
             />
           ) : (
-            <EditorContent editor={editor} />
+            <>
+              <EditorContent editor={editor} />
+              <TodoStats editor={editor} />
+            </>
           )}
         </div>
       </div>
@@ -734,7 +736,7 @@ export default function NoteEditPage() {
             )}
 
             {aiData && !aiLoading && (
-              <div className="mt-kb-md flex flex-col gap-kb-md">
+              <div className="mt-kb-md flex flex-col gap-kb-md kb-ai-result-enter">
                 {/* 摘要文本 + 复制按钮 */}
                 <div className="group relative">
                   <p className="text-b3 font-medium text-text-tertiary uppercase tracking-wide mb-1">摘要</p>

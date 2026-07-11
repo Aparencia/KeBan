@@ -142,10 +142,12 @@ export default function FeynmanPage() {
         handleConfirmDelete(noteCtx);
         break;
       case 'ai-follow-up':
+        // 跳转到会话页，让用户使用 AI 追问功能
+        navigate(`/feynman/${noteCtx.id}`);
+        break;
       case 'ai-simplify':
       case 'ai-gap-check':
-        // TODO: beta 阶段对接 AI 功能
-        console.warn(`[Feynman ContextMenu] action=${itemKey}`, { noteId: noteCtx.id });
+        // 其他 AI 操作待后续实现
         toast({ type: 'info', message: 'AI 功能即将上线' });
         break;
     }

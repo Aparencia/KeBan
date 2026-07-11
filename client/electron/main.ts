@@ -439,6 +439,107 @@ ipcMain.handle(
   },
 );
 
+/**
+ * ai_feynman_question — POST /api/v1/ai/feynman-question
+ */
+ipcMain.handle(
+  'ai_feynman_question',
+  async (
+    _event,
+    args: {
+      concept: string;
+      explanation: string;
+      authToken?: string;
+    },
+  ) => {
+    const startMs = Date.now();
+    console.log(`[IPC] ai_feynman_question start, concept_length=${args.concept.length}`);
+    const reqBody = {
+      concept: args.concept,
+      explanation: args.explanation,
+    };
+
+    interface FeynmanQuestionResp {
+      questions: Array<{ question: string; focus: string }>;
+      model: string;
+      tokens_used: number;
+      latency_ms: number;
+    }
+
+    const { data: resp, requestId } = await postJson<typeof reqBody, FeynmanQuestionResp>(
+      '/api/v1/ai/feynman-question',
+      reqBody,
+      args.authToken,
+    );
+
+    console.log(`[IPC] Request ID: ${requestId ?? 'N/A'}`);
+    console.log(`[IPC] ai_feynman_question end, question_count=${resp.questions.length}`);
+    return {
+      questions: resp.questions.map((q) => ({
+        question: q.question,
+        focus: q.focus,
+      })),
+      model: resp.model,
+      tokensUsed: resp.tokens_used,
+      latencyMs: resp.latency_ms,
+      requestId,
+    };
+  },
+);
+
+/**
+ * ai_feynman_evaluate_answers — POST /api/v1/ai/feynman-evaluate-answers
+ */
+ipcMain.handle(
+  'ai_feynman_evaluate_answers',
+  async (
+    _event,
+    args: {
+      concept: string;
+      questions: string[];
+      answers: string[];
+      authToken?: string;
+    },
+  ) => {
+    const startMs = Date.now();
+    console.log(`[IPC] ai_feynman_evaluate_answers start, concept_length=${args.concept.length}`);
+    const reqBody = {
+      concept: args.concept,
+      questions: args.questions,
+      answers: args.answers,
+    };
+
+    interface FeynmanAnswerEvalResp {
+      understanding_score: number;
+      feedback: string;
+      strong_points: string[];
+      weak_points: string[];
+      model: string;
+      tokens_used: number;
+      latency_ms: number;
+    }
+
+    const { data: resp, requestId } = await postJson<typeof reqBody, FeynmanAnswerEvalResp>(
+      '/api/v1/ai/feynman-evaluate-answers',
+      reqBody,
+      args.authToken,
+    );
+
+    console.log(`[IPC] Request ID: ${requestId ?? 'N/A'}`);
+    console.log(`[IPC] ai_feynman_evaluate_answers end, score=${resp.understanding_score}`);
+    return {
+      understandingScore: resp.understanding_score,
+      feedback: resp.feedback,
+      strongPoints: resp.strong_points,
+      weakPoints: resp.weak_points,
+      model: resp.model,
+      tokensUsed: resp.tokens_used,
+      latencyMs: resp.latency_ms,
+      requestId,
+    };
+  },
+);
+
 // ================================================================
 // IPC Handler — 屏幕截图采集
 // ================================================================

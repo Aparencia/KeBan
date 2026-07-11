@@ -90,6 +90,7 @@ func Push(c *gin.Context) {
 		return
 	}
 
+	userID := c.GetString("user_id")
 	accepted := make([]string, 0)
 	conflicts := make([]ConflictInfo, 0)
 	pushErrors := make([]string, 0)
@@ -98,7 +99,7 @@ func Push(c *gin.Context) {
 	for _, op := range req.Operations {
 		// Look up current server version for this entity.
 		var ev models.EntityVersion
-		result := models.DB.Where("entity_type = ? AND entity_id = ?", op.EntityType, op.EntityID).First(&ev)
+		result := models.DB.Where("user_id = ? AND entity_type = ? AND entity_id = ?", userID, op.EntityType, op.EntityID).First(&ev)
 
 		if result.RowsAffected == 0 && result.Error != nil && result.Error != gorm.ErrRecordNotFound {
 			pushErrors = append(pushErrors, "db error: "+result.Error.Error())
@@ -138,6 +139,7 @@ func Push(c *gin.Context) {
 				}
 			} else {
 				newEV := models.EntityVersion{
+					UserID:     userID,
 					EntityType: op.EntityType,
 					EntityID:   op.EntityID,
 					Version:    op.Version,
@@ -152,6 +154,7 @@ func Push(c *gin.Context) {
 			dbOp := models.Operation{
 				ServerSeqNo: seqNo,
 				DeviceID:    req.DeviceID,
+				UserID:      userID,
 				EntityType:  op.EntityType,
 				EntityID:    op.EntityID,
 				Operation:   op.Operation,
@@ -174,7 +177,6 @@ func Push(c *gin.Context) {
 	}
 
 	// Update Redis cache after successful push.
-	userID := c.GetString("user_id")
 	ctx := context.Background()
 	if req.DeviceID != "" {
 		_ = cache.SetDeviceOnline(ctx, userID, req.DeviceID)
@@ -216,6 +218,7 @@ func Push(c *gin.Context) {
 // Pull returns all server operations since `sinceVersion` (exclusive).
 // Query params: deviceId, sinceVersion
 func Pull(c *gin.Context) {
+	userID := c.GetString("user_id")
 	deviceID := c.Query("deviceId")
 	sinceVersionStr := c.DefaultQuery("sinceVersion", "0")
 	sinceVersion, err := strconv.ParseInt(sinceVersionStr, 10, 64)
@@ -226,7 +229,7 @@ func Pull(c *gin.Context) {
 
 	var ops []models.Operation
 	if err := models.DB.
-		Where("server_seq_no > ? AND device_id != ?", sinceVersion, deviceID).
+		Where("user_id = ? AND server_seq_no > ? AND device_id != ?", userID, sinceVersion, deviceID).
 		Order("server_seq_no ASC").
 		Find(&ops).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -268,6 +271,8 @@ type resolveRequest struct {
 
 // Resolve handles conflict resolution submitted by the client.
 func Resolve(c *gin.Context) {
+	userID := c.GetString("user_id")
+
 	var req resolveRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -291,7 +296,7 @@ func Resolve(c *gin.Context) {
 
 			// Upsert EntityVersion.
 			var ev models.EntityVersion
-			res := tx.Where("entity_type = ? AND entity_id = ?", req.EntityType, req.EntityID).First(&ev)
+			res := tx.Where("user_id = ? AND entity_type = ? AND entity_id = ?", userID, req.EntityType, req.EntityID).First(&ev)
 			if res.RowsAffected > 0 {
 				if err := tx.Model(&ev).Updates(map[string]interface{}{
 					"version": req.Version,
@@ -301,6 +306,7 @@ func Resolve(c *gin.Context) {
 				}
 			} else {
 				if err := tx.Create(&models.EntityVersion{
+					UserID:     userID,
 					EntityType: req.EntityType,
 					EntityID:   req.EntityID,
 					Version:    req.Version,
@@ -314,6 +320,7 @@ func Resolve(c *gin.Context) {
 			return tx.Create(&models.Operation{
 				ServerSeqNo: seqNo,
 				DeviceID:    req.DeviceID,
+				UserID:      userID,
 				EntityType:  req.EntityType,
 				EntityID:    req.EntityID,
 				Operation:   "update",
@@ -346,17 +353,19 @@ func Resolve(c *gin.Context) {
 
 // Status returns a lightweight summary of the sync store.
 func Status(c *gin.Context) {
+	userID := c.GetString("user_id")
+
 	var opCount, evCount int64
-	models.DB.Model(&models.Operation{}).Count(&opCount)
-	models.DB.Model(&models.EntityVersion{}).Count(&evCount)
+	models.DB.Model(&models.Operation{}).Where("user_id = ?", userID).Count(&opCount)
+	models.DB.Model(&models.EntityVersion{}).Where("user_id = ?", userID).Count(&evCount)
 
 	var g models.GlobalSeqNo
 	models.DB.First(&g)
 
 	c.JSON(http.StatusOK, gin.H{
-		"totalOperations":   opCount,
-		"trackedEntities":   evCount,
-		"latestSeqNo":       g.SeqNo,
-		"redisConnected":    cache.RDB != nil,
+		"totalOperations": opCount,
+		"trackedEntities": evCount,
+		"latestSeqNo":     g.SeqNo,
+		"redisConnected":  cache.RDB != nil,
 	})
 }

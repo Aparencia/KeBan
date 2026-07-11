@@ -9,6 +9,9 @@ import type {
   DurationOptions,
   DurationHistoryData,
   DurationResult,
+  OptimizeCardResult,
+  FeynmanQuestionResult,
+  FeynmanAnswerEvalResult,
 } from './types';
 import { AIError } from './types';
 
@@ -42,8 +45,6 @@ export class ElectronAIPlugin implements AIPlugin {
     this.checkOnline();
     try {
       const ipcStart = performance.now();
-      console.log(`[ElectronAI] summarizeNote → IPC ai_summarize, text_length=${noteContent.length}`);
-      console.log(`[IPC] ai_summarize start, text_length=${noteContent.length}`);
       const result = await window.electronAPI!.invoke('ai_summarize', {
         text: noteContent,
         maxLength: options?.maxLength ?? null,
@@ -58,8 +59,6 @@ export class ElectronAIPlugin implements AIPlugin {
         requestId?: string;
       };
       const ipcElapsed = Math.round(performance.now() - ipcStart);
-      console.log(`[ElectronAI] summarizeNote ← IPC ai_summarize done in ${ipcElapsed}ms, model=${result.model}, request_id=${result.requestId ?? 'N/A'}`);
-      console.log(`[IPC] ai_summarize end, model=${result.model}, request_id=${result.requestId ?? 'N/A'}`);
 
       return {
         summary: result.summary,
@@ -70,9 +69,6 @@ export class ElectronAIPlugin implements AIPlugin {
         latencyMs: result.latencyMs,
       };
     } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : String(error);
-      console.error('[ElectronAI] summarizeNote failed:', msg);
-      console.error('[IPC] ai_summarize error:', msg);
       throw this.handleError(error);
     }
   }
@@ -82,8 +78,6 @@ export class ElectronAIPlugin implements AIPlugin {
     this.checkOnline();
     try {
       const ipcStart = performance.now();
-      console.log(`[ElectronAI] generateFlashcards → IPC ai_generate_cards, note_length=${noteContent.length}`);
-      console.log(`[IPC] ai_generate_cards start, note_length=${noteContent.length}`);
       const result = await window.electronAPI!.invoke('ai_generate_cards', {
         note: noteContent,
         maxCards: options?.count ?? null,
@@ -98,8 +92,6 @@ export class ElectronAIPlugin implements AIPlugin {
         requestId?: string;
       };
       const ipcElapsed = Math.round(performance.now() - ipcStart);
-      console.log(`[ElectronAI] generateFlashcards ← IPC ai_generate_cards done in ${ipcElapsed}ms, cards_count=${result.cards.length}, request_id=${result.requestId ?? 'N/A'}`);
-      console.log(`[IPC] ai_generate_cards end, cards_count=${result.cards.length}, request_id=${result.requestId ?? 'N/A'}`);
 
       return {
         cards: result.cards.map(c => ({
@@ -114,9 +106,6 @@ export class ElectronAIPlugin implements AIPlugin {
         tokensUsed: result.tokensUsed,
       };
     } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : String(error);
-      console.error('[ElectronAI] generateFlashcards failed:', msg);
-      console.error('[IPC] ai_generate_cards error:', msg);
       throw this.handleError(error);
     }
   }
@@ -130,8 +119,6 @@ export class ElectronAIPlugin implements AIPlugin {
     this.checkOnline();
     try {
       const ipcStart = performance.now();
-      console.log(`[ElectronAI] evaluateExplanation → IPC ai_evaluate, concept=${concept}`);
-      console.log(`[IPC] ai_evaluate start, concept_length=${concept.length}`);
       const result = await window.electronAPI!.invoke('ai_evaluate', {
         concept,
         explanation,
@@ -148,8 +135,6 @@ export class ElectronAIPlugin implements AIPlugin {
         requestId?: string;
       };
       const ipcElapsed = Math.round(performance.now() - ipcStart);
-      console.log(`[ElectronAI] evaluateExplanation ← IPC ai_evaluate done in ${ipcElapsed}ms, overall_score=${result.overallScore}, request_id=${result.requestId ?? 'N/A'}`);
-      console.log(`[IPC] ai_evaluate end, overall_score=${result.overallScore}, request_id=${result.requestId ?? 'N/A'}`);
 
       return {
         overallScore: result.overallScore > 10 ? result.overallScore / 10 : result.overallScore,
@@ -168,9 +153,6 @@ export class ElectronAIPlugin implements AIPlugin {
         latencyMs: result.latencyMs,
       };
     } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : String(error);
-      console.error('[ElectronAI] evaluateExplanation failed:', msg);
-      console.error('[IPC] ai_evaluate error:', msg);
       throw this.handleError(error);
     }
   }
@@ -191,8 +173,6 @@ export class ElectronAIPlugin implements AIPlugin {
       }));
 
       const ipcStart = performance.now();
-      console.log(`[ElectronAI] recommendDuration → IPC ai_recommend_duration, sessions_count=${historyData.sessions.length}`);
-      console.log(`[IPC] ai_recommend_duration start, sessions_count=${historyData.sessions.length}`);
       const result = await window.electronAPI!.invoke('ai_recommend_duration', {
         history,
         authToken: this.authToken,
@@ -208,8 +188,6 @@ export class ElectronAIPlugin implements AIPlugin {
         requestId?: string;
       };
       const ipcElapsed = Math.round(performance.now() - ipcStart);
-      console.log(`[ElectronAI] recommendDuration ← IPC ai_recommend_duration done in ${ipcElapsed}ms, recommended_minutes=${result.recommendedMinutes}, request_id=${result.requestId ?? 'N/A'}`);
-      console.log(`[IPC] ai_recommend_duration end, recommended_minutes=${result.recommendedMinutes}, request_id=${result.requestId ?? 'N/A'}`);
 
       return {
         recommendedDuration: result.recommendedMinutes,
@@ -223,9 +201,111 @@ export class ElectronAIPlugin implements AIPlugin {
         latencyMs: result.latencyMs,
       };
     } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : String(error);
-      console.error('[ElectronAI] recommendDuration failed:', msg);
-      console.error('[IPC] ai_recommend_duration error:', msg);
+      throw this.handleError(error);
+    }
+  }
+
+  // ── invoke('ai_optimize_card') ──────────────────────────────
+  async optimizeCard(front: string, back: string): Promise<OptimizeCardResult> {
+    this.checkOnline();
+    try {
+      const ipcStart = performance.now();
+      const result = await window.electronAPI!.invoke('ai_optimize_card', {
+        front,
+        back,
+        authToken: this.authToken,
+      }) as {
+        suggestedFront: string;
+        suggestedBack: string;
+        improvements: string[];
+        model: string;
+        tokensUsed: number;
+        latencyMs: number;
+        requestId?: string;
+      };
+      const ipcElapsed = Math.round(performance.now() - ipcStart);
+
+      return {
+        suggestedFront: result.suggestedFront,
+        suggestedBack: result.suggestedBack,
+        improvements: result.improvements,
+        model: result.model,
+        tokensUsed: result.tokensUsed,
+        latencyMs: result.latencyMs,
+      };
+    } catch (error: unknown) {
+      throw this.handleError(error);
+    }
+  }
+
+  // ── invoke('ai_feynman_question') ──────────────────────────
+  async generateFeynmanQuestions(concept: string, explanation: string): Promise<FeynmanQuestionResult> {
+    this.checkOnline();
+    try {
+      const ipcStart = performance.now();
+      const result = await window.electronAPI!.invoke('ai_feynman_question', {
+        concept,
+        explanation,
+        authToken: this.authToken,
+      }) as {
+        questions: Array<{ question: string; focus: string }>;
+        model: string;
+        tokensUsed: number;
+        latencyMs: number;
+        requestId?: string;
+      };
+      const ipcElapsed = Math.round(performance.now() - ipcStart);
+
+      return {
+        questions: result.questions.map(q => ({
+          question: q.question,
+          focus: q.focus,
+        })),
+        model: result.model,
+        tokensUsed: result.tokensUsed,
+        latencyMs: result.latencyMs,
+      };
+    } catch (error: unknown) {
+      throw this.handleError(error);
+    }
+  }
+
+  // ── invoke('ai_feynman_evaluate_answers') ────────────────────
+  async evaluateFeynmanAnswers(
+    concept: string,
+    questions: string[],
+    answers: string[],
+  ): Promise<FeynmanAnswerEvalResult> {
+    this.checkOnline();
+    try {
+      const ipcStart = performance.now();
+      const result = await window.electronAPI!.invoke('ai_feynman_evaluate_answers', {
+        concept,
+        questions,
+        answers,
+        authToken: this.authToken,
+      }) as {
+        understandingScore: number;
+        feedback: string;
+        strongPoints: string[];
+        weakPoints: string[];
+        model: string;
+        tokensUsed: number;
+        latencyMs: number;
+        requestId?: string;
+      };
+      const ipcElapsed = Math.round(performance.now() - ipcStart);
+
+      return {
+        understandingScore: result.understandingScore,
+        feedback: result.feedback,
+        strongPoints: result.strongPoints,
+        weakPoints: result.weakPoints,
+        model: result.model,
+        tokensUsed: result.tokensUsed,
+        latencyMs: result.latencyMs,
+      };
+    } catch (error: unknown) {
       throw this.handleError(error);
     }
   }
@@ -234,7 +314,6 @@ export class ElectronAIPlugin implements AIPlugin {
     if (error instanceof AIError) return error;
 
     const msg = error instanceof Error ? error.message : String(error);
-    console.error('[AI] ElectronAIPlugin error:', msg);
 
     // 离线检查（IPC 调用时网络断开）
     if (typeof navigator !== 'undefined' && !navigator.onLine) {

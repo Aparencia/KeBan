@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { Home, Timer, FileText, Layers, Lightbulb, Settings, ChevronLeft, ChevronRight, MessageSquare, Clapperboard } from 'lucide-react';
+import { Home, Timer, FileText, Layers, Lightbulb, Settings, ChevronLeft, ChevronRight, MessageSquare, Clapperboard, BarChart3, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSidebarStore } from '@/stores/useSidebarStore';
 import { useCaptureStore } from '@/stores/useCaptureStore';
@@ -11,6 +11,8 @@ const navItems = [
   { to: '/notes', label: '笔记', icon: FileText },
   { to: '/flashcards', label: '闪卡', icon: Layers },
   { to: '/feynman', label: '费曼', icon: Lightbulb },
+  { to: '/analytics', label: '效率分析', icon: BarChart3 },
+  { to: '/inspiration', label: '灵感空间', icon: Sparkles },
 ];
 
 export default function Sidebar() {

@@ -12,6 +12,7 @@ from fastapi import APIRouter, Request
 
 from config import call_with_fallback
 from chains.card_gen_chain import CardGenChain
+from chains.optimize_card_chain import OptimizeCardChain
 from fastapi import HTTPException
 
 logger = logging.getLogger(__name__)
@@ -103,4 +104,71 @@ async def generate_cards(request: Request, body: CardGenRequest) -> CardGenRespo
         total_extracted=total_extracted,
         model=model_used,
         tokens_used=tokens_used,
+    )
+
+
+# ============================================================
+# 闪卡优化
+# ============================================================
+
+
+class OptimizeCardRequest(BaseModel):
+    """闪卡优化请求"""
+    front: str = Field(..., min_length=1, description="当前卡片正面内容")
+    back: str = Field(..., min_length=1, description="当前卡片背面内容")
+
+
+class OptimizeCardResult(BaseModel):
+    """闪卡优化响应"""
+    suggested_front: str = Field(..., description="优化后的正面内容")
+    suggested_back: str = Field(..., description="优化后的背面内容")
+    improvements: list[str] = Field(default_factory=list, description="改进说明列表")
+    model: str
+    tokens_used: int
+    latency_ms: int
+
+
+@router.post("/optimize-card", response_model=OptimizeCardResult, summary="优化闪卡内容")
+async def optimize_card(request: Request, body: OptimizeCardRequest) -> OptimizeCardResult:
+    """
+    为现有闪卡生成更清晰的正面/反面表述建议
+
+    - 分析当前卡片内容的清晰度
+    - 生成更简洁、更易记忆的表述
+    - 提供改进说明
+    """
+    user_id = getattr(request.state, "user_id", "anonymous")
+    logger.info("闪卡优化请求: user=%s, front_length=%d, back_length=%d",
+                user_id, len(body.front), len(body.back))
+
+    async def _run_chain(provider, model_name):
+        chain = OptimizeCardChain(provider=provider, model=model_name)
+        return await chain.run(front=body.front, back=body.back)
+
+    try:
+        chain_result, used_provider = await call_with_fallback(
+            request.app, "optimize_card", _run_chain
+        )
+
+        logger.info("闪卡优化完成: provider=%s", used_provider)
+
+    except RuntimeError as e:
+        logger.error("闪卡优化服务全部不可用: %s", str(e))
+        # 降级：返回原始内容 + 提示
+        return OptimizeCardResult(
+            suggested_front=body.front,
+            suggested_back=body.back,
+            improvements=["AI 服务暂不可用，已保留原始内容"],
+            model="fallback",
+            tokens_used=0,
+            latency_ms=0,
+        )
+
+    return OptimizeCardResult(
+        suggested_front=chain_result.get("suggested_front", body.front),
+        suggested_back=chain_result.get("suggested_back", body.back),
+        improvements=chain_result.get("improvements", []),
+        model=chain_result.get("model", "unknown"),
+        tokens_used=chain_result.get("tokens_used", 0),
+        latency_ms=chain_result.get("latency_ms", 0),
     )

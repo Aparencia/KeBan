@@ -12,7 +12,7 @@ import {
   MessageCircle, Lightbulb, SearchCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useAIEvaluate } from '@/lib/ai/useAI';
+import { useAIEvaluate, useAIFeynmanQuestion, useAIFeynmanEvaluateAnswers } from '@/lib/ai/useAI';
 
 export default function FeynmanSessionPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -41,6 +41,8 @@ export default function FeynmanSessionPage() {
   const [rating, setRating] = useState(0);
   const [hoverRating, setHoverRating] = useState(0);
   const [showAIEval, setShowAIEval] = useState(false);
+  const [localAnswers, setLocalAnswers] = useState<string[]>([]);
+  const [showQuestionPanel, setShowQuestionPanel] = useState(false);
 
   // AI Evaluate
   const {
@@ -49,6 +51,23 @@ export default function FeynmanSessionPage() {
     error: aiEvalError,
     evaluate: aiEvaluate,
   } = useAIEvaluate();
+
+  // AI 反问
+  const {
+    loading: aiQuestionLoading,
+    data: aiQuestionData,
+    error: aiQuestionError,
+    generateQuestions,
+  } = useAIFeynmanQuestion();
+
+  // AI 回答评估
+  const {
+    loading: aiAnswerEvalLoading,
+    data: aiAnswerEvalData,
+    error: aiAnswerEvalError,
+    evaluateAnswers: aiEvaluateAnswers,
+  } = useAIFeynmanEvaluateAnswers();
+
   const { toast } = useToast();
 
   const explanationRef = useRef<HTMLDivElement>(null);
@@ -159,9 +178,19 @@ export default function FeynmanSessionPage() {
   ], []);
 
   const handleMenuSelect = useCallback((itemKey: string, text: string) => {
-    // TODO: beta 阶段对接 AI 功能
-    console.warn(`[Feynman ContextMenu] action=${itemKey}`, { text: text.slice(0, 120) });
-  }, []);
+    if (itemKey === 'ai-follow-up') {
+      if (!note?.concept || !note?.explanation) {
+        toast({ type: 'warning', message: '请先完成讲解内容' });
+        return;
+      }
+      setShowQuestionPanel(true);
+      generateQuestions(note.concept, note.explanation)
+        .catch(() => toast({ type: 'error', message: 'AI 追问生成失败，请稍后重试' }));
+    } else {
+      // 其他 AI 操作待后续实现
+      console.warn(`[Feynman ContextMenu] action=${itemKey}`, { text: text.slice(0, 120) });
+    }
+  }, [note, generateQuestions, toast]);
 
   /**
    * 从 textarea 或 window selection 中提取选中文本，若无选中则回退到整体内容。
@@ -637,7 +666,7 @@ export default function FeynmanSessionPage() {
                     )}
 
                     {aiEvalData && !aiEvalLoading && (
-                      <div className="flex flex-col gap-kb-md">
+                      <div className="flex flex-col gap-kb-md kb-ai-result-enter">
                         {/* Overall score */}
                         <div className="flex items-center gap-3">
                           <div className={cn(
@@ -717,6 +746,237 @@ export default function FeynmanSessionPage() {
                                 </li>
                               ))}
                             </ul>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* AI 反问区域 */}
+                {isCompleted && (
+                  <div className={cn(
+                    'p-kb-md rounded-kb-lg',
+                    'bg-feynman/5 border border-feynman/20',
+                  )}>
+                    <div className="flex items-center justify-between mb-kb-md">
+                      <h3 className="text-b1 font-semibold text-text-primary flex items-center gap-2">
+                        <MessageCircle className="w-icon-sm h-icon-sm text-feynman" strokeWidth={1.5} />
+                        AI 反问
+                      </h3>
+                      {showQuestionPanel && (
+                        <button
+                          onClick={() => setShowQuestionPanel(false)}
+                          className="p-1 rounded-kb-full text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-kb-fast"
+                        >
+                          <X className="w-4 h-4" strokeWidth={1.5} />
+                        </button>
+                      )}
+                    </div>
+
+                    {!showQuestionPanel && (
+                      <button
+                        onClick={() => {
+                          if (!note?.concept || !note?.explanation) {
+                            toast({ type: 'warning', message: '请先完成讲解内容' });
+                            return;
+                          }
+                          setShowQuestionPanel(true);
+                          setLocalAnswers([]);
+                          generateQuestions(note.concept, note.explanation)
+                            .catch(() => toast({ type: 'error', message: 'AI 追问生成失败，请稍后重试' }));
+                        }}
+                        disabled={aiQuestionLoading}
+                        className={cn(
+                          'w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-kb-md text-b2 font-medium',
+                          'bg-feynman text-white',
+                          'hover:bg-feynman/90 active:scale-[0.98] transition-all duration-kb-fast',
+                          aiQuestionLoading && 'opacity-60 cursor-not-allowed',
+                        )}
+                      >
+                        {aiQuestionLoading ? (
+                          <Loader2 className="w-icon-sm h-icon-sm animate-spin" />
+                        ) : (
+                          <MessageCircle className="w-icon-sm h-icon-sm" strokeWidth={1.5} />
+                        )}
+                        让 AI 反问
+                      </button>
+                    )}
+
+                    {showQuestionPanel && (
+                      <div className="flex flex-col gap-kb-md">
+                        {/* 加载中 */}
+                        {aiQuestionLoading && (
+                          <div className="flex items-center gap-2 text-b2 text-text-secondary py-4">
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            AI 正在思考追问...
+                          </div>
+                        )}
+
+                        {/* 错误 */}
+                        {aiQuestionError && !aiQuestionLoading && (
+                          <div className="p-3 rounded-kb-md bg-rose-500/10 border border-rose-500/20 text-b2 text-rose-500">
+                            {aiQuestionError}
+                          </div>
+                        )}
+
+                        {/* 追问卡片 */}
+                        {aiQuestionData && !aiQuestionLoading && (
+                          <div className="kb-ai-result-enter flex flex-col gap-kb-sm">
+                            <p className="text-b2 text-text-tertiary">
+                              以下是 AI 小白的追问，请试着回答：
+                            </p>
+                            {aiQuestionData.questions.map((q, i) => (
+                              <div
+                                key={i}
+                                className={cn(
+                                  'p-kb-md rounded-kb-md',
+                                  'bg-bg-elevated border border-border/40',
+                                )}
+                              >
+                                <div className="flex items-start gap-2 mb-2">
+                                  <span className="flex-shrink-0 w-5 h-5 rounded-kb-full bg-feynman/10 text-feynman text-c1 font-semibold flex items-center justify-center">
+                                    {i + 1}
+                                  </span>
+                                  <div className="flex-1">
+                                    <p className="text-b2 text-text-primary font-medium">{q.question}</p>
+                                    {q.focus && (
+                                      <p className="text-c1 text-text-tertiary mt-0.5">聚焦：{q.focus}</p>
+                                    )}
+                                  </div>
+                                </div>
+                                <textarea
+                                  value={localAnswers[i] || ''}
+                                  onChange={(e) => {
+                                    const newAnswers = [...localAnswers];
+                                    newAnswers[i] = e.target.value;
+                                    setLocalAnswers(newAnswers);
+                                  }}
+                                  placeholder="在这里写下你的回答..."
+                                  className={cn(
+                                    'w-full mt-2 p-2.5 rounded-kb-md',
+                                    'bg-bg-secondary border border-border/40',
+                                    'text-b2 text-text-primary placeholder:text-text-tertiary/60',
+                                    'outline-none resize-none min-h-[80px]',
+                                    'focus:border-feynman/50 focus:ring-1 focus:ring-feynman/20 transition-all duration-kb-fast',
+                                  )}
+                                />
+                              </div>
+                            ))}
+
+                            {/* 提交回答按钮 */}
+                            {aiQuestionData.questions.length > 0 && (
+                              <button
+                                onClick={async () => {
+                                  if (!note?.concept) return;
+                                  const questions = aiQuestionData.questions.map(q => q.question);
+                                  const answers = aiQuestionData.questions.map((_, i) => localAnswers[i] || '');
+                                  if (answers.every(a => !a.trim())) {
+                                    toast({ type: 'warning', message: '请至少回答一个追问' });
+                                    return;
+                                  }
+                                  await aiEvaluateAnswers(note.concept, questions, answers)
+                                    .catch(() => toast({ type: 'error', message: 'AI 评估失败，请稍后重试' }));
+                                }}
+                                disabled={aiAnswerEvalLoading || localAnswers.every(a => !a?.trim())}
+                                className={cn(
+                                  'w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-kb-md text-b2 font-medium',
+                                  'bg-brand-600 text-white',
+                                  'hover:bg-brand-700 active:scale-[0.98] transition-all duration-kb-fast',
+                                  (aiAnswerEvalLoading || localAnswers.every(a => !a?.trim())) && 'opacity-60 cursor-not-allowed',
+                                )}
+                              >
+                                {aiAnswerEvalLoading ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <Check className="w-4 h-4" strokeWidth={2} />
+                                )}
+                                提交回答，查看理解度评估
+                              </button>
+                            )}
+
+                            {/* 评估结果 */}
+                            {aiAnswerEvalLoading && (
+                              <div className="flex items-center gap-2 text-b2 text-text-secondary py-4">
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                                正在评估你的回答...
+                              </div>
+                            )}
+
+                            {aiAnswerEvalError && !aiAnswerEvalLoading && (
+                              <div className="p-3 rounded-kb-md bg-rose-500/10 border border-rose-500/20 text-b2 text-rose-500">
+                                {aiAnswerEvalError}
+                              </div>
+                            )}
+
+                            {aiAnswerEvalData && !aiAnswerEvalLoading && (
+                              <div className={cn(
+                                'p-kb-md rounded-kb-md kb-ai-result-enter',
+                                'bg-brand-600/5 border border-brand-500/20',
+                              )}>
+                                <h4 className="text-b1 font-semibold text-text-primary mb-kb-md flex items-center gap-2">
+                                  <Sparkles className="w-icon-sm h-icon-sm text-brand-500" strokeWidth={1.5} />
+                                  理解度评估
+                                </h4>
+
+                                {/* 分数 */}
+                                <div className="flex items-center gap-3 mb-kb-md">
+                                  <div className={cn(
+                                    'w-14 h-14 rounded-kb-full flex items-center justify-center flex-shrink-0',
+                                    'bg-feynman/10 text-feynman text-h2 font-bold',
+                                  )}>
+                                    {aiAnswerEvalData.understandingScore}
+                                  </div>
+                                  <div>
+                                    <p className="text-b1 font-semibold text-text-primary">理解度评分</p>
+                                    <p className="text-b2 text-text-tertiary">
+                                      {aiAnswerEvalData.understandingScore >= 8
+                                        ? '深入理解，能举一反三！'
+                                        : aiAnswerEvalData.understandingScore >= 6
+                                          ? '理解较好，还有深化空间'
+                                          : '建议继续学习，加深理解'}
+                                    </p>
+                                  </div>
+                                </div>
+
+                                {/* 反馈 */}
+                                {aiAnswerEvalData.feedback && (
+                                  <p className="text-b2 text-text-secondary mb-kb-md leading-relaxed">
+                                    {aiAnswerEvalData.feedback}
+                                  </p>
+                                )}
+
+                                {/* 强项 */}
+                                {aiAnswerEvalData.strongPoints.length > 0 && (
+                                  <div className="mb-2">
+                                    <p className="text-b3 font-medium text-semantic-success uppercase tracking-wide mb-1">强项</p>
+                                    <ul className="flex flex-col gap-1">
+                                      {aiAnswerEvalData.strongPoints.map((s, i) => (
+                                        <li key={i} className="flex items-start gap-2 text-b2 text-text-secondary">
+                                          <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 text-semantic-success flex-shrink-0" />
+                                          {s}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
+
+                                {/* 薄弱点 */}
+                                {aiAnswerEvalData.weakPoints.length > 0 && (
+                                  <div>
+                                    <p className="text-b3 font-medium text-rose-500 uppercase tracking-wide mb-1">待加强</p>
+                                    <ul className="flex flex-col gap-1">
+                                      {aiAnswerEvalData.weakPoints.map((w, i) => (
+                                        <li key={i} className="flex items-start gap-2 text-b2 text-text-secondary">
+                                          <Circle className="w-3.5 h-3.5 mt-0.5 text-rose-400 flex-shrink-0" />
+                                          {w}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>

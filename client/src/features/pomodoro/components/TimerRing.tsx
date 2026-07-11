@@ -14,6 +14,33 @@ const PHASE_COLORS: Record<string, string> = {
   long_break: '#2563EB',
 };
 
+// RGB tuples for interpolation
+const COLOR_WARM_START: [number, number, number] = [249, 115, 22];  // #F97316
+const COLOR_WARM_END:   [number, number, number] = [234, 88, 12];   // #EA580C
+
+function lerpColor(
+  from: [number, number, number],
+  to: [number, number, number],
+  t: number,
+): string {
+  const r = Math.round(from[0] + t * (to[0] - from[0]));
+  const g = Math.round(from[1] + t * (to[1] - from[1]));
+  const b = Math.round(from[2] + t * (to[2] - from[2]));
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
+function getStrokeColor(
+  phase: string,
+  remainingSeconds: number,
+): string {
+  const base = PHASE_COLORS[phase] ?? '#F43F5E';
+  if (phase === 'work' && remainingSeconds <= 300 && remainingSeconds > 0) {
+    const t = 1 - remainingSeconds / 300; // 0 → 1 as time depletes
+    return lerpColor(COLOR_WARM_START, COLOR_WARM_END, t);
+  }
+  return base;
+}
+
 const PHASE_LABELS: Record<string, string> = {
   work: '专注中',
   short_break: '短休息',
@@ -30,7 +57,7 @@ export default function TimerRing({
   const rafRef = useRef<number>(0);
 
   const progress = totalSeconds > 0 ? remainingSeconds / totalSeconds : 0;
-  const color = PHASE_COLORS[phase];
+  const color = getStrokeColor(phase, remainingSeconds);
   const label = PHASE_LABELS[phase];
   const isLast10 = remainingSeconds <= 10 && remainingSeconds > 0 && isRunning;
 
@@ -107,10 +134,12 @@ export default function TimerRing({
             strokeLinecap="round"
             strokeDasharray={circumference}
             strokeDashoffset={offset}
-            className="transition-all duration-kb-normal ease-kb-default"
+            className="transition-[stroke-dashoffset] duration-1000 ease-linear"
             style={{
               transform: 'rotate(-90deg)',
               transformOrigin: '50% 50%',
+              stroke: color,
+              transition: 'stroke 1s ease-in-out, stroke-dashoffset 1s linear',
             }}
           />
         </svg>

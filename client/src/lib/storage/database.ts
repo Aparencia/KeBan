@@ -148,6 +148,12 @@ export class KeBanDatabase extends Dexie {
     this.version(5).stores({
       windowCaptures: 'id, noteId, status, startedAt',
     });
+
+    // v0.5.0-alpha.2: 双向关联 — flashcards 新增 sourceNoteId 索引，notes 新增 videoNoteType 索引
+    this.version(6).stores({
+      flashcards: 'id, deckId, front, back, createdAt, dueDate, interval, easeFactor, repetitions, lapses, sourceNoteId',
+      notes: 'id, title, folderId, createdAt, updatedAt, *tags, pinned, videoNoteType',
+    });
   }
 }
 

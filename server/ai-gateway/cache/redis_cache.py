@@ -12,6 +12,8 @@ import logging
 from typing import Any
 
 import redis.asyncio as aioredis
+from redis.retry import Retry
+from redis.backoff import ExponentialBackoff
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +23,6 @@ class RedisCache:
 
     def __init__(self, redis_url: str = "redis://localhost:6379/0"):
         self.redis_url = redis_url
-        # TODO-1: 初始化 Redis 异步客户端（延迟到 connect() 时真正建立连接）
         self._client: aioredis.Redis | None = None
 
     async def connect(self) -> None:
@@ -32,12 +33,12 @@ class RedisCache:
         连接失败时仅记录日志，不抛出异常（优雅降级）。
         """
         try:
-            # TODO-2 / TODO-3: 创建异步客户端并建立连接
             self._client = aioredis.from_url(
                 self.redis_url,
                 decode_responses=True,
                 socket_connect_timeout=5,
                 retry_on_timeout=True,
+                retry=Retry(ExponentialBackoff(), retries=3),
             )
             # 验证连接可用
             await self._client.ping()
@@ -62,28 +63,28 @@ class RedisCache:
         if not self._client:
             return None
         try:
-            # TODO-4: 实现 get 操作
             return await self._client.get(key)
         except Exception as exc:
             logger.warning("Redis GET 失败 key=%s: %s", key, exc)
             return None
 
-    async def set(self, key: str, value: str, expire: int = 0) -> None:
+    async def set(self, key: str, value: str, expire: int = 0) -> bool:
         """
         设置缓存值，expire 为过期时间（秒）
 
-        Redis 不可用时静默跳过。
+        Redis 不可用时静默跳过。返回是否设置成功。
         """
         if not self._client:
-            return
+            return False
         try:
-            # TODO-5: 实现 set 操作（带可选 TTL）
             if expire > 0:
                 await self._client.set(key, value, ex=expire)
             else:
                 await self._client.set(key, value)
+            return True
         except Exception as exc:
             logger.warning("Redis SET 失败 key=%s: %s", key, exc)
+            return False
 
     async def increment(self, key: str, expire: int = 86400) -> int:
         """
@@ -102,7 +103,6 @@ class RedisCache:
         if not self._client:
             return 0
         try:
-            # TODO-6: 实现 increment 操作（pipeline: INCR + EXPIRE）
             pipe = self._client.pipeline()
             pipe.incr(key)
             pipe.expire(key, expire)
@@ -122,7 +122,6 @@ class RedisCache:
         Returns:
             dict | None: 缓存的 AI 响应；未命中或 Redis 不可用时返回 None
         """
-        # TODO-7: 实现 AI 响应缓存读取（JSON 反序列化）
         key = f"ai_cache:{prompt_hash}"
         data = await self.get(key)
         if data:
@@ -143,7 +142,6 @@ class RedisCache:
             response: AI 响应数据
             expire: 缓存过期时间（秒），默认 1 小时
         """
-        # TODO-8 / TODO-9: 实现 AI 响应缓存写入（JSON 序列化）
         key = f"ai_cache:{prompt_hash}"
         try:
             await self.set(key, json.dumps(response, ensure_ascii=False), expire=expire)

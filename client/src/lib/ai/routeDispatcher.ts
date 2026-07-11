@@ -103,7 +103,6 @@ export class RouteDispatcher {
    */
   registerWorker(worker: PipelineWorker): void {
     this.workers.push(worker);
-    console.log(`[RouteDispatcher] Worker registered: ${worker.name}`);
   }
 
   /**
@@ -202,8 +201,7 @@ export class RouteDispatcher {
         if (result) {
           results.push(result);
         }
-      } catch (error) {
-        console.error(`[RouteDispatcher] Worker "${worker.name}" failed:`, error);
+      } catch {
         // 错误隔离：单个 Worker 失败不影响其他
       }
     }
@@ -233,7 +231,6 @@ export class RouteDispatcher {
    */
   handleFailure(route: RouteSource, error: Error): RouteDecision {
     this.failureCounts[route]++;
-    console.warn(`[RouteDispatcher] Route "${route}" failed (${this.failureCounts[route]}/${this.config.maxRetries}):`, error.message);
 
     // 基于当前决策重新计算，失败的通道会被自动关闭
     const base = this.lastDecision ?? this.makeFallbackDecision();

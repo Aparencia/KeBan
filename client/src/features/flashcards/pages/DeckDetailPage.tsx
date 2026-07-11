@@ -15,6 +15,7 @@ import {
   Check,
   Download,
   PauseCircle,
+  ExternalLink,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { exportDeck, downloadDeckFile } from '@/lib/storage/exportImport';
@@ -295,6 +296,17 @@ export default function DeckDetailPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0">
+                  {card.sourceNoteId && (
+                    <button
+                      onClick={() => navigate(`/notes/${card.sourceNoteId}`)}
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded-kb-sm text-c1 text-text-tertiary hover:text-brand-600 hover:bg-brand-50 transition-all duration-kb-fast"
+                      aria-label="查看上下文"
+                      title="查看来源笔记"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" strokeWidth={1.5} />
+                      查看上下文
+                    </button>
+                  )}
                   <button
                     onClick={() => openEditModal(card)}
                     className="p-1.5 rounded-kb-full text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-kb-fast"
@@ -425,7 +437,7 @@ export default function DeckDetailPage() {
               )}
             </>
           ) : (
-            <div className="flex flex-col gap-kb-sm">
+            <div className="flex flex-col gap-kb-sm kb-ai-result-enter">
               <p className="text-b2 text-text-tertiary mb-1">
                 生成 {aiGeneratedCards.length} 张闪卡，点击「添加到卡组」将其加入当前牌组：
               </p>

@@ -63,6 +63,10 @@ MODEL_ROUTING: dict[str, tuple[str, str]] = {
     "recommend": ("glm", "free"),
     "vision_extract": ("glm", "vision"),
     "transcribe": ("qwen", "asr"),
+    "tag_content": ("glm", "free"),
+    "optimize_card": ("glm", "free"),
+    "feynman_question": ("deepseek", "evaluate"),
+    "feynman_evaluate": ("deepseek", "evaluate"),
 }
 
 # ============================================================
@@ -114,6 +118,10 @@ PROVIDER_FALLBACK_CHAIN: dict[str, list[str]] = {
     "recommend":      ["deepseek", "glm", "fallback"],   # DeepSeek 为主，GLM 备选
     "vision_extract": ["glm", "qwen"],                   # GLM-4V-Flash（免费）优先，Qwen-VL 备选
     "transcribe":     ["qwen", "glm", "fallback"],       # Qwen Paraformer 优先，GLM 备选
+    "tag_content":    ["glm", "deepseek", "fallback"],    # GLM（免费）优先，DeepSeek 备选
+    "optimize_card":  ["glm", "qwen", "fallback"],       # GLM（免费）优先，Qwen 备选
+    "feynman_question": ["deepseek", "glm", "fallback"], # DeepSeek 为主，GLM 备选
+    "feynman_evaluate": ["deepseek", "glm", "fallback"], # DeepSeek 为主，GLM 备选
 }
 
 
@@ -190,6 +198,10 @@ TIMEOUT_CONFIG: dict[str, int] = {
     "recommend": 10,
     "vision_extract": 20,
     "transcribe": 30,
+    "tag_content": 10,
+    "optimize_card": 15,
+    "feynman_question": 15,
+    "feynman_evaluate": 15,
 }
 
 # ============================================================
@@ -204,6 +216,10 @@ RATE_LIMITS: dict[str, int] = {
     "recommend": 15,
     "vision_extract": 20,
     "transcribe": 30,
+    "tag_content": 30,
+    "optimize_card": 15,
+    "feynman_question": 15,
+    "feynman_evaluate": 15,
 }
 
 # ============================================================
@@ -219,6 +235,7 @@ def is_valid_api_key(key: str) -> bool:
 
 
 APP_CONFIG = {
+    "app_env": os.getenv("APP_ENV", "development"),
     "title": "课伴 AI 网关",
     "version": "0.1.0-alpha",
     "description": "课伴(KeBan) AI 增强服务网关 — MVP-2 Alpha",

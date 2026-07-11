@@ -3,13 +3,14 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Button, EmptyState, useToast } from '@/components/ui';
 import { ContextMenu, type ContextMenuGroup } from '@/components/ui/ContextMenu';
 import { FlipCard } from '../components/FlipCard';
-import { X, RotateCcw, BookOpen, PauseCircle, AlertTriangle, Sparkles } from 'lucide-react';
+import { X, RotateCcw, BookOpen, PauseCircle, AlertTriangle, Sparkles, ExternalLink, Loader2, Check, XIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useStudySessionStore } from '../store/useStudySessionStore';
 import { useFlashcardStore } from '../store/useFlashcardStore';
 import { useContextMenu } from '@/lib/contextMenu/useContextMenu';
 import { Rating, calculateIntervals } from '@/lib/sm2';
 import type { Flashcard } from '@/types/models';
+import { useAIFlashcards, useAIOptimizeCard } from '@/lib/ai/useAI';
 
 function formatInterval(days: number): string {
   if (days === 0) return '<1d';
@@ -43,6 +44,13 @@ export default function StudySessionPage() {
 
   const { selectDeck, loadCards, updateCard } = useFlashcardStore();
   const { toast } = useToast();
+  const { generate: aiGenerate } = useAIFlashcards();
+  const {
+    optimize: aiOptimize,
+    data: optimizeData,
+    loading: optimizeLoading,
+    error: optimizeError,
+  } = useAIOptimizeCard();
 
   // Flip-completion gate: 翻转动画结束后才显示评分按钮（stagger 入场）
   const [flipDone, setFlipDone] = useState(false);
@@ -56,6 +64,8 @@ export default function StudySessionPage() {
   const prevIndexRef = useRef(currentIndex);
   // Ref to current button DOM nodes for bounce class
   const btnRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  // AI optimize suggestion modal visibility
+  const [showOptimizeModal, setShowOptimizeModal] = useState(false);
 
   // 当 isFlipped 变为 false 时重置 flipDone
   useEffect(() => {
@@ -97,7 +107,7 @@ export default function StudySessionPage() {
     },
   ];
 
-  const handleSessionSelect = useCallback((itemKey: string, card: Flashcard) => {
+  const handleSessionSelect = useCallback(async (itemKey: string, card: Flashcard) => {
     switch (itemKey) {
       case 'suspend': {
         // 搁置：将到期日设为 1 年后
@@ -114,13 +124,13 @@ export default function StudySessionPage() {
         toast({ type: 'success', message: '已标记为困难卡片，后续会更频繁复习' });
         break;
       }
-      case 'ai-optimize':
-        // TODO: 接入 AI 优化卡片内容功能
-        console.warn('[StudySessionPage] AI 优化卡片内容功能待实现');
-        toast({ type: 'info', message: 'AI 优化功能正在开发中' });
+      case 'ai-optimize': {
+        await aiOptimize(card.front, card.back);
+        setShowOptimizeModal(true);
         break;
+      }
     }
-  }, [updateCard, toast]);
+  }, [updateCard, toast, aiOptimize]);
 
   // Initialize session on mount
   useEffect(() => {
@@ -163,14 +173,25 @@ export default function StudySessionPage() {
     }, 350);
   };
 
-  /** 按钮点击回弹效果 */
-  const handleBtnClick = (index: number) => {
+  /** 按钮点击回弹 + 涟漪效果 */
+  const handleBtnClick = (index: number, e?: React.MouseEvent<HTMLButtonElement>) => {
     const el = btnRefs.current[index];
     if (el) {
       el.classList.add('animate-scale-bounce');
       el.addEventListener('animationend', () => {
         el.classList.remove('animate-scale-bounce');
       }, { once: true });
+
+      // 涟漪效果：仅“良好”和“简单”按钮（index 2 & 3）
+      if ((index === 2 || index === 3) && e) {
+        const rect = el.getBoundingClientRect();
+        const ripple = document.createElement('span');
+        ripple.className = 'kb-ripple-effect';
+        ripple.style.left = `${e.clientX - rect.left}px`;
+        ripple.style.top = `${e.clientY - rect.top}px`;
+        el.appendChild(ripple);
+        ripple.addEventListener('animationend', () => ripple.remove(), { once: true });
+      }
     }
   };
 
@@ -184,6 +205,26 @@ export default function StudySessionPage() {
   const handleFinish = () => {
     endSession();
     navigate(`/flashcards/${deckId}`);
+  };
+
+  const handleOptimizeClick = async () => {
+    if (!current) return;
+    await aiOptimize(current.front, current.back);
+    setShowOptimizeModal(true);
+  };
+
+  const handleAdoptSuggestion = () => {
+    if (!current || !optimizeData) return;
+    updateCard(current.id, {
+      front: optimizeData.suggestedFront,
+      back: optimizeData.suggestedBack,
+    });
+    setShowOptimizeModal(false);
+    toast({ type: 'success', message: '已更新卡片内容' });
+  };
+
+  const handleDismissSuggestion = () => {
+    setShowOptimizeModal(false);
   };
 
   // No cards available
@@ -261,6 +302,38 @@ export default function StudySessionPage() {
               onFlipEnd={() => setFlipDone(true)}
               exiting={exiting}
             />
+            {isFlipped && (
+              <div className="flex justify-center gap-3 mt-3">
+                {current.sourceNoteId && (
+                  <button
+                    onClick={() => navigate(`/notes/${current.sourceNoteId}`)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-kb-md text-b3 font-medium text-text-secondary hover:text-brand-600 hover:bg-brand-50 transition-all duration-kb-fast"
+                    title="查看来源笔记"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" strokeWidth={1.5} />
+                    查看上下文
+                  </button>
+                )}
+                <button
+                  onClick={handleOptimizeClick}
+                  disabled={optimizeLoading}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-kb-md text-b3 font-medium",
+                    "text-text-secondary hover:text-amber-600 hover:bg-amber-50",
+                    "transition-all duration-kb-fast",
+                    "disabled:opacity-50 disabled:cursor-not-allowed",
+                  )}
+                  title="AI 优化建议"
+                >
+                  {optimizeLoading ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" strokeWidth={1.5} />
+                  ) : (
+                    <Sparkles className="w-3.5 h-3.5" strokeWidth={1.5} />
+                  )}
+                  AI 优化建议
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           <div className="flex flex-col items-center gap-kb-md text-center py-kb-2xl">
@@ -317,11 +390,11 @@ export default function StudySessionPage() {
                   <button
                     ref={(el) => { btnRefs.current[i] = el; }}
                     key={label}
-                    onClick={() => { handleBtnClick(i); handleRate(rating); }}
+                    onClick={(e) => { handleBtnClick(i, e); handleRate(rating); }}
                     onMouseEnter={() => setHoveredRating(i)}
                     onMouseLeave={() => setHoveredRating(null)}
                     className={cn(
-                      'flex flex-col items-center gap-0.5 py-3 rounded-kb-lg',
+                      'relative overflow-hidden flex flex-col items-center gap-0.5 py-3 rounded-kb-lg',
                       'text-white font-semibold text-b2',
                       'opacity-0 animate-stagger-in',
                       'transition-[background-color,box-shadow] duration-kb-fast',
@@ -353,6 +426,87 @@ export default function StudySessionPage() {
               </Button>
             </div>
           )}
+        </div>
+      )}
+
+      {/* AI 优化建议模态框 */}
+      {showOptimizeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-kb-md">
+          <div className="w-full max-w-md bg-bg-elevated rounded-kb-xl shadow-kb-lg p-kb-lg animate-fade-in-up">
+            <div className="flex items-center justify-between mb-kb-md">
+              <h3 className="text-h2 font-semibold text-text-primary flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-amber-500" strokeWidth={1.5} />
+                AI 优化建议
+              </h3>
+              <button
+                onClick={handleDismissSuggestion}
+                className="p-1 rounded-kb-full text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all"
+              >
+                <X className="w-4 h-4" strokeWidth={1.5} />
+              </button>
+            </div>
+
+            {optimizeLoading && (
+              <div className="flex flex-col items-center gap-3 py-kb-lg">
+                <Loader2 className="w-8 h-8 animate-spin text-brand-600" strokeWidth={1.5} />
+                <p className="text-b2 text-text-secondary">AI 正在分析卡片内容…</p>
+              </div>
+            )}
+
+            {optimizeError && !optimizeLoading && (
+              <div className="py-kb-md">
+                <p className="text-b2 text-semantic-error">{optimizeError}</p>
+              </div>
+            )}
+
+            {optimizeData && !optimizeLoading && (
+              <div className="flex flex-col gap-kb-md kb-ai-result-enter">
+                {/* 建议正面 */}
+                <div>
+                  <p className="text-c1 font-medium text-text-tertiary mb-1">建议正面</p>
+                  <p className="text-b2 text-text-primary bg-bg-tertiary rounded-kb-md px-3 py-2">
+                    {optimizeData.suggestedFront}
+                  </p>
+                </div>
+                {/* 建议背面 */}
+                <div>
+                  <p className="text-c1 font-medium text-text-tertiary mb-1">建议背面</p>
+                  <p className="text-b2 text-text-primary bg-bg-tertiary rounded-kb-md px-3 py-2">
+                    {optimizeData.suggestedBack}
+                  </p>
+                </div>
+                {/* 改进说明 */}
+                {optimizeData.improvements.length > 0 && (
+                  <div>
+                    <p className="text-c1 font-medium text-text-tertiary mb-1">改进说明</p>
+                    <ul className="list-disc list-inside space-y-1">
+                      {optimizeData.improvements.map((imp, i) => (
+                        <li key={i} className="text-b3 text-text-secondary">{imp}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {/* 操作按钮 */}
+                <div className="flex gap-3 mt-kb-sm">
+                  <Button
+                    variant="secondary"
+                    onClick={handleDismissSuggestion}
+                    className="flex-1"
+                    icon={<XIcon className="w-icon-sm h-icon-sm" strokeWidth={1.5} />}
+                  >
+                    忽略
+                  </Button>
+                  <Button
+                    onClick={handleAdoptSuggestion}
+                    className="flex-1"
+                    icon={<Check className="w-icon-sm h-icon-sm" strokeWidth={1.5} />}
+                  >
+                    采用建议
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

@@ -26,6 +26,12 @@ PATH_TO_FEATURE: dict[str, str] = {
     "/api/v1/ai/generate-cards": "generate_cards",
     "/api/v1/ai/evaluate-explanation": "evaluate",
     "/api/v1/ai/recommend-duration": "recommend",
+    "/api/v1/ai/vision": "vision_extract",
+    "/api/v1/ai/transcribe": "transcribe",
+    "/api/v1/ai/tag-content": "tag_content",
+    "/api/v1/ai/optimize-card": "optimize_card",
+    "/api/v1/ai/feynman-question": "feynman_question",
+    "/api/v1/ai/feynman-evaluate-answers": "feynman_evaluate",
 }
 
 

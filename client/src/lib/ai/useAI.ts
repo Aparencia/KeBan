@@ -6,7 +6,8 @@ import { hasUserKeys } from './apiKeyManager';
 import type {
   SummarizeResult, FlashcardResult, EvaluateResult, DurationResult,
   SummarizeOptions, FlashcardOptions, EvaluateOptions, DurationHistoryData, DurationOptions,
-  VisionExtractResult,
+  VisionExtractResult, OptimizeCardResult,
+  FeynmanQuestionResult, FeynmanAnswerEvalResult,
 } from './types';
 
 interface AIState<T> {
@@ -57,20 +58,15 @@ export function useAISummarize() {
     } catch (error: unknown) {
       const aiError = error instanceof AIError ? error : null;
       if (aiError?.code === 'content_too_short') {
-        console.warn('[AI]', aiError.message);
         setState({ data: null, loading: false, error: aiError.message, isFallback: false, needsConfig: false });
       } else if (aiError?.code === 'offline') {
-        console.warn('[AI] 离线状态');
         setState({ data: null, loading: false, error: aiError.message, isFallback: false, needsConfig: false });
       } else if (aiError?.code === 'timeout') {
-        console.warn('[AI] 超时');
         setState({ data: null, loading: false, error: 'AI 服务响应超时，请稍后重试', isFallback: false, needsConfig: false });
       } else if (aiError?.code === 'service_unavailable') {
-        console.warn('[AI] 服务不可用');
         const svc = handleServiceUnavailable();
         setState({ data: null, loading: false, error: svc.error, isFallback: false, needsConfig: svc.needsConfig });
       } else {
-        console.error('[AI] summarize hook error:', error);
         const fallback = getLocalFallbackMessage('summarize');
         setState({ data: null, loading: false, error: fallback.message + '。' + fallback.suggestion, isFallback: true, needsConfig: false });
       }
@@ -97,20 +93,15 @@ export function useAIFlashcards() {
     } catch (error: unknown) {
       const aiError = error instanceof AIError ? error : null;
       if (aiError?.code === 'content_too_short') {
-        console.warn('[AI]', aiError.message);
         setState({ data: null, loading: false, error: aiError.message, isFallback: false, needsConfig: false });
       } else if (aiError?.code === 'offline') {
-        console.warn('[AI] 离线状态');
         setState({ data: null, loading: false, error: aiError.message, isFallback: false, needsConfig: false });
       } else if (aiError?.code === 'timeout') {
-        console.warn('[AI] 超时');
         setState({ data: null, loading: false, error: 'AI 服务响应超时，请稍后重试', isFallback: false, needsConfig: false });
       } else if (aiError?.code === 'service_unavailable') {
-        console.warn('[AI] 服务不可用');
         const svc = handleServiceUnavailable();
         setState({ data: null, loading: false, error: svc.error, isFallback: false, needsConfig: svc.needsConfig });
       } else {
-        console.error('[AI] flashcard hook error:', error);
         const fallback = getLocalFallbackMessage('flashcard');
         setState({ data: null, loading: false, error: fallback.message + '。' + fallback.suggestion, isFallback: true, needsConfig: false });
       }
@@ -137,20 +128,15 @@ export function useAIEvaluate() {
     } catch (error: unknown) {
       const aiError = error instanceof AIError ? error : null;
       if (aiError?.code === 'content_too_short') {
-        console.warn('[AI]', aiError.message);
         setState({ data: null, loading: false, error: aiError.message, isFallback: false, needsConfig: false });
       } else if (aiError?.code === 'offline') {
-        console.warn('[AI] 离线状态');
         setState({ data: null, loading: false, error: aiError.message, isFallback: false, needsConfig: false });
       } else if (aiError?.code === 'timeout') {
-        console.warn('[AI] 超时');
         setState({ data: null, loading: false, error: 'AI 服务响应超时，请稍后重试', isFallback: false, needsConfig: false });
       } else if (aiError?.code === 'service_unavailable') {
-        console.warn('[AI] 服务不可用');
         const svc = handleServiceUnavailable();
         setState({ data: null, loading: false, error: svc.error, isFallback: false, needsConfig: svc.needsConfig });
       } else {
-        console.error('[AI] evaluate hook error:', error);
         const fallback = getLocalFallbackMessage('evaluate');
         setState({ data: null, loading: false, error: fallback.message + '。' + fallback.suggestion, isFallback: true, needsConfig: false });
       }
@@ -177,20 +163,15 @@ export function useAIDuration() {
     } catch (error: unknown) {
       const aiError = error instanceof AIError ? error : null;
       if (aiError?.code === 'content_too_short') {
-        console.warn('[AI]', aiError.message);
         setState({ data: null, loading: false, error: aiError.message, isFallback: false, needsConfig: false });
       } else if (aiError?.code === 'offline') {
-        console.warn('[AI] 离线状态');
         setState({ data: null, loading: false, error: aiError.message, isFallback: false, needsConfig: false });
       } else if (aiError?.code === 'timeout') {
-        console.warn('[AI] 超时');
         setState({ data: null, loading: false, error: 'AI 服务响应超时，请稍后重试', isFallback: false, needsConfig: false });
       } else if (aiError?.code === 'service_unavailable') {
-        console.warn('[AI] 服务不可用');
         const svc = handleServiceUnavailable();
         setState({ data: null, loading: false, error: svc.error, isFallback: false, needsConfig: svc.needsConfig });
       } else {
-        console.error('[AI] duration hook error:', error);
         const msg = error instanceof Error ? error.message : (typeof error === 'string' ? error : '番茄钟推荐失败');
         setState({ data: null, loading: false, error: msg, isFallback: true, needsConfig: false });
       }
@@ -198,6 +179,43 @@ export function useAIDuration() {
   }, []);
 
   return { ...state, recommend };
+}
+
+/**
+ * AI 内容打标 hook
+ */
+export function useAITagContent() {
+  const [state, setState] = useState<AIState<{ contentNature: string; cognitiveDepth: string; subject: string }>>({
+    ...INITIAL_STATE,
+  });
+
+  const tagContent = useCallback(async (content: string) => {
+    setState(prev => ({ ...prev, loading: true, error: null, needsConfig: false }));
+    try {
+      const result = await aiPluginLoader.tagContent(content);
+      const mapped = {
+        contentNature: result.contentNature,
+        cognitiveDepth: result.cognitiveDepth,
+        subject: result.subject,
+      };
+      setState({ data: mapped, loading: false, error: null, isFallback: false, needsConfig: false });
+      return mapped;
+    } catch (error: unknown) {
+      const aiError = error instanceof AIError ? error : null;
+      if (aiError?.code === 'offline') {
+        setState({ data: null, loading: false, error: aiError.message, isFallback: false, needsConfig: false });
+      } else if (aiError?.code === 'service_unavailable') {
+        const svc = handleServiceUnavailable();
+        setState({ data: null, loading: false, error: svc.error, isFallback: false, needsConfig: svc.needsConfig });
+      } else {
+        const msg = error instanceof Error ? error.message : '内容打标失败';
+        setState({ data: null, loading: false, error: msg, isFallback: true, needsConfig: false });
+      }
+      return null;
+    }
+  }, []);
+
+  return { ...state, tagContent };
 }
 
 /**
@@ -233,4 +251,113 @@ export function useVisionExtract() {
   }, []);
 
   return { extract, data, loading, error, needsConfig };
+}
+
+/**
+ * AI 闪卡优化 hook
+ */
+export function useAIOptimizeCard() {
+  const [state, setState] = useState<AIState<OptimizeCardResult>>({
+    ...INITIAL_STATE,
+  });
+
+  const optimize = useCallback(async (front: string, back: string) => {
+    setState(prev => ({ ...prev, loading: true, error: null, needsConfig: false }));
+    try {
+      const result = await aiPluginLoader.optimizeCard(front, back);
+      setState({ data: result, loading: false, error: null, isFallback: false, needsConfig: false });
+      return result;
+    } catch (error: unknown) {
+      const aiError = error instanceof AIError ? error : null;
+      if (aiError?.code === 'content_too_short') {
+        setState({ data: null, loading: false, error: aiError.message, isFallback: false, needsConfig: false });
+      } else if (aiError?.code === 'offline') {
+        setState({ data: null, loading: false, error: aiError.message, isFallback: false, needsConfig: false });
+      } else if (aiError?.code === 'timeout') {
+        setState({ data: null, loading: false, error: 'AI 服务响应超时，请稍后重试', isFallback: false, needsConfig: false });
+      } else if (aiError?.code === 'service_unavailable') {
+        const svc = handleServiceUnavailable();
+        setState({ data: null, loading: false, error: svc.error, isFallback: false, needsConfig: svc.needsConfig });
+      } else {
+        const fallback = getLocalFallbackMessage('optimize_card');
+        setState({ data: null, loading: false, error: fallback.message + '。' + fallback.suggestion, isFallback: true, needsConfig: false });
+      }
+    }
+  }, []);
+
+  return { ...state, optimize };
+}
+
+/**
+ * AI 费曼反问 hook — 生成追问
+ */
+export function useAIFeynmanQuestion() {
+  const [state, setState] = useState<AIState<FeynmanQuestionResult>>({
+    ...INITIAL_STATE,
+  });
+
+  const generateQuestions = useCallback(async (concept: string, explanation: string) => {
+    setState(prev => ({ ...prev, loading: true, error: null, needsConfig: false }));
+    try {
+      const result = await aiPluginLoader.generateFeynmanQuestions(concept, explanation);
+      setState({ data: result, loading: false, error: null, isFallback: false, needsConfig: false });
+      return result;
+    } catch (error: unknown) {
+      const aiError = error instanceof AIError ? error : null;
+      if (aiError?.code === 'content_too_short') {
+        setState({ data: null, loading: false, error: aiError.message, isFallback: false, needsConfig: false });
+      } else if (aiError?.code === 'offline') {
+        setState({ data: null, loading: false, error: aiError.message, isFallback: false, needsConfig: false });
+      } else if (aiError?.code === 'timeout') {
+        setState({ data: null, loading: false, error: 'AI 服务响应超时，请稍后重试', isFallback: false, needsConfig: false });
+      } else if (aiError?.code === 'service_unavailable') {
+        const svc = handleServiceUnavailable();
+        setState({ data: null, loading: false, error: svc.error, isFallback: false, needsConfig: svc.needsConfig });
+      } else {
+        const msg = error instanceof Error ? error.message : 'AI 追问生成失败';
+        setState({ data: null, loading: false, error: msg, isFallback: true, needsConfig: false });
+      }
+      return null;
+    }
+  }, []);
+
+  return { ...state, generateQuestions };
+}
+
+/**
+ * AI 费曼回答评估 hook — 评估理解度
+ */
+export function useAIFeynmanEvaluateAnswers() {
+  const [state, setState] = useState<AIState<FeynmanAnswerEvalResult>>({
+    ...INITIAL_STATE,
+  });
+
+  const evaluateAnswers = useCallback(async (
+    concept: string,
+    questions: string[],
+    answers: string[],
+  ) => {
+    setState(prev => ({ ...prev, loading: true, error: null, needsConfig: false }));
+    try {
+      const result = await aiPluginLoader.evaluateFeynmanAnswers(concept, questions, answers);
+      setState({ data: result, loading: false, error: null, isFallback: false, needsConfig: false });
+      return result;
+    } catch (error: unknown) {
+      const aiError = error instanceof AIError ? error : null;
+      if (aiError?.code === 'offline') {
+        setState({ data: null, loading: false, error: aiError.message, isFallback: false, needsConfig: false });
+      } else if (aiError?.code === 'timeout') {
+        setState({ data: null, loading: false, error: 'AI 服务响应超时，请稍后重试', isFallback: false, needsConfig: false });
+      } else if (aiError?.code === 'service_unavailable') {
+        const svc = handleServiceUnavailable();
+        setState({ data: null, loading: false, error: svc.error, isFallback: false, needsConfig: svc.needsConfig });
+      } else {
+        const msg = error instanceof Error ? error.message : 'AI 评估失败';
+        setState({ data: null, loading: false, error: msg, isFallback: true, needsConfig: false });
+      }
+      return null;
+    }
+  }, []);
+
+  return { ...state, evaluateAnswers };
 }

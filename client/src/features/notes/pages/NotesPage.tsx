@@ -14,6 +14,7 @@ import { useNavigate } from 'react-router-dom';
 import { useNoteStore } from '../store/useNoteStore';
 import { useContextMenu } from '@/lib/contextMenu';
 import type { Note } from '@/types/models';
+import { useAISummarize, useAIFlashcards } from '@/lib/ai/useAI';
 
 const templateLabels: Record<NoteTemplate | 'qa', string> = {
   outline: '大纲式', cornell: '康奈尔', mindmap: '思维导图', free: '自由笔记', blank: '空白', qa: '问答',
@@ -60,6 +61,10 @@ export default function NotesPage() {
   } = useNoteStore();
 
   const { toast } = useToast();
+
+  // AI hooks
+  const { summarize } = useAISummarize();
+  const { generate: aiGenerateCards } = useAIFlashcards();
 
   // 右键菜单 hook
   const {
@@ -195,7 +200,7 @@ export default function NotesPage() {
   ], []);
 
   // 右键菜单选中回调
-  const handleCtxMenuSelect = useCallback((itemKey: string, noteCtx: Note) => {
+  const handleCtxMenuSelect = useCallback(async (itemKey: string, noteCtx: Note) => {
     switch (itemKey) {
       case 'open':
         handleSelectNote(noteCtx.id!);
@@ -212,18 +217,48 @@ export default function NotesPage() {
       case 'delete':
         handleDeleteNote(noteCtx.id!);
         break;
-      case 'ai-summary':
-        // TODO: 集成 AI 摘要（需在编辑页内触发）
-        console.warn('[ContextMenu] AI 摘要功能待集成', noteCtx.id);
-        toast({ type: 'info', message: 'AI 摘要功能即将上线' });
+      case 'ai-summary': {
+        const text = stripHtml(noteCtx.content);
+        if (text.length < 10) {
+          toast({ type: 'warning', message: '笔记内容太少，无法生成摘要' });
+          break;
+        }
+        toast({ type: 'info', message: 'AI 正在生成摘要...' });
+        try {
+          const result = await summarize(text, { max_length: 200, style: 'bullet', language: 'zh' });
+          if (result?.summary) {
+            await navigator.clipboard.writeText(result.summary);
+            toast({ type: 'success', message: 'AI 摘要已生成并复制到剪贴板' });
+          } else {
+            toast({ type: 'warning', message: 'AI 未能生成摘要，请检查内容或稍后重试' });
+          }
+        } catch {
+          toast({ type: 'error', message: 'AI 摘要生成失败，请检查网络后重试' });
+        }
         break;
-      case 'ai-flashcard':
-        // TODO: 集成 AI 闪卡生成
-        console.warn('[ContextMenu] AI 闪卡功能待集成', noteCtx.id);
-        toast({ type: 'info', message: 'AI 闪卡生成功能即将上线' });
+      }
+      case 'ai-flashcard': {
+        const text = stripHtml(noteCtx.content);
+        if (text.length < 20) {
+          toast({ type: 'warning', message: '笔记内容太少，无法生成闪卡' });
+          break;
+        }
+        toast({ type: 'info', message: 'AI 正在生成闪卡...' });
+        try {
+          const result = await aiGenerateCards(text, { max_cards: 10, difficulty: 'medium' });
+          if (result?.cards?.length) {
+            // TODO [v0.5.0-B2.3]: 自动写入牌组 — 将生成的闪卡写入以笔记标题命名的牌组
+            toast({ type: 'success', message: `AI 已生成 ${result.cards.length} 张闪卡，请在笔记编辑页中使用右键菜单逐张添加` });
+          } else {
+            toast({ type: 'warning', message: 'AI 未能生成闪卡，请检查内容或稍后重试' });
+          }
+        } catch {
+          toast({ type: 'error', message: 'AI 闪卡生成失败，请检查网络后重试' });
+        }
         break;
+      }
     }
-  }, [handleSelectNote, handleTogglePin, handleDuplicateNote, handleExportNote, handleDeleteNote, toast]);
+  }, [handleSelectNote, handleTogglePin, handleDuplicateNote, handleExportNote, handleDeleteNote, toast, summarize, aiGenerateCards]);
 
   return (
     <div className="flex h-[calc(100vh-4rem)] overflow-hidden">

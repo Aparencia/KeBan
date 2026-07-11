@@ -1,5 +1,6 @@
 import type { AIPlugin, SummarizeResult, FlashcardResult, EvaluateResult, DurationResult,
-  SummarizeOptions, FlashcardOptions, EvaluateOptions, DurationOptions, DurationHistoryData } from './types';
+  SummarizeOptions, FlashcardOptions, EvaluateOptions, DurationOptions, DurationHistoryData,
+  OptimizeCardResult, FeynmanQuestionResult, FeynmanAnswerEvalResult } from './types';
 import { AIError } from './types';
 import { aiClient } from '../http/apiClient';
 
@@ -162,6 +163,98 @@ export class RemoteAIPlugin implements AIPlugin {
         confidence: 'medium',
         source: result.source,
         isLocalFallback: result.source === 'local_rule',
+        model: result.model,
+        tokensUsed: result.tokens_used,
+        latencyMs: result.latency_ms,
+      };
+    } catch (error: unknown) {
+      throw this.handleError(error);
+    }
+  }
+
+  // ── POST /api/v1/ai/feynman-question ───────────────────
+  async generateFeynmanQuestions(concept: string, explanation: string): Promise<FeynmanQuestionResult> {
+    this.checkOnline();
+    try {
+      const result = await aiClient.post<{
+        questions: Array<{ question: string; focus: string }>;
+        model: string;
+        tokens_used: number;
+        latency_ms: number;
+      }>(
+        '/api/v1/ai/feynman-question',
+        { concept, explanation },
+      );
+
+      return {
+        questions: result.questions.map(q => ({
+          question: q.question,
+          focus: q.focus,
+        })),
+        model: result.model,
+        tokensUsed: result.tokens_used,
+        latencyMs: result.latency_ms,
+      };
+    } catch (error: unknown) {
+      throw this.handleError(error);
+    }
+  }
+
+  // ── POST /api/v1/ai/feynman-evaluate-answers ────────────
+  async evaluateFeynmanAnswers(
+    concept: string,
+    questions: string[],
+    answers: string[],
+  ): Promise<FeynmanAnswerEvalResult> {
+    this.checkOnline();
+    try {
+      const result = await aiClient.post<{
+        understanding_score: number;
+        feedback: string;
+        strong_points: string[];
+        weak_points: string[];
+        model: string;
+        tokens_used: number;
+        latency_ms: number;
+      }>(
+        '/api/v1/ai/feynman-evaluate-answers',
+        { concept, questions, answers },
+      );
+
+      return {
+        understandingScore: result.understanding_score,
+        feedback: result.feedback,
+        strongPoints: result.strong_points,
+        weakPoints: result.weak_points,
+        model: result.model,
+        tokensUsed: result.tokens_used,
+        latencyMs: result.latency_ms,
+      };
+    } catch (error: unknown) {
+      throw this.handleError(error);
+    }
+  }
+
+  // ── POST /api/v1/ai/optimize-card ──────────────────────────
+  async optimizeCard(front: string, back: string): Promise<OptimizeCardResult> {
+    this.checkOnline();
+    try {
+      const result = await aiClient.post<{
+        suggested_front: string;
+        suggested_back: string;
+        improvements: string[];
+        model: string;
+        tokens_used: number;
+        latency_ms: number;
+      }>(
+        '/api/v1/ai/optimize-card',
+        { front, back },
+      );
+
+      return {
+        suggestedFront: result.suggested_front,
+        suggestedBack: result.suggested_back,
+        improvements: result.improvements,
         model: result.model,
         tokensUsed: result.tokens_used,
         latencyMs: result.latency_ms,

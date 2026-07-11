@@ -36,6 +36,7 @@ export interface Note {
   updatedAt: Date;
   wordCount: number;
   pinned: boolean;               // 是否置顶
+  videoNoteType?: string;         // 视频笔记类型标识（lecture/tutorial/etc）
 }
 
 // 笔记文件夹
@@ -76,6 +77,7 @@ export interface Flashcard {
   lastReviewDate?: Date;         // 上次复习日期
   createdAt: Date;
   updatedAt: Date;
+  sourceNoteId?: string;          // 来源笔记 ID（用于双向关联）
   order: number;
 }
 
@@ -205,19 +207,24 @@ export interface PomodoroGoal {
 
 // 牌组分享文件格式 (.kban-deck)
 export interface KbanDeckFile {
-  version: '1.0';
+  version: '1.0' | '1.1';
   type: 'deck';
   exportedAt: string;       // ISO 8601
+  author?: string;          // v1.1 新增：导出者标识
   deck: {
     id: string;
     name: string;
     description: string;
     createdAt: string;
+    cardCount?: number;     // v1.1 新增：卡片数量提示
+    tags?: string[];        // v1.1 新增：牌组标签
   };
   cards: Array<{
     front: string;           // TipTap JSON 字符串
     back: string;
     tags: string[];
+    type?: 'basic' | 'cloze' | 'multi_choice';  // v1.1 新增
+    sourceNoteId?: string;   // v1.1 新增：来源笔记关联
   }>;
 }
 

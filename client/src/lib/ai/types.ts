@@ -7,6 +7,8 @@ export interface AIPlugin {
   evaluateExplanation(concept: string, explanation: string, options?: EvaluateOptions): Promise<EvaluateResult>;
   recommendDuration(historyData: DurationHistoryData, options?: DurationOptions): Promise<DurationResult>;
   extractScreenContent?(imageBase64: string, language?: string): Promise<VisionExtractResult>;
+  tagContent?(content: string): Promise<TagContentResult>;
+  optimizeCard?(front: string, back: string): Promise<OptimizeCardResult>;
 }
 
 // === Summarize ===
@@ -72,6 +74,30 @@ export interface EvaluateResult {
   latencyMs?: number;
 }
 
+// === Feynman Question (AI 反问) ===
+export interface FeynmanQuestionItem {
+  question: string;
+  focus: string;
+}
+
+export interface FeynmanQuestionResult {
+  questions: FeynmanQuestionItem[];
+  model?: string;
+  tokensUsed?: number;
+  latencyMs?: number;
+}
+
+// === Feynman Answer Evaluation (理解度评估) ===
+export interface FeynmanAnswerEvalResult {
+  understandingScore: number;  // 0-10
+  feedback: string;
+  strongPoints: string[];
+  weakPoints: string[];
+  model?: string;
+  tokensUsed?: number;
+  latencyMs?: number;
+}
+
 // === Duration Recommendation ===
 export interface DurationHistoryData {
   sessions: Array<{
@@ -108,6 +134,26 @@ export interface VisionExtractResult {
   diagrams: string[];
   keyPoints: string[];
   confidence: number;
+}
+
+// === Tag Content ===
+export interface TagContentResult {
+  contentNature: 'concept' | 'question' | 'inspiration' | 'todo';
+  cognitiveDepth: 'shallow' | 'understanding' | 'application';
+  subject: string;
+  model?: string;
+  tokensUsed?: number;
+  latencyMs?: number;
+}
+
+// === Optimize Card ===
+export interface OptimizeCardResult {
+  suggestedFront: string;
+  suggestedBack: string;
+  improvements: string[];
+  model?: string;
+  tokensUsed?: number;
+  latencyMs?: number;
 }
 
 // === Error types ===

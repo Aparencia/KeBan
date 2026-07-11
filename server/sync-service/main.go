@@ -1,8 +1,8 @@
 package main
 
 import (
-	"log"
 	"net/http"
+	"os"
 
 	"keban/sync-service/cache"
 	"keban/sync-service/handlers"
@@ -10,25 +10,76 @@ import (
 	"keban/sync-service/models"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
+// logger is the global structured logger.
+var logger *zap.Logger
+
+func init() {
+	var err error
+	if os.Getenv("APP_ENV") == "production" {
+		logger, err = zap.NewProduction()
+	} else {
+		logger, err = zap.NewDevelopment()
+	}
+	if err != nil {
+		panic(err)
+	}
+}
+
 func main() {
+	defer logger.Sync() //nolint:errcheck
+
 	// Initialise PostgreSQL connection before anything else.
 	if err := models.InitDB(); err != nil {
-		log.Fatalf("[sync-service] Database initialisation failed: %v", err)
+		logger.Fatal("Database initialisation failed", zap.Error(err))
 	}
 
 	// Initialise Redis cache (graceful degradation on failure).
 	if err := cache.InitRedis(); err != nil {
-		log.Printf("[sync-service] Redis init error: %v", err)
+		logger.Warn("Redis init error (graceful degradation)", zap.Error(err))
 	}
 	defer cache.CloseRedis()
 
 	r := gin.Default()
 
-	// Health check
+	// Health check — liveness probe
+	r.GET("/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"status":  "ok",
+			"service": "sync-service",
+			"version": "0.5.0",
+		})
+	})
+
+	// Also keep the legacy /api/health endpoint for backward compatibility.
 	r.GET("/api/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+		c.JSON(http.StatusOK, gin.H{
+			"status":  "ok",
+			"service": "sync-service",
+			"version": "0.5.0",
+		})
+	})
+
+	// Readiness probe — checks DB connectivity.
+	r.GET("/ready", func(c *gin.Context) {
+		sqlDB, err := models.DB.DB()
+		if err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"status": "not_ready",
+				"error":  "db unavailable",
+			})
+			return
+		}
+		if err := sqlDB.Ping(); err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"status": "not_ready",
+				"error":  "db ping failed",
+			})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"status": "ready"})
 	})
 
 	// Sync API v1
@@ -54,8 +105,8 @@ func main() {
 		})
 	}
 
-	log.Println("[sync-service] Starting on :8080")
+	logger.Info("sync-service starting", zap.String("addr", ":8080"))
 	if err := r.Run(":8080"); err != nil {
-		log.Fatalf("Failed to start server: %v", err)
+		logger.Fatal("Failed to start server", zap.Error(err))
 	}
 }

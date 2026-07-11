@@ -20,16 +20,25 @@ from errors import AuthenticationError
 logger = logging.getLogger(__name__)
 
 # 不需要认证的路径白名单
-PUBLIC_PATHS = {"/health", "/docs", "/openapi.json", "/redoc"}
+PUBLIC_PATHS = {"/health"}
 
 # 启动时检查密钥配置
 if not APP_CONFIG["jwt_secret"]:
-    warnings.warn(
-        "SUPABASE_JWT_SECRET 未配置，JWT 验证将使用占位密钥，仅适用于本地开发。"
-        "生产环境请务必从 Supabase Dashboard > Settings > API > JWT Settings 获取公钥。",
-        RuntimeWarning,
-        stacklevel=2,
-    )
+    if APP_CONFIG.get("app_env") == "production":
+        import sys
+        print(
+            "FATAL: SUPABASE_JWT_SECRET required in production. "
+            "请在 Supabase Dashboard > Settings > API > JWT Settings 获取公钥并配置到环境变量。",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+    else:
+        warnings.warn(
+            "SUPABASE_JWT_SECRET 未配置，JWT 验证将使用占位密钥，仅适用于本地开发。"
+            "生产环境请务必从 Supabase Dashboard > Settings > API > JWT Settings 获取公钥。",
+            RuntimeWarning,
+            stacklevel=2,
+        )
 
 
 def _normalize_pem_key(raw: str) -> str:
@@ -123,7 +132,7 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
         raw_secret = APP_CONFIG.get("jwt_secret", "")
 
         if not raw_secret:
-            # 本地开发降级：SUPABASE_JWT_SECRET 未配置时
+            # 生产环境已在模块加载时退出，此处仅处理开发环境降级
             if not getattr(self, '_warned_dev_mode', False):
                 logger.warning(
                     "⚠️ JWT 验证处于开发降级模式！请勿在生产环境使用。"

@@ -44,7 +44,7 @@ const (
 
 // WSMessage defines the wire format for all WebSocket messages.
 type WSMessage struct {
-	Type    string          `json:"type"`    // "operation", "ack", "ping", "pong", "sync_request"
+	Type    string          `json:"type"` // "operation", "ack", "ping", "pong", "sync_request"
 	Payload json.RawMessage `json:"payload"`
 }
 

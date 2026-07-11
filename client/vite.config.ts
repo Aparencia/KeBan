@@ -82,6 +82,9 @@ export default defineConfig({
       ignored: ['**/electron/**', '**/dist-electron/**'],
     },
   },
+  define: {
+    'import.meta.env.VITE_API_BASE_URL': JSON.stringify(process.env.VITE_API_BASE_URL || ''),
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

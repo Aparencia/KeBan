@@ -1,19 +1,22 @@
-"""
+"""  
 课伴 AI 网关 — FastAPI 应用入口
 
-MVP-2 Alpha 阶段的 AI 增强服务网关。
-- CORS 中间件（开发阶段允许所有来源）
+MVP-2 阶段的 AI 增强服务网关。
+- CORS 中间件（生产环境严格模式 / 开发环境宽松模式）
 - JWT 认证中间件
 - 频率限制中间件
+- 安全头中间件（HSTS / CSP / X-Frame-Options 等）
 - 健康检查端点
 - 全局异常处理器
 """
 
 import asyncio
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
+from pythonjsonlogger import jsonlogger
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -24,6 +27,7 @@ from config import APP_CONFIG
 from errors import AIError
 from middleware.auth import JWTAuthMiddleware
 from middleware.rate_limit import RateLimitMiddleware
+from middleware.input_validation import InputValidationMiddleware
 from routers import (
     summarize_router,
     generate_cards_router,
@@ -31,18 +35,37 @@ from routers import (
     recommend_router,
     vision_router,
     transcribe_router,
+    tag_content_router,
+    feynman_question_router,
 )
 from cache.redis_cache import get_cache
 
 # ============================================================
-# 日志配置
+# 结构化 JSON 日志配置
 # ============================================================
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
+
+def setup_json_logging():
+    """配置结构化 JSON 日志"""
+    log_handler = logging.StreamHandler()
+    log_formatter = jsonlogger.JsonFormatter(
+        fmt="%(timestamp)s %(level)s %(module)s %(message)s",
+        rename_fields={
+            "timestamp": "timestamp",
+            "levelname": "level",
+            "name": "module",
+            "message": "message",
+        },
+    )
+    log_handler.setFormatter(log_formatter)
+
+    root_logger = logging.getLogger()
+    root_logger.handlers.clear()
+    root_logger.addHandler(log_handler)
+    root_logger.setLevel(getattr(logging, os.getenv("LOG_LEVEL", "INFO")))
+
+
+setup_json_logging()
 logger = logging.getLogger(__name__)
 
 
@@ -126,11 +149,19 @@ async def lifespan(app: FastAPI):
 # FastAPI 应用实例
 # ============================================================
 
+# 生产环境禁用自动文档生成（通过 docs_url/redoc_url/openapi_url=None）
+_docs_url = "/docs" if APP_CONFIG.get("app_env") != "production" else None
+_redoc_url = "/redoc" if APP_CONFIG.get("app_env") != "production" else None
+_openapi_url = "/openapi.json" if APP_CONFIG.get("app_env") != "production" else None
+
 app = FastAPI(
     title=APP_CONFIG["title"],
     version=APP_CONFIG["version"],
     description=APP_CONFIG["description"],
     lifespan=lifespan,
+    docs_url=_docs_url,
+    redoc_url=_redoc_url,
+    openapi_url=_openapi_url,
 )
 
 
@@ -147,6 +178,10 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data:; font-src 'self'"
+        )
         return response
 
 
@@ -154,22 +189,41 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 # 中间件注册（执行顺序与注册顺序相反：后注册的先执行）
 #
 # 注册顺序（从内到外）：
-#   1. SecurityHeaders — 最先注册 = 最内层
-#   2. JWTAuth         — 第二层
-#   3. RateLimit       — 第三层
-#   4. CORS            — 最后注册 = 最外层，最先处理请求（含 OPTIONS 预检）
+#   1. SecurityHeaders   — 最先注册 = 最内层
+#   2. JWTAuth           — 第二层
+#   3. RateLimit         — 第三层
+#   4. InputValidation   — 第四层
+#   5. CORS              — 最后注册 = 最外层，最先处理请求（含 OPTIONS 预检）
+#
+# CORS 策略：
+#   - 生产环境：仅允许 CORS_ORIGINS 环境变量中配置的域名
+#   - 开发环境：允许所有来源（便于调试）
 # ============================================================
 
 app.add_middleware(SecurityHeadersMiddleware)   # 最内层
 app.add_middleware(JWTAuthMiddleware)           # 第二层
 app.add_middleware(RateLimitMiddleware)         # 第三层
-app.add_middleware(                             # 最外层
-    CORSMiddleware,
-    allow_origins=APP_CONFIG["cors_origins"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+app.add_middleware(InputValidationMiddleware)   # 第四层
+
+# CORS 中间件：根据 APP_ENV 区分严格/宽松模式
+if APP_CONFIG.get("app_env") == "production":
+    # 生产环境 CORS 严格模式：仅允许配置的域名
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=APP_CONFIG["cors_origins"],
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type"],
+    )
+else:
+    # 开发环境 CORS 宽松模式：允许所有来源（便于调试）
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 
 # ============================================================
@@ -231,6 +285,7 @@ async def health_check():
 
     return {
         "status": overall,
+        "service": "ai-gateway",
         "version": APP_CONFIG["version"],
         "providers": providers_status,
         "redis": redis_status,
@@ -255,6 +310,8 @@ app.include_router(evaluate_router)
 app.include_router(recommend_router)
 app.include_router(vision_router)
 app.include_router(transcribe_router)
+app.include_router(feynman_question_router)
+app.include_router(tag_content_router)
 
 
 # ============================================================

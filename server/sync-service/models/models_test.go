@@ -12,12 +12,16 @@ import (
 
 func TestEntityVersionFields(t *testing.T) {
 	ev := EntityVersion{
+		UserID:     "user-001",
 		EntityType: "note",
 		EntityID:   "note-001",
 		Version:    5,
 		Data:       `{"title":"test"}`,
 	}
 
+	if ev.UserID != "user-001" {
+		t.Errorf("UserID = %q, want %q", ev.UserID, "user-001")
+	}
 	if ev.EntityType != "note" {
 		t.Errorf("EntityType = %q, want %q", ev.EntityType, "note")
 	}
@@ -35,15 +39,15 @@ func TestEntityVersionFields(t *testing.T) {
 func TestEntityVersionCompositeUniqueIndex(t *testing.T) {
 	rt := reflect.TypeOf(EntityVersion{})
 
-	// EntityType 和 EntityID 都应有 uniqueIndex:idx_entity
-	for _, fieldName := range []string{"EntityType", "EntityID"} {
+	// UserID, EntityType 和 EntityID 都应有 uniqueIndex:idx_user_entity
+	for _, fieldName := range []string{"UserID", "EntityType", "EntityID"} {
 		field, ok := rt.FieldByName(fieldName)
 		if !ok {
 			t.Fatalf("field %s not found", fieldName)
 		}
 		tag := field.Tag.Get("gorm")
-		if !strings.Contains(tag, "uniqueIndex:idx_entity") {
-			t.Errorf("%s gorm tag %q missing uniqueIndex:idx_entity", fieldName, tag)
+		if !strings.Contains(tag, "uniqueIndex:idx_user_entity") {
+			t.Errorf("%s gorm tag %q missing uniqueIndex:idx_user_entity", fieldName, tag)
 		}
 		if !strings.Contains(tag, "not null") {
 			t.Errorf("%s gorm tag %q missing not null", fieldName, tag)
@@ -55,6 +59,7 @@ func TestEntityVersionJSONTags(t *testing.T) {
 	rt := reflect.TypeOf(EntityVersion{})
 
 	expected := map[string]string{
+		"UserID":     "userId",
 		"EntityType": "entityType",
 		"EntityID":   "entityId",
 		"Version":    "version",
@@ -82,6 +87,7 @@ func TestOperationFields(t *testing.T) {
 		ID:          1,
 		ServerSeqNo: 42,
 		DeviceID:    "device-abc",
+		UserID:      "user-001",
 		EntityType:  "note",
 		EntityID:    "note-002",
 		Operation:   "create",
@@ -96,6 +102,9 @@ func TestOperationFields(t *testing.T) {
 	}
 	if op.DeviceID != "device-abc" {
 		t.Errorf("DeviceID = %q, want %q", op.DeviceID, "device-abc")
+	}
+	if op.UserID != "user-001" {
+		t.Errorf("UserID = %q, want %q", op.UserID, "user-001")
 	}
 	if op.Operation != "create" {
 		t.Errorf("Operation = %q, want %q", op.Operation, "create")
@@ -114,6 +123,8 @@ func TestOperationGormTags(t *testing.T) {
 		{"ServerSeqNo", "not null"},
 		{"DeviceID", "index"},
 		{"DeviceID", "not null"},
+		{"UserID", "index:idx_op_user"},
+		{"UserID", "not null"},
 		{"EntityType", "index"},
 		{"EntityType", "not null"},
 		{"EntityID", "not null"},
@@ -141,6 +152,7 @@ func TestOperationJSONTags(t *testing.T) {
 	expected := map[string]string{
 		"ServerSeqNo": "serverSeqNo",
 		"DeviceID":    "deviceId",
+		"UserID":      "userId",
 		"EntityType":  "entityType",
 		"EntityID":    "entityId",
 		"Operation":   "operation",

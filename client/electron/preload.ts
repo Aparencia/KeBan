@@ -13,6 +13,8 @@ const ALLOWED_CHANNELS = [
   'ai_generate_cards',
   'ai_evaluate',
   'ai_recommend_duration',
+  'ai_feynman_question',
+  'ai_feynman_evaluate_answers',
   'screen_list_windows',
   'screen_capture_start',
   'screen_capture_stop',

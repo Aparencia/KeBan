@@ -1,0 +1,164 @@
+import { commandRegistry } from './registry';
+import type { Command } from './registry';
+
+type NavigateFn = (path: string) => void;
+type ToastFn = (options: { type: 'success' | 'error' | 'warning' | 'info'; message: string }) => void;
+
+export function registerDefaultCommands(navigate: NavigateFn, toast: ToastFn): void {
+  const comingSoon = (label: string) =>
+    toast({ type: 'info', message: `"${label}" 功能即将上线，敬请期待！` });
+
+  const commands: Command[] = [
+    // ─── 导航命令 ───────────────────────────────────────────────────────────────
+    {
+      id: 'nav-dashboard',
+      label: '打开仪表盘',
+      description: '查看学习概览与统计',
+      icon: 'LayoutDashboard',
+      category: 'navigation',
+      shortcut: 'G D',
+      execute: () => navigate('/'),
+    },
+    {
+      id: 'nav-pomodoro',
+      label: '打开番茄钟',
+      description: '专注计时与休息提醒',
+      icon: 'Timer',
+      category: 'navigation',
+      shortcut: 'G P',
+      execute: () => navigate('/pomodoro'),
+    },
+    {
+      id: 'nav-notes',
+      label: '打开笔记',
+      description: '浏览与管理学习笔记',
+      icon: 'FileText',
+      category: 'navigation',
+      shortcut: 'G N',
+      execute: () => navigate('/notes'),
+    },
+    {
+      id: 'nav-flashcards',
+      label: '打开闪卡',
+      description: '间隔重复记忆卡片',
+      icon: 'Layers',
+      category: 'navigation',
+      shortcut: 'G F',
+      execute: () => navigate('/flashcards'),
+    },
+    {
+      id: 'nav-feynman',
+      label: '打开费曼',
+      description: '费曼学习法输出练习',
+      icon: 'Lightbulb',
+      category: 'navigation',
+      shortcut: 'G Y',
+      execute: () => navigate('/feynman'),
+    },
+    {
+      id: 'nav-analytics',
+      label: '打开效率分析',
+      description: '学习数据与效率图表',
+      icon: 'BarChart3',
+      category: 'navigation',
+      shortcut: 'G A',
+      execute: () => navigate('/analytics'),
+    },
+    {
+      id: 'nav-settings',
+      label: '打开设置',
+      description: '应用设置与偏好配置',
+      icon: 'Settings',
+      category: 'navigation',
+      shortcut: 'G S',
+      execute: () => navigate('/settings'),
+    },
+
+    // ─── 操作命令 ───────────────────────────────────────────────────────────────
+    {
+      id: 'action-new-note',
+      label: '新建笔记',
+      description: '创建一条新的学习笔记',
+      icon: 'FilePlus',
+      category: 'action',
+      shortcut: 'Ctrl+N',
+      execute: () => navigate('/notes'),
+    },
+    {
+      id: 'action-new-deck',
+      label: '新建牌组',
+      description: '创建新的闪卡牌组',
+      icon: 'FolderPlus',
+      category: 'action',
+      execute: () => navigate('/flashcards'),
+    },
+    {
+      id: 'action-import-deck',
+      label: '导入牌组',
+      description: '从文件导入闪卡牌组',
+      icon: 'Import',
+      category: 'action',
+      execute: () => comingSoon('导入牌组'),
+    },
+    {
+      id: 'action-export-all',
+      label: '导出全部数据',
+      description: '将所有数据导出为文件',
+      icon: 'Download',
+      category: 'action',
+      execute: () => comingSoon('导出全部数据'),
+    },
+    {
+      id: 'action-toggle-theme',
+      label: '切换深色/浅色模式',
+      description: '快速切换界面主题',
+      icon: 'Moon',
+      category: 'action',
+      execute: () => comingSoon('切换主题'),
+    },
+    {
+      id: 'action-checkin',
+      label: '今日打卡',
+      description: '记录今日学习打卡',
+      icon: 'CheckCircle',
+      category: 'action',
+      execute: () => comingSoon('今日打卡'),
+    },
+
+    // ─── 设置命令 ───────────────────────────────────────────────────────────────
+    {
+      id: 'settings-appearance',
+      label: '外观设置',
+      description: '主题、字体与界面外观',
+      icon: 'Palette',
+      category: 'settings',
+      execute: () => navigate('/settings'),
+    },
+    {
+      id: 'settings-ai',
+      label: 'AI 供应商设置',
+      description: '配置 AI 模型与 API Key',
+      icon: 'Brain',
+      category: 'settings',
+      execute: () => navigate('/settings'),
+    },
+    {
+      id: 'settings-data',
+      label: '数据管理',
+      description: '导入、导出与清理数据',
+      icon: 'Database',
+      category: 'settings',
+      execute: () => navigate('/settings'),
+    },
+    {
+      id: 'settings-about',
+      label: '关于课伴',
+      description: '版本信息与开源协议',
+      icon: 'Info',
+      category: 'settings',
+      execute: () => navigate('/settings'),
+    },
+  ];
+
+  commands.forEach((cmd) => commandRegistry.register(cmd));
+}

@@ -1,6 +1,7 @@
 import { RouterProvider } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ToastProvider } from '@/components/ui/Toast';
+import AchievementToast from '@/components/ui/AchievementToast';
 import { AuthProvider } from '@/lib/auth/AuthContext';
 import { SyncProvider } from '@/lib/sync/SyncContext';
 import { router } from '@/routes';
@@ -25,6 +26,7 @@ function App() {
         <SyncProvider>
           <ToastProvider>
             <RouterProvider router={router} />
+            <AchievementToast />
           </ToastProvider>
         </SyncProvider>
       </AuthProvider>

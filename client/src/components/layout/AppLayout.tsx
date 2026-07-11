@@ -3,7 +3,8 @@ import { Outlet, useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import BottomNav from './BottomNav';
 import Navbar from './Navbar';
-import SyncStatusBar from '@/components/sync/SyncStatusBar';
+import CommandPalette from '../ui/CommandPalette';
+import SyncStatusBar from '../sync/SyncStatusBar';
 
 const DENSITY_KEY = 'keban-density';
 
@@ -44,9 +45,6 @@ export default function AppLayout() {
 
       {/* Main content area */}
       <div className="flex-1 flex flex-col min-h-screen">
-        {/* Sync/network status bar */}
-        <SyncStatusBar />
-
         {/* Top navbar */}
         <Navbar />
 
@@ -55,6 +53,12 @@ export default function AppLayout() {
           <Outlet />
         </main>
       </div>
+
+      {/* 同步状态栏 */}
+      <SyncStatusBar />
+
+      {/* 全局命令面板 */}
+      <CommandPalette />
 
       {/* Mobile bottom nav */}
       <BottomNav />

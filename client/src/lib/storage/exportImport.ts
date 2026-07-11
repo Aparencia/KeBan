@@ -2,7 +2,7 @@ import { db } from './database';
 import type { KbanDeckFile, FlashcardDeck, Flashcard } from '@/types/models';
 
 /**
- * 导出牌组为 .kban-deck 文件结构
+ * 导出牌组为 .kban-deck 文件结构（v1.1 增强版）
  */
 export async function exportDeck(deckId: string): Promise<KbanDeckFile> {
   const deck = await db.flashcardDecks.get(deckId);
@@ -11,20 +11,23 @@ export async function exportDeck(deckId: string): Promise<KbanDeckFile> {
   const cards = await db.flashcards.where('deckId').equals(deckId).toArray();
 
   return {
-    version: '1.0',
+    version: '1.1',
     type: 'deck',
     exportedAt: new Date().toISOString(),
+    author: 'keban-user',
     deck: {
       id: deck.id,
       name: deck.name,
       description: deck.description || '',
       createdAt: deck.createdAt.toISOString(),
+      cardCount: cards.length,
     },
     cards: cards.map((card) => ({
       front: card.front,
       back: card.back,
-      // Flashcard 类型暂无 tags 字段，使用 as any 安全降级
       tags: (card as any).tags || [],
+      type: card.type,
+      sourceNoteId: card.sourceNoteId,
     })),
   };
 }
@@ -46,39 +49,49 @@ export function downloadDeckFile(data: KbanDeckFile): void {
 }
 
 /**
- * 导入 .kban-deck 文件，返回新牌组 ID 和卡片数量
+ * 解析 .kban-deck 文件并检测冲突（不自动写入数据库）
  */
-export async function importDeck(file: File): Promise<{ deckId: string; cardCount: number }> {
+export async function importDeck(file: File): Promise<{
+  deckData: KbanDeckFile;
+  hasConflict: boolean;
+  existingDeckId?: string;
+}> {
   const text = await file.text();
   const data: KbanDeckFile = JSON.parse(text);
 
-  // 校验格式
-  if (data.version !== '1.0' || data.type !== 'deck') {
+  // 校验格式（兼容 v1.0 和 v1.1）
+  if ((data.version !== '1.0' && data.version !== '1.1') || data.type !== 'deck') {
     throw new Error('无效的 .kban-deck 文件格式');
   }
 
-  // 生成新 ID（避免与本地现有牌组冲突）
+  // 检测同名牌组冲突
+  const existing = await db.flashcardDecks.where('name').equals(data.deck.name).first();
+  return {
+    deckData: data,
+    hasConflict: !!existing,
+    existingDeckId: existing?.id,
+  };
+}
+
+/** 无冲突时直接创建新牌组并导入，返回新牌组 ID 和卡片数 */
+export async function importDeckNew(deckData: KbanDeckFile): Promise<{ deckId: string; cardCount: number }> {
   const newDeckId = crypto.randomUUID();
   const now = new Date();
-
-  // 写入牌组
   await db.flashcardDecks.add({
     id: newDeckId,
-    name: data.deck.name + ' (导入)',
-    description: data.deck.description,
+    name: deckData.deck.name,
+    description: deckData.deck.description,
     createdAt: now,
     updatedAt: now,
     order: 0,
   } as FlashcardDeck);
-
-  // 写入卡片（需提供 SM-2 算法默认值）
-  const cardPromises = data.cards.map((card) =>
+  const cardPromises = deckData.cards.map((card) =>
     db.flashcards.add({
       id: crypto.randomUUID(),
       deckId: newDeckId,
       front: card.front,
       back: card.back,
-      type: 'basic',
+      type: card.type || 'basic',
       easeFactor: 2.5,
       interval: 0,
       repetitions: 0,
@@ -86,12 +99,80 @@ export async function importDeck(file: File): Promise<{ deckId: string; cardCoun
       dueDate: now,
       createdAt: now,
       updatedAt: now,
+      sourceNoteId: card.sourceNoteId,
       order: 0,
     } as Flashcard),
   );
   await Promise.all(cardPromises);
+  return { deckId: newDeckId, cardCount: deckData.cards.length };
+}
 
-  return { deckId: newDeckId, cardCount: data.cards.length };
+/** 覆盖：删除旧牌组及其卡片，导入新数据 */
+export async function importDeckOverwrite(deckData: KbanDeckFile, existingDeckId: string): Promise<void> {
+  // 删除旧卡片和旧牌组
+  await db.flashcards.where('deckId').equals(existingDeckId).delete();
+  await db.flashcardDecks.delete(existingDeckId);
+  // 以原 ID 重新写入
+  const now = new Date();
+  await db.flashcardDecks.add({
+    id: existingDeckId,
+    name: deckData.deck.name,
+    description: deckData.deck.description,
+    createdAt: now,
+    updatedAt: now,
+    order: 0,
+  } as FlashcardDeck);
+  const cardPromises = deckData.cards.map((card) =>
+    db.flashcards.add({
+      id: crypto.randomUUID(),
+      deckId: existingDeckId,
+      front: card.front,
+      back: card.back,
+      type: card.type || 'basic',
+      easeFactor: 2.5,
+      interval: 0,
+      repetitions: 0,
+      lapses: 0,
+      dueDate: now,
+      createdAt: now,
+      updatedAt: now,
+      sourceNoteId: card.sourceNoteId,
+      order: 0,
+    } as Flashcard),
+  );
+  await Promise.all(cardPromises);
+}
+
+/** 跳过：不做任何操作 */
+export async function importDeckSkip(): Promise<void> {
+  // 无操作
+}
+
+/** 合并：将新卡片追加到现有牌组，返回新增卡片数 */
+export async function importDeckMerge(deckData: KbanDeckFile, existingDeckId: string): Promise<number> {
+  const now = new Date();
+  const cardPromises = deckData.cards.map((card) =>
+    db.flashcards.add({
+      id: crypto.randomUUID(),
+      deckId: existingDeckId,
+      front: card.front,
+      back: card.back,
+      type: card.type || 'basic',
+      easeFactor: 2.5,
+      interval: 0,
+      repetitions: 0,
+      lapses: 0,
+      dueDate: now,
+      createdAt: now,
+      updatedAt: now,
+      sourceNoteId: card.sourceNoteId,
+      order: 0,
+    } as Flashcard),
+  );
+  await Promise.all(cardPromises);
+  // 更新牌组的 updatedAt
+  await db.flashcardDecks.update(existingDeckId, { updatedAt: now });
+  return deckData.cards.length;
 }
 
 export interface ExportData {
@@ -110,6 +191,13 @@ export interface ExportData {
     feynmanWeakPoints: any[];
     operationLog: any[];
     appSettings: any[];
+    // v0.5.0 A1.3 补全：
+    studyCheckIns: any[];
+    achievements: any[];
+    pomodoroGoals: any[];
+    syncConflicts: any[];
+    offlineQueue: any[];
+    windowCaptures: any[];
   };
 }
 
@@ -128,6 +216,12 @@ export async function exportAllData(): Promise<string> {
     feynmanWeakPoints,
     operationLog,
     appSettings,
+    studyCheckIns,
+    achievements,
+    pomodoroGoals,
+    syncConflicts,
+    offlineQueue,
+    windowCaptures,
   ] = await Promise.all([
     db.pomodoroSessions.toArray(),
     db.pomodoroSettings.toArray(),
@@ -141,6 +235,12 @@ export async function exportAllData(): Promise<string> {
     db.feynmanWeakPoints.toArray(),
     db.operationLog.toArray(),
     db.appSettings.toArray(),
+    db.studyCheckIns.toArray(),
+    db.achievements.toArray(),
+    db.pomodoroGoals.toArray(),
+    db.syncConflicts.toArray(),
+    db.offlineQueue.toArray(),
+    db.windowCaptures.toArray(),
   ]);
 
   const exportData: ExportData = {
@@ -159,6 +259,12 @@ export async function exportAllData(): Promise<string> {
       feynmanWeakPoints,
       operationLog,
       appSettings,
+      studyCheckIns,
+      achievements,
+      pomodoroGoals,
+      syncConflicts,
+      offlineQueue,
+      windowCaptures,
     },
   };
 
@@ -212,6 +318,12 @@ export async function importData(
       db.feynmanWeakPoints,
       db.operationLog,
       db.appSettings,
+      db.studyCheckIns,
+      db.achievements,
+      db.pomodoroGoals,
+      db.syncConflicts,
+      db.offlineQueue,
+      db.windowCaptures,
     ], async () => {
       await db.pomodoroSessions.clear();
       await db.pomodoroSettings.clear();
@@ -225,6 +337,12 @@ export async function importData(
       await db.feynmanWeakPoints.clear();
       await db.operationLog.clear();
       await db.appSettings.clear();
+      await db.studyCheckIns.clear();
+      await db.achievements.clear();
+      await db.pomodoroGoals.clear();
+      await db.syncConflicts.clear();
+      await db.offlineQueue.clear();
+      await db.windowCaptures.clear();
 
       if (data.pomodoroSessions?.length) await db.pomodoroSessions.bulkPut(data.pomodoroSessions);
       if (data.pomodoroSettings?.length) await db.pomodoroSettings.bulkPut(data.pomodoroSettings);
@@ -238,6 +356,12 @@ export async function importData(
       if (data.feynmanWeakPoints?.length) await db.feynmanWeakPoints.bulkPut(data.feynmanWeakPoints);
       if (data.operationLog?.length) await db.operationLog.bulkPut(data.operationLog);
       if (data.appSettings?.length) await db.appSettings.bulkPut(data.appSettings);
+      if (data.studyCheckIns?.length) await db.studyCheckIns.bulkPut(data.studyCheckIns);
+      if (data.achievements?.length) await db.achievements.bulkPut(data.achievements);
+      if (data.pomodoroGoals?.length) await db.pomodoroGoals.bulkPut(data.pomodoroGoals);
+      if (data.syncConflicts?.length) await db.syncConflicts.bulkPut(data.syncConflicts);
+      if (data.offlineQueue?.length) await db.offlineQueue.bulkPut(data.offlineQueue);
+      if (data.windowCaptures?.length) await db.windowCaptures.bulkPut(data.windowCaptures);
     });
 
     return { success: true, message: '数据导入成功' };
