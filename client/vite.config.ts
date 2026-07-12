@@ -90,4 +90,9 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  // electron-updater 是纯 ESM 模块，仅 Electron 主进程使用，
+  // 排除 Vite 预构建避免 ERR_REQUIRE_ESM 错误
+  optimizeDeps: {
+    exclude: ['electron-updater'],
+  },
 })

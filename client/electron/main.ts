@@ -4,9 +4,6 @@
  * 创建 BrowserWindow，注册 IPC handler 代理 AI 网关请求。
  */
 
-// 开发时禁用 Electron 安全警告
-process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
-
 import { app, BrowserWindow, ipcMain, desktopCapturer, Tray, Menu, nativeImage, dialog } from 'electron';
 import { ScreenCapture } from './screenCapture.js';
 import type { ScreenCaptureOptions, ScreenshotFrameData } from './screenCapture.js';
@@ -18,6 +15,11 @@ import { safeHandle } from './ipcUtils.js';
 import { logger } from './logger.js';
 import { registerAIHandlers } from './aiHandlers.js';
 import { initAutoUpdater, checkForUpdate, downloadUpdate, installUpdate, destroyAutoUpdater, setAutoCheckEnabled } from './updater.js';
+
+// 仅开发模式禁用 Electron 安全警告，生产环境保留
+if (process.env.NODE_ENV === 'development' || !app.isPackaged) {
+  process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
+}
 
 // CommonJS 模式下 __filename 和 __dirname 全局可用，无需额外声明
 
