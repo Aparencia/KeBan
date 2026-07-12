@@ -4,6 +4,10 @@ import type { PomodoroSession, PomodoroSettings } from '@/types/models';
 import { playBeep } from '@/utils/sound';
 
 const SETTINGS_ID = 'default';
+const BEEP_FREQUENCY_HZ = 800;
+const BEEP_DURATION_SHORT_MS = 200;
+const BEEP_DURATION_LONG_MS = 1000;
+const BEEP_FREQUENCY_LOW_HZ = 220;
 
 /**
  * 从 IndexedDB 加载番茄钟设置
@@ -41,8 +45,8 @@ export async function recordSession(
  * 播放阶段完成提示音（复用全局声音工具）
  */
 export function playCompletionSound(): void {
-  playBeep(800, 200);
-  setTimeout(() => playBeep(1000, 200), 220);
+  playBeep(BEEP_FREQUENCY_HZ, BEEP_DURATION_SHORT_MS);
+  setTimeout(() => playBeep(BEEP_DURATION_LONG_MS, BEEP_DURATION_SHORT_MS), BEEP_FREQUENCY_LOW_HZ);
 }
 
 /**

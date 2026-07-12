@@ -1,4 +1,5 @@
-import { useMemo } from 'react';
+﻿import { useMemo } from 'react';
+import { motion } from 'framer-motion';
 import {
   ResponsiveContainer,
   LineChart,
@@ -12,7 +13,6 @@ import {
   Legend,
 } from 'recharts';
 import type { PomodoroSession, FlashcardReview, FeynmanNote, StudyCheckIn } from '@/types/models';
-import { Card } from '@/components/ui/Card';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -25,11 +25,35 @@ export interface EfficiencyData {
 
 // ─── Color tokens ────────────────────────────────────────────────────────────
 
-const BRAND_500 = '#FF7F50';
+const BRAND_500 = '#5B8A72';
 const SUCCESS_500 = '#66D9A0';
-const WARNING_500 = '#FFB84D';
+const WARNING_500 = '#C4956A';
 const ERROR_500 = '#FF6B6B';
 const PIE_COLORS = [BRAND_500, SUCCESS_500, WARNING_500, ERROR_500];
+
+// ─── Animation helpers ───────────────────────────────────────────────────────
+
+const cardVariants = {
+  hidden: { opacity: 0, y: 20, filter: 'blur(4px)' },
+  visible: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.4, ease: [0.25, 0.1, 0.25, 1] as const } },
+};
+
+// ─── Glass Card wrapper ──────────────────────────────────────────────────────
+
+function GlassCard({ children, className = '', delay = 0 }: { children: React.ReactNode; className?: string; delay?: number }) {
+  return (
+    <motion.div
+      variants={cardVariants}
+      transition={{ delay }}
+      className={`relative rounded-[var(--kb-radius-lg)] bg-bg-secondary/60 backdrop-blur-xl border border-border/30
+        hover:border-brand-400/20 transition-colors duration-300 overflow-hidden p-kb-lg ${className}`}
+    >
+      {/* subtle top gradient accent */}
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-brand-400/30 to-transparent" />
+      {children}
+    </motion.div>
+  );
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -55,30 +79,19 @@ function StudyTrendChart({ sessions }: { sessions: PomodoroSession[] }) {
   const data = useMemo(() => {
     const cutoff = daysAgo(30);
     const map = new Map<string, number>();
-
-    // Pre-fill all 30 days with 0
-    for (let i = 29; i >= 0; i--) {
-      map.set(daysAgo(i), 0);
-    }
-
+    for (let i = 29; i >= 0; i--) map.set(daysAgo(i), 0);
     sessions.forEach((s) => {
       const dateStr = toDateStr(s.completedAt);
-      if (dateStr >= cutoff) {
-        map.set(dateStr, (map.get(dateStr) ?? 0) + s.actualDuration);
-      }
+      if (dateStr >= cutoff) map.set(dateStr, (map.get(dateStr) ?? 0) + s.actualDuration);
     });
-
     return Array.from(map.entries())
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([date, seconds]) => ({
-        date: shortLabel(date),
-        minutes: Math.round(seconds / 60),
-      }));
+      .map(([date, seconds]) => ({ date: shortLabel(date), minutes: Math.round(seconds / 60) }));
   }, [sessions]);
 
   return (
-    <Card variant="elevated" padding="lg">
-      <h3 className="text-h2 text-text-primary mb-kb-md">学习趋势（近 30 天）</h3>
+    <GlassCard>
+      <h3 className="text-h2 text-text-primary mb-kb-md font-semibold">学习趋势（近 30 天）</h3>
       <div className="h-64">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data} margin={{ top: 8, right: 16, bottom: 0, left: 0 }}>
@@ -86,7 +99,7 @@ function StudyTrendChart({ sessions }: { sessions: PomodoroSession[] }) {
               dataKey="date"
               tick={{ fontSize: 11, fill: 'var(--color-text-tertiary)' }}
               tickLine={false}
-              axisLine={{ stroke: 'var(--color-border)' }}
+              axisLine={{ stroke: 'var(--color-border)', strokeOpacity: 0.3 }}
               interval="preserveStartEnd"
             />
             <YAxis
@@ -98,10 +111,12 @@ function StudyTrendChart({ sessions }: { sessions: PomodoroSession[] }) {
             />
             <Tooltip
               contentStyle={{
-                background: 'var(--color-bg-elevated)',
-                border: '1px solid var(--color-border)',
-                borderRadius: '8px',
+                background: 'rgba(var(--color-bg-elevated-rgb, 30,30,30), 0.85)',
+                backdropFilter: 'blur(12px)',
+                border: '1px solid rgba(91,138,114,0.2)',
+                borderRadius: '12px',
                 fontSize: 12,
+                boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
               }}
               formatter={(value: number) => [`${value} 分钟`, '学习时长']}
             />
@@ -109,23 +124,21 @@ function StudyTrendChart({ sessions }: { sessions: PomodoroSession[] }) {
               type="monotone"
               dataKey="minutes"
               stroke={BRAND_500}
-              strokeWidth={2}
+              strokeWidth={2.5}
               dot={false}
-              activeDot={{ r: 4, fill: BRAND_500 }}
+              activeDot={{ r: 5, fill: BRAND_500, stroke: '#fff', strokeWidth: 2 }}
             />
           </LineChart>
         </ResponsiveContainer>
       </div>
-    </Card>
+    </GlassCard>
   );
 }
 
 // ─── Sub-component: Module Time Pie Chart ────────────────────────────────────
 
 function ModuleTimePieChart({
-  sessions,
-  reviews,
-  feynmanNotes,
+  sessions, reviews, feynmanNotes,
 }: {
   sessions: PomodoroSession[];
   reviews: FlashcardReview[];
@@ -133,16 +146,11 @@ function ModuleTimePieChart({
 }) {
   const data = useMemo(() => {
     const pomodoroMin = sessions.reduce((sum, s) => sum + s.actualDuration, 0) / 60;
-
     const flashcardMin = reviews.reduce((sum, r) => sum + (r.timeSpent ?? 0), 0) / 60;
-
     const feynmanMin = feynmanNotes.reduce((sum, n) => {
-      const created = new Date(n.createdAt).getTime();
-      const updated = new Date(n.updatedAt).getTime();
-      const diffSec = Math.max(0, (updated - created) / 1000);
+      const diffSec = Math.max(0, (new Date(n.updatedAt).getTime() - new Date(n.createdAt).getTime()) / 1000);
       return sum + diffSec;
     }, 0) / 60;
-
     return [
       { name: '番茄钟', value: Math.round(pomodoroMin) },
       { name: '闪卡复习', value: Math.round(flashcardMin) },
@@ -152,18 +160,18 @@ function ModuleTimePieChart({
 
   if (data.length === 0) {
     return (
-      <Card variant="elevated" padding="lg">
-        <h3 className="text-h2 text-text-primary mb-kb-md">模块时间占比</h3>
+      <GlassCard>
+        <h3 className="text-h2 text-text-primary mb-kb-md font-semibold">模块时间占比</h3>
         <div className="h-64 flex items-center justify-center">
           <span className="text-b2 text-text-tertiary">暂无数据</span>
         </div>
-      </Card>
+      </GlassCard>
     );
   }
 
   return (
-    <Card variant="elevated" padding="lg">
-      <h3 className="text-h2 text-text-primary mb-kb-md">模块时间占比</h3>
+    <GlassCard>
+      <h3 className="text-h2 text-text-primary mb-kb-md font-semibold">模块时间占比</h3>
       <div className="h-64">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
@@ -176,6 +184,8 @@ function ModuleTimePieChart({
               paddingAngle={3}
               dataKey="value"
               label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+              animationBegin={200}
+              animationDuration={800}
             >
               {data.map((_, index) => (
                 <Cell key={index} fill={PIE_COLORS[index % PIE_COLORS.length]} />
@@ -187,17 +197,19 @@ function ModuleTimePieChart({
             />
             <Tooltip
               contentStyle={{
-                background: 'var(--color-bg-elevated)',
-                border: '1px solid var(--color-border)',
-                borderRadius: '8px',
+                background: 'rgba(var(--color-bg-elevated-rgb, 30,30,30), 0.85)',
+                backdropFilter: 'blur(12px)',
+                border: '1px solid rgba(91,138,114,0.2)',
+                borderRadius: '12px',
                 fontSize: 12,
+                boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
               }}
               formatter={(value: number) => [`${value} 分钟`, '']}
             />
           </PieChart>
         </ResponsiveContainer>
       </div>
-    </Card>
+    </GlassCard>
   );
 }
 
@@ -206,7 +218,7 @@ function ModuleTimePieChart({
 const WEEKDAY_LABELS = ['一', '二', '三', '四', '五', '六', '日'];
 
 function getHeatColor(moduleCount: number): string {
-  if (moduleCount === 0) return 'bg-bg-tertiary';
+  if (moduleCount === 0) return 'bg-bg-tertiary/50';
   if (moduleCount <= 1) return 'bg-brand-200';
   if (moduleCount <= 2) return 'bg-brand-400';
   return 'bg-brand-600';
@@ -214,61 +226,46 @@ function getHeatColor(moduleCount: number): string {
 
 function CheckInHeatmap({ checkIns }: { checkIns: StudyCheckIn[] }) {
   const grid = useMemo(() => {
-    // Build a map of date -> modulesUsed.length
     const dateMap = new Map<string, number>();
-    checkIns.forEach((c) => {
-      dateMap.set(c.date, c.modulesUsed.length);
-    });
-
-    // Generate 90 days (13 weeks × 7 days, aligned to Monday)
+    checkIns.forEach((c) => dateMap.set(c.date, c.modulesUsed.length));
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-
-    // Find the Monday of the week containing (today - 89 days)
     const startDate = new Date(today);
     startDate.setDate(startDate.getDate() - 89);
-    // Adjust to Monday
-    const dayOfWeek = startDate.getDay(); // 0=Sun, 1=Mon ...
+    const dayOfWeek = startDate.getDay();
     const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
     startDate.setDate(startDate.getDate() + mondayOffset);
-
     const weeks: { date: string; count: number }[][] = [];
     const cursor = new Date(startDate);
-
     while (cursor <= today || weeks.length < 13) {
       const week: { date: string; count: number }[] = [];
       for (let d = 0; d < 7; d++) {
         const dateStr = cursor.toISOString().split('T')[0];
-        week.push({
-          date: dateStr,
-          count: dateMap.get(dateStr) ?? 0,
-        });
+        week.push({ date: dateStr, count: dateMap.get(dateStr) ?? 0 });
         cursor.setDate(cursor.getDate() + 1);
       }
       weeks.push(week);
       if (cursor > today && weeks.length >= 13) break;
     }
-
     return weeks;
   }, [checkIns]);
 
   return (
-    <Card variant="elevated" padding="lg">
-      <h3 className="text-h2 text-text-primary mb-kb-md">打卡热力图（近 90 天）</h3>
+    <GlassCard>
+      <h3 className="text-h2 text-text-primary mb-kb-md font-semibold">打卡热力图（近 90 天）</h3>
 
       {/* Legend */}
       <div className="flex items-center gap-2 mb-kb-sm text-c1 text-text-tertiary">
         <span>少</span>
-        <span className="w-3 h-3 rounded-sm bg-bg-tertiary" />
+        <span className="w-3 h-3 rounded-sm bg-bg-tertiary/50" />
         <span className="w-3 h-3 rounded-sm bg-brand-200" />
         <span className="w-3 h-3 rounded-sm bg-brand-400" />
         <span className="w-3 h-3 rounded-sm bg-brand-600" />
         <span>多</span>
       </div>
 
-      {/* Grid: weekday labels + week columns */}
+      {/* Grid */}
       <div className="flex gap-1">
-        {/* Weekday labels */}
         <div className="flex flex-col gap-1 mr-1">
           {WEEKDAY_LABELS.map((label, i) => (
             <div key={i} className="w-4 h-4 flex items-center justify-end pr-1">
@@ -276,23 +273,29 @@ function CheckInHeatmap({ checkIns }: { checkIns: StudyCheckIn[] }) {
             </div>
           ))}
         </div>
-
-        {/* Week columns */}
         <div className="flex gap-1 overflow-x-auto">
           {grid.map((week, wi) => (
-            <div key={wi} className="flex flex-col gap-1">
+            <motion.div
+              key={wi}
+              className="flex flex-col gap-1"
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.2, delay: wi * 0.02 }}
+            >
               {week.map((day, di) => (
-                <div
+                <motion.div
                   key={di}
-                  className={`w-4 h-4 rounded-sm ${getHeatColor(day.count)}`}
+                  className={`w-4 h-4 rounded-sm ${getHeatColor(day.count)} cursor-default`}
                   title={`${day.date}: ${day.count} 个模块`}
+                  whileHover={{ scale: 1.5, zIndex: 10 }}
+                  transition={{ type: 'spring', stiffness: 500, damping: 20 }}
                 />
               ))}
-            </div>
+            </motion.div>
           ))}
         </div>
       </div>
-    </Card>
+    </GlassCard>
   );
 }
 
@@ -300,16 +303,30 @@ function CheckInHeatmap({ checkIns }: { checkIns: StudyCheckIn[] }) {
 
 export default function EfficiencyChart({ data }: { data: EfficiencyData }) {
   return (
-    <div className="space-y-kb-lg">
+    <motion.div
+      className="space-y-kb-lg"
+      initial="hidden"
+      animate="visible"
+      variants={{
+        hidden: {},
+        visible: { transition: { staggerChildren: 0.1, delayChildren: 0.15 } },
+      }}
+    >
       <StudyTrendChart sessions={data.pomodoroSessions} />
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-kb-lg">
+      <motion.div
+        className="grid grid-cols-1 lg:grid-cols-2 gap-kb-lg"
+        variants={{
+          hidden: {},
+          visible: { transition: { staggerChildren: 0.08 } },
+        }}
+      >
         <ModuleTimePieChart
           sessions={data.pomodoroSessions}
           reviews={data.flashcardReviews}
           feynmanNotes={data.feynmanNotes}
         />
         <CheckInHeatmap checkIns={data.studyCheckIns} />
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }

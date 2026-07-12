@@ -1,46 +1,30 @@
 /**
  * 音效播放器
  *
- * 基于 Web Audio API 实现，零依赖。
- * 支持预加载、音量控制、静音切换。
+ * @ai-context 基于 Web Audio API 实现，零依赖。
+ * 支持预加载、分类音量控制、全局静音、类别级开关。
  * 播放失败时静默降级，不影响主流程。
  */
 
-/** 音效 ID 到文件路径的映射 */
-const SOUND_MAP = {
-  capture_start: '/sounds/capture_start.wav',
-  capture_stop: '/sounds/capture_stop.wav',
-  note_autosave: '/sounds/note_autosave.wav',
-  note_manual_save: '/sounds/note_manual_save.wav',
-  pomodoro_start: '/sounds/pomodoro_start.wav',
-  pomodoro_pause: '/sounds/pomodoro_pause.wav',
-  pomodoro_tick: '/sounds/pomodoro_tick.wav',
-  pomodoro_tick_final: '/sounds/pomodoro_tick_final.wav',
-  pomodoro_5min_warning: '/sounds/pomodoro_5min_warning.wav',
-  pomodoro_work_complete: '/sounds/pomodoro_work_complete.wav',
-  pomodoro_break_end: '/sounds/pomodoro_break_end.wav',
-  pomodoro_complete: '/sounds/pomodoro_complete.wav',
-  rate_remember: '/sounds/rate_remember.wav',
-  rate_fuzzy: '/sounds/rate_fuzzy.wav',
-  rate_forgot: '/sounds/rate_forgot.wav',
-  card_flip: '/sounds/card_flip.wav',
-  deck_complete: '/sounds/deck_complete.wav',
-  achievement_unlocked: '/sounds/achievement_unlocked.wav',
-  ai_analysis_done: '/sounds/ai_analysis_done.wav',
-  daily_checkin: '/sounds/daily_checkin.wav',
-  feynman_record_start: '/sounds/feynman_record_start.wav',
-  feynman_record_stop: '/sounds/feynman_record_stop.wav',
-  feynman_complete: '/sounds/feynman_complete.wav',
-  feynman_weak_point: '/sounds/feynman_weak_point.wav',
-} as const;
+import {
+  SOUND_DEFINITIONS,
+  DEFAULT_SOUND_SETTINGS,
+  findSoundDefinition,
+  type SoundCategory,
+  type SoundSettings,
+} from './audioConfig';
 
-export type SoundId = keyof typeof SOUND_MAP;
+/** 音效 ID → 文件路径映射（从 SOUND_DEFINITIONS 动态生成） */
+const SOUND_MAP: Record<string, string> = Object.fromEntries(
+  SOUND_DEFINITIONS.map((d) => [d.id, d.filePath]),
+);
+
+export type SoundId = string;
 
 class SoundPlayer {
   private context: AudioContext | null = null;
   private buffers: Map<string, AudioBuffer> = new Map();
-  private volume: number = 0.7;
-  private muted: boolean = false;
+  private settings: SoundSettings = { ...DEFAULT_SOUND_SETTINGS };
 
   private getContext(): AudioContext {
     if (!this.context) {
@@ -49,13 +33,32 @@ class SoundPlayer {
     return this.context;
   }
 
-  /** 预加载音效到 AudioBuffer */
+  /**
+   * 更新音效设置（由 settingsStore 调用）
+   * @param settings - 新的音效设置
+   */
+  updateSettings(settings: SoundSettings): void {
+    this.settings = settings;
+  }
+
+  /**
+   * 获取当前音效设置
+   * @returns 当前音效设置快照
+   */
+  getSettings(): SoundSettings {
+    return this.settings;
+  }
+
+  /**
+   * 预加载音效到 AudioBuffer
+   * @param soundId - 音效 ID
+   */
   async preload(soundId: SoundId): Promise<void> {
     const path = SOUND_MAP[soundId];
     if (!path || this.buffers.has(path)) return;
     try {
       const ctx = this.getContext();
-      const response = await fetch(path);
+      const response = await fetch(path, { signal: AbortSignal.timeout(5000) });
       if (!response.ok) return;
       const arrayBuffer = await response.arrayBuffer();
       const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
@@ -68,20 +71,62 @@ class SoundPlayer {
   /** 预加载所有音效 */
   async preloadAll(): Promise<void> {
     await Promise.allSettled(
-      (Object.keys(SOUND_MAP) as SoundId[]).map((id) => this.preload(id)),
+      SOUND_DEFINITIONS.map((d) => this.preload(d.id)),
     );
   }
 
-  /** 播放音效 */
+  /**
+   * 按类别播放音效
+   * @param soundId - 音效 ID
+   * @param category - 音效类别（用于检查开关和音量）
+   */
+  playByCategory(soundId: string, category: SoundCategory): void {
+    if (this.settings.masterMute) return;
+    const catSettings = this.settings.categories[category];
+    if (!catSettings?.enabled) return;
+    this.playInternal(soundId, catSettings.volume / 100);
+  }
+
+  /**
+   * 播放音效（向后兼容，使用对应类别的设置）
+   * @param soundId - 音效 ID
+   * @param options - 可选音量覆盖
+   */
   play(soundId: SoundId, options?: { volume?: number }): void {
-    if (this.muted) return;
+    const def = findSoundDefinition(soundId);
+    if (def) {
+      if (this.settings.masterMute) return;
+      const catSettings = this.settings.categories[def.category];
+      if (!catSettings?.enabled) return;
+      const vol = options?.volume ?? catSettings.volume / 100;
+      this.playInternal(soundId, vol);
+    } else {
+      // 未注册的音效，使用默认音量播放
+      if (this.settings.masterMute) return;
+      this.playInternal(soundId, options?.volume ?? 0.7);
+    }
+  }
+
+  /**
+   * 预览播放（忽略静音/禁用状态，用于设置页试听）
+   * @param soundId - 音效 ID
+   */
+  previewSound(soundId: string): void {
+    this.playInternal(soundId, 0.8);
+  }
+
+  /**
+   * 内部播放实现
+   * @param soundId - 音效 ID
+   * @param volume - 音量 0-1
+   */
+  private playInternal(soundId: string, volume: number): void {
     try {
       const path = SOUND_MAP[soundId];
       if (!path) return;
       const buffer = this.buffers.get(path);
       if (!buffer) {
-        // 未预加载则异步加载后播放
-        this.preload(soundId).then(() => this.play(soundId, options));
+        this.preload(soundId).then(() => this.playInternal(soundId, volume));
         return;
       }
       const ctx = this.getContext();
@@ -91,7 +136,7 @@ class SoundPlayer {
       const source = ctx.createBufferSource();
       source.buffer = buffer;
       const gainNode = ctx.createGain();
-      gainNode.gain.value = options?.volume ?? this.volume;
+      gainNode.gain.value = Math.max(0, Math.min(1, volume));
       source.connect(gainNode);
       gainNode.connect(ctx.destination);
       source.start(0);
@@ -100,24 +145,39 @@ class SoundPlayer {
     }
   }
 
-  /** 设置全局音量 (0-1) */
+  /**
+   * 设置全局音量 (0-1)
+   * @deprecated 请使用 updateSettings 替代
+   */
   setVolume(vol: number): void {
-    this.volume = Math.max(0, Math.min(1, vol));
+    const ratio = Math.max(0, Math.min(1, vol));
+    const updated = { ...this.settings };
+    for (const key of Object.keys(updated.categories) as SoundCategory[]) {
+      updated.categories[key] = {
+        ...updated.categories[key],
+        volume: Math.round(ratio * 100),
+      };
+    }
+    this.settings = updated;
   }
 
-  /** 获取当前音量 */
+  /** 获取当前音量（取最高类别音量） */
   getVolume(): number {
-    return this.volume;
+    const volumes = Object.values(this.settings.categories).map((c) => c.volume);
+    return Math.max(...volumes) / 100;
   }
 
-  /** 设置静音 */
+  /**
+   * 设置静音
+   * @deprecated 请使用 updateSettings 替代
+   */
   setMuted(muted: boolean): void {
-    this.muted = muted;
+    this.settings = { ...this.settings, masterMute: muted };
   }
 
   /** 是否静音 */
   isMuted(): boolean {
-    return this.muted;
+    return this.settings.masterMute;
   }
 }
 

@@ -1,5 +1,11 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { useNavigate, useParams } from 'react-router-dom';
+import {
+  ArrowLeft, ArrowRight, Check, Highlighter, X,
+  Star, Trash2, CheckCircle2, Circle, Sparkles, Loader2,
+  MessageCircle, Lightbulb, SearchCheck,
+} from 'lucide-react';
 import { Button, Skeleton, EmptyState, useToast, ContextMenu } from '@/components/ui';
 import { AIButton } from '@/components/ui/AIButton';
 import type { ContextMenuGroup } from '@/components/ui';
@@ -7,11 +13,6 @@ import { useContextMenu } from '@/lib/contextMenu';
 import { StepIndicator } from '../components/StepIndicator';
 import { useFeynmanStore } from '../store/useFeynmanStore';
 import type { FeynmanWeakPoint } from '@/types/models';
-import {
-  ArrowLeft, ArrowRight, Check, Highlighter, X,
-  Star, Trash2, CheckCircle2, Circle, Sparkles, Loader2,
-  MessageCircle, Lightbulb, SearchCheck,
-} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAIEvaluate, useAIFeynmanQuestion, useAIFeynmanEvaluateAnswers } from '@/lib/ai/useAI';
 
@@ -68,6 +69,8 @@ export default function FeynmanSessionPage() {
     error: aiAnswerEvalError,
     evaluateAnswers: aiEvaluateAnswers,
   } = useAIFeynmanEvaluateAnswers();
+
+  const prefersReduced = useReducedMotion();
 
   const { toast } = useToast();
 
@@ -347,9 +350,38 @@ export default function FeynmanSessionPage() {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-4rem)]">
+    <motion.div
+      className="flex flex-col h-[calc(100vh-4rem)] relative"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.3 }}
+    >
+      {/* ── 环境光 ── */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+        {/* 环境光 - 暖色 */}
+        <motion.div
+          className="absolute -top-20 -right-20 w-64 h-64 rounded-full opacity-20"
+          style={{ background: 'radial-gradient(circle, #F59E0B 0%, transparent 70%)' }}
+          animate={prefersReduced ? {} : { scale: [1, 1.15, 1], opacity: [0.15, 0.25, 0.15] }}
+          transition={{ duration: 8, repeat: Infinity, ease: 'easeInOut' }}
+        />
+        {/* 环境光 - 冷色互补 */}
+        {!prefersReduced && (
+          <motion.div
+            className="absolute -bottom-16 -left-16 w-48 h-48 rounded-full opacity-10"
+            style={{ background: 'radial-gradient(circle, #5B8A72 0%, transparent 70%)' }}
+            animate={{ scale: [1, 1.1, 1], opacity: [0.08, 0.15, 0.08] }}
+            transition={{ duration: 11, repeat: Infinity, ease: 'easeInOut', delay: 2 }}
+          />
+        )}
+      </div>
       {/* 顶栏 */}
-      <div className="flex items-center gap-kb-sm px-kb-md py-3 border-b border-border/50 flex-shrink-0">
+      <motion.div
+        className="flex items-center gap-kb-sm px-kb-md py-3 border-b border-border/50 flex-shrink-0 relative z-10"
+        initial={{ opacity: 0, y: -8, filter: 'blur(3px)' }}
+        animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+        transition={{ duration: 0.35, delay: 0.05 }}
+      >
         <button
           onClick={() => navigate('/feynman')}
           className="p-1.5 rounded-kb-full text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-kb-fast"
@@ -385,18 +417,45 @@ export default function FeynmanSessionPage() {
             已完成
           </span>
         )}
-      </div>
+      </motion.div>
 
       {/* StepIndicator */}
-      <div className="px-kb-md py-kb-md flex-shrink-0">
+      <motion.div
+        className="px-kb-md py-kb-md flex-shrink-0 relative z-10"
+        initial={{ opacity: 0, y: -6 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, delay: 0.1 }}
+      >
         <StepIndicator currentStep={currentStep} completedSteps={completedSteps} />
-      </div>
+      </motion.div>
 
       {/* 主体区域 */}
-      <div className="flex-1 overflow-hidden flex relative">
+      <div className="flex-1 overflow-hidden flex relative z-10">
+        {/* 专注遮罩 - 聚焦中心内容区 */}
+        <motion.div
+          className="pointer-events-none absolute inset-0 z-10"
+          style={{
+            background: 'radial-gradient(ellipse 70% 60% at 50% 45%, transparent 0%, transparent 50%, rgba(0,0,0,0.15) 100%)',
+          }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: prefersReduced ? 0 : 1 }}
+          transition={{ duration: 0.8, delay: 0.3 }}
+        />
         {/* 主内容 */}
         <div className="flex-1 overflow-y-auto px-kb-md pb-kb-md">
-          <div key={currentStep} className="animate-fade-in max-w-2xl mx-auto">
+          <AnimatePresence mode="wait">
+          <motion.div
+            key={currentStep}
+            className="max-w-2xl mx-auto"
+            initial={prefersReduced
+              ? { opacity: 0 }
+              : { opacity: 0, y: 16, scale: 0.97, filter: 'blur(6px)' }}
+            animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
+            exit={prefersReduced
+              ? { opacity: 0 }
+              : { opacity: 0, y: -12, scale: 1.02, filter: 'blur(4px)' }}
+            transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] as const }}
+          >
 
             {/* 步骤 1: 选择概念 */}
             {currentStep === 1 && (
@@ -532,7 +591,7 @@ export default function FeynmanSessionPage() {
                 {/* 选中文本弹窗 */}
                 {selectionPopup && (
                   <div className={cn(
-                    'flex items-center gap-2 p-2 rounded-kb-md',
+                    'flex items-center gap-2 p-kb-sm rounded-kb-md',
                     'bg-[#F59E0B]/10 border border-[#F59E0B]/30',
                   )}>
                     <span className="text-b2 text-text-secondary flex-1 truncate">
@@ -652,7 +711,7 @@ export default function FeynmanSessionPage() {
                     )}
 
                     {aiEvalError && !aiEvalLoading && (
-                      <div className="p-3 rounded-kb-md bg-rose-500/10 border border-rose-500/20 text-b2 text-rose-500">
+                      <div className="p-3 rounded-kb-md bg-semantic-error/10 border border-semantic-error/20 text-b2 text-semantic-error">
                         {aiEvalError}
                       </div>
                     )}
@@ -714,7 +773,7 @@ export default function FeynmanSessionPage() {
                         {/* Weaknesses */}
                         {aiEvalData.weaknesses.length > 0 && (
                           <div>
-                            <p className="text-b3 font-medium text-rose-500 uppercase tracking-wide mb-1">待改进</p>
+                            <p className="text-b3 font-medium text-semantic-error uppercase tracking-wide mb-1">待改进</p>
                             <ul className="flex flex-col gap-1">
                               {aiEvalData.weaknesses.map((w, i) => (
                                 <li key={i} className="flex items-start gap-2 text-b2 text-text-secondary">
@@ -781,7 +840,7 @@ export default function FeynmanSessionPage() {
                         disabled={aiQuestionLoading}
                         className={cn(
                           'w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-kb-md text-b2 font-medium',
-                          'bg-feynman text-white',
+                          'bg-feynman text-text-inverse',
                           'hover:bg-feynman/90 active:scale-[0.98] transition-all duration-kb-fast',
                           aiQuestionLoading && 'opacity-60 cursor-not-allowed',
                         )}
@@ -807,7 +866,7 @@ export default function FeynmanSessionPage() {
 
                         {/* 错误 */}
                         {aiQuestionError && !aiQuestionLoading && (
-                          <div className="p-3 rounded-kb-md bg-rose-500/10 border border-rose-500/20 text-b2 text-rose-500">
+                          <div className="p-3 rounded-kb-md bg-semantic-error/10 border border-semantic-error/20 text-b2 text-semantic-error">
                             {aiQuestionError}
                           </div>
                         )}
@@ -890,7 +949,7 @@ export default function FeynmanSessionPage() {
                             )}
 
                             {aiAnswerEvalError && !aiAnswerEvalLoading && (
-                              <div className="p-3 rounded-kb-md bg-rose-500/10 border border-rose-500/20 text-b2 text-rose-500">
+                              <div className="p-3 rounded-kb-md bg-semantic-error/10 border border-semantic-error/20 text-b2 text-semantic-error">
                                 {aiAnswerEvalError}
                               </div>
                             )}
@@ -950,7 +1009,7 @@ export default function FeynmanSessionPage() {
                                 {/* 薄弱点 */}
                                 {aiAnswerEvalData.weakPoints.length > 0 && (
                                   <div>
-                                    <p className="text-b3 font-medium text-rose-500 uppercase tracking-wide mb-1">待加强</p>
+                                    <p className="text-b3 font-medium text-semantic-error uppercase tracking-wide mb-1">待加强</p>
                                     <ul className="flex flex-col gap-1">
                                       {aiAnswerEvalData.weakPoints.map((w, i) => (
                                         <li key={i} className="flex items-start gap-2 text-b2 text-text-secondary">
@@ -971,16 +1030,23 @@ export default function FeynmanSessionPage() {
                 )}
               </div>
             )}
-          </div>
+          </motion.div>
+          </AnimatePresence>
         </div>
 
         {/* 右侧薄弱点面板（步骤 3 抽屉） */}
         {currentStep === 3 && weakPanelOpen && (
-          <aside className={cn(
-            'w-72 flex-shrink-0 border-l border-border/50 bg-bg-secondary',
-            'overflow-y-auto hidden md:block',
-            'animate-slide-in-right',
-          )}>
+          <motion.aside
+            className={cn(
+              'w-72 flex-shrink-0 border-l border-border/50 bg-bg-secondary/80 backdrop-blur-xl',
+              'shadow-[-8px_0_24px_rgba(0,0,0,0.12)]',
+              'overflow-y-auto hidden md:block',
+            )}
+            initial={{ opacity: 0, x: 24, filter: 'blur(4px)' }}
+            animate={{ opacity: 1, x: 0, filter: 'blur(0px)' }}
+            exit={{ opacity: 0, x: 16, filter: 'blur(3px)' }}
+            transition={{ duration: 0.25, ease: [0.25, 0.1, 0.25, 1] as const }}
+          >
             <div className="p-kb-md">
               <div className="flex items-center justify-between mb-kb-md">
                 <h3 className="text-b1 font-semibold text-text-primary">薄弱点列表</h3>
@@ -997,9 +1063,12 @@ export default function FeynmanSessionPage() {
                 </p>
               ) : (
                 <div className="space-y-2.5">
-                  {noteWeakPoints.map((wp) => (
-                    <div
+                  {noteWeakPoints.map((wp, i) => (
+                    <motion.div
                       key={wp.id}
+                      initial={{ opacity: 0, y: 8, filter: 'blur(3px)' }}
+                      animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+                      transition={{ duration: 0.25, delay: i * 0.05 }}
                       className={cn(
                         'flex gap-2.5 p-3 rounded-kb-md',
                         'bg-bg-elevated border border-border/40',
@@ -1030,20 +1099,25 @@ export default function FeynmanSessionPage() {
                       >
                         <Trash2 className="w-3.5 h-3.5" strokeWidth={1.5} />
                       </button>
-                    </div>
+                    </motion.div>
                   ))}
                 </div>
               )}
             </div>
-          </aside>
+          </motion.aside>
         )}
       </div>
 
       {/* 底部导航 */}
-      <div className={cn(
-        'flex items-center justify-between gap-kb-sm px-kb-md py-3',
-        'border-t border-border/50 bg-bg-elevated flex-shrink-0',
-      )}>
+      <motion.div
+        className={cn(
+          'flex items-center justify-between gap-kb-sm px-kb-md py-3',
+          'border-t border-border/50 bg-bg-elevated/90 backdrop-blur-sm flex-shrink-0 relative z-10',
+        )}
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, delay: 0.15 }}
+      >
         <Button
           variant="secondary"
           size="sm"
@@ -1080,7 +1154,7 @@ export default function FeynmanSessionPage() {
             返回列表
           </Button>
         )}
-      </div>
+      </motion.div>
 
       {/* 右键菜单 */}
       {menuOpen && menuContext && (
@@ -1095,21 +1169,8 @@ export default function FeynmanSessionPage() {
 
       {/* 动画样式 */}
       <style>{`
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(6px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        .animate-fade-in {
-          animation: fadeIn 250ms var(--kb-ease-out) forwards;
-        }
-        @keyframes slideInRight {
-          from { opacity: 0; transform: translateX(16px); }
-          to { opacity: 1; transform: translateX(0); }
-        }
-        .animate-slide-in-right {
-          animation: slideInRight 200ms var(--kb-ease-out) forwards;
-        }
+        /* CSS animations kept for non-motion elements */
       `}</style>
-    </div>
+    </motion.div>
   );
 }

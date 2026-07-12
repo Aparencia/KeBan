@@ -18,6 +18,8 @@ module.exports = {
           900: 'var(--kb-brand-900)',
         },
         accent: {
+          DEFAULT: 'var(--accent)',
+          foreground: 'var(--accent-foreground)',
           50: 'var(--kb-accent-50)',
           100: 'var(--kb-accent-100)',
           200: 'var(--kb-accent-200)',
@@ -29,10 +31,15 @@ module.exports = {
           800: 'var(--kb-accent-800)',
           900: 'var(--kb-accent-900)',
         },
-        pomodoro: { DEFAULT: '#FF6B6B', light: '#FFA8A8' },
-        note: { DEFAULT: '#4FB0FF', light: '#ADD6FF' },
-        flashcard: { DEFAULT: '#00D2D3', light: '#80E8E8' },
-        feynman: { DEFAULT: '#FF7F50', light: '#FFB8A0' },
+        pomodoro: { DEFAULT: '#5B8A72', light: '#AAC9B5' },
+        note: { DEFAULT: '#6B9BD2', light: '#ADD6FF' },
+        flashcard: { DEFAULT: '#7BC4B8', light: '#B8E0D8' },
+        feynman: { DEFAULT: '#C4956A', light: '#DEBB92' },
+        /* 深海静谧功能色 */
+        focus: { DEFAULT: 'var(--kb-focus-blue)' },
+        amber: { DEFAULT: 'var(--kb-amber)' },
+        moss: { DEFAULT: 'var(--kb-moss-green)' },
+        cyber: { DEFAULT: 'var(--kb-cyber-cyan)' },
         bg: {
           primary: 'var(--kb-bg-primary)',
           secondary: 'var(--kb-bg-secondary)',
@@ -55,6 +62,35 @@ module.exports = {
           error: 'var(--kb-color-error)',
           info: 'var(--kb-color-info)',
         },
+        // shadcn/ui 兼容色
+        background: 'var(--background)',
+        foreground: 'var(--foreground)',
+        card: {
+          DEFAULT: 'var(--card)',
+          foreground: 'var(--card-foreground)',
+        },
+        popover: {
+          DEFAULT: 'var(--popover)',
+          foreground: 'var(--popover-foreground)',
+        },
+        primary: {
+          DEFAULT: 'var(--primary)',
+          foreground: 'var(--primary-foreground)',
+        },
+        secondary: {
+          DEFAULT: 'var(--secondary)',
+          foreground: 'var(--secondary-foreground)',
+        },
+        muted: {
+          DEFAULT: 'var(--muted)',
+          foreground: 'var(--muted-foreground)',
+        },
+        destructive: {
+          DEFAULT: 'var(--destructive)',
+          foreground: 'var(--destructive-foreground)',
+        },
+        input: 'var(--input)',
+        ring: 'var(--ring)',
       },
       fontFamily: {
         sans: ['var(--kb-font-sans)'],
@@ -88,6 +124,11 @@ module.exports = {
         'kb-lg': 'var(--kb-radius-lg)',
         'kb-xl': 'var(--kb-radius-xl)',
         'kb-full': 'var(--kb-radius-full)',
+        // shadcn 使用默认命名
+        sm: 'calc(var(--radius) - 4px)',
+        md: 'calc(var(--radius) - 2px)',
+        lg: 'var(--radius)',
+        xl: 'calc(var(--radius) + 4px)',
       },
       boxShadow: {
         'kb-sm': 'var(--kb-shadow-sm)',
@@ -141,5 +182,5 @@ module.exports = {
       },
     },
   },
-  plugins: [],
+  plugins: [require('tailwindcss-animate')],
 }

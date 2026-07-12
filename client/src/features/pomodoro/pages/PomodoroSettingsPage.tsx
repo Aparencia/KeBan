@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { motion } from 'framer-motion';
 import { Timer, Zap, Bell, Save, RotateCcw, GraduationCap, Sparkles, Loader2, CheckCircle2, Music, Volume2 } from 'lucide-react';
 import { Button, Card, Input, useToast } from '@/components/ui';
 import { cn } from '@/lib/utils';
@@ -89,6 +90,9 @@ export default function PomodoroSettingsPage() {
   const [resetDone, setResetDone] = useState(false);
   const [audioPrefs, setAudioPrefs] = useState<AudioPreferences>(() => loadAudioPreferences());
 
+  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // AI recommend
   const {
     loading: aiRecLoading,
@@ -104,6 +108,14 @@ export default function PomodoroSettingsPage() {
   useEffect(() => {
     initialize();
   }, [initialize]);
+
+  // Cleanup feedback timers on unmount
+  useEffect(() => {
+    return () => {
+      if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+      if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+    };
+  }, []);
 
   // Sync local state when store settings change (e.g. after initialize resolves)
   useEffect(() => {
@@ -130,21 +142,30 @@ export default function PomodoroSettingsPage() {
     updateSettings(localSettings);
     saveAudioPreferences(audioPrefs);
     setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    savedTimerRef.current = setTimeout(() => setSaved(false), 2000);
   };
 
   const handleReset = () => {
     updateSettings(DEFAULT_SETTINGS);
     setLocalSettings({ ...DEFAULT_SETTINGS });
     setResetDone(true);
-    setTimeout(() => setResetDone(false), 2000);
+    resetTimerRef.current = setTimeout(() => setResetDone(false), 2000);
   };
 
   return (
-    <div className="max-w-xl mx-auto px-kb-md py-kb-lg">
-      <h1 className="text-h1 font-semibold text-text-primary mb-kb-lg">番茄钟设置</h1>
+    <motion.div
+      className="max-w-xl mx-auto px-kb-md py-kb-lg"
+      initial="hidden"
+      animate="visible"
+      variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.07, delayChildren: 0.06 } } }}
+    >
+      <motion.h1
+        className="text-h1 font-semibold text-text-primary mb-kb-lg"
+        variants={{ hidden: { opacity: 0, y: -12, filter: 'blur(3px)' }, visible: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.35 } } }}
+      >番茄钟设置</motion.h1>
 
       {/* Duration settings */}
+      <motion.div variants={{ hidden: { opacity: 0, y: 16, filter: 'blur(3px)' }, visible: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.35 } } }}>
       <Card variant="default" padding="lg" className="mb-kb-md">
         <div className="flex items-center gap-2 mb-kb-md">
           <Timer className="w-icon-sm h-icon-sm text-pomodoro" strokeWidth={1.5} />
@@ -190,8 +211,10 @@ export default function PomodoroSettingsPage() {
           />
         </div>
       </Card>
+      </motion.div>
 
       {/* Class mode settings */}
+      <motion.div variants={{ hidden: { opacity: 0, y: 16, filter: 'blur(3px)' }, visible: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.35 } } }}>
       <Card variant="default" padding="lg" className="mb-kb-md">
         <div className="flex items-center gap-2 mb-kb-md">
           <GraduationCap className="w-icon-sm h-icon-sm text-brand-600" strokeWidth={1.5} />
@@ -212,11 +235,13 @@ export default function PomodoroSettingsPage() {
           />
         </div>
       </Card>
+      </motion.div>
 
       {/* Automation settings */}
+      <motion.div variants={{ hidden: { opacity: 0, y: 16, filter: 'blur(3px)' }, visible: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.35 } } }}>
       <Card variant="default" padding="lg" className="mb-kb-md">
         <div className="flex items-center gap-2 mb-kb-sm">
-          <Zap className="w-icon-sm h-icon-sm text-amber-500" strokeWidth={1.5} />
+          <Zap className="w-icon-sm h-icon-sm text-semantic-warning" strokeWidth={1.5} />
           <h2 className="text-h3 font-medium text-text-primary">自动化</h2>
         </div>
 
@@ -235,8 +260,10 @@ export default function PomodoroSettingsPage() {
           </SettingRow>
         </div>
       </Card>
+      </motion.div>
 
       {/* Notification settings */}
+      <motion.div variants={{ hidden: { opacity: 0, y: 16, filter: 'blur(3px)' }, visible: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.35 } } }}>
       <Card variant="default" padding="lg" className="mb-kb-xl">
         <div className="flex items-center gap-2 mb-kb-sm">
           <Bell className="w-icon-sm h-icon-sm text-brand-600" strokeWidth={1.5} />
@@ -258,8 +285,10 @@ export default function PomodoroSettingsPage() {
           </SettingRow>
         </div>
       </Card>
+      </motion.div>
 
       {/* AI 智能推荐 */}
+      <motion.div variants={{ hidden: { opacity: 0, y: 16, filter: 'blur(3px)' }, visible: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.35 } } }}>
       <Card variant="default" padding="lg" className="mb-kb-xl">
         <div className="flex items-center gap-2 mb-kb-md">
           <Sparkles className="w-icon-sm h-icon-sm text-brand-500" strokeWidth={1.5} />
@@ -268,7 +297,7 @@ export default function PomodoroSettingsPage() {
         <p className="text-b2 text-text-tertiary mb-kb-md">
           AI 分析你的历史专注数据，为你推荐最适合的工作时长。
           {aiRecFallback && aiRecData && (
-            <span className="ml-1 text-amber-500 text-c1">（基于本地分析）</span>
+            <span className="ml-1 text-semantic-warning text-c1">（基于本地分析）</span>
           )}
         </p>
 
@@ -305,7 +334,7 @@ export default function PomodoroSettingsPage() {
         </Button>
 
         {aiRecError && (
-          <div className="mt-kb-sm p-3 rounded-kb-md bg-rose-500/10 border border-rose-500/20 text-b2 text-rose-500">
+          <div className="mt-kb-sm p-3 rounded-kb-md bg-semantic-error/10 border border-semantic-error/20 text-b2 text-semantic-error">
             {aiRecError}
           </div>
         )}
@@ -328,14 +357,14 @@ export default function PomodoroSettingsPage() {
                 aiRecData.confidence === 'high'
                   ? 'bg-semantic-success/10 text-semantic-success'
                   : aiRecData.confidence === 'medium'
-                    ? 'bg-amber-500/10 text-amber-500'
+                    ? 'bg-semantic-warning/10 text-semantic-warning'
                     : 'bg-text-tertiary/10 text-text-tertiary',
               )}>
                 {aiRecData.confidence === 'high' ? '高置信度' : aiRecData.confidence === 'medium' ? '中等' : '低'}
               </span>
             </div>
             {aiRecFallback && (
-              <p className="text-c1 text-amber-500 flex items-center gap-1">
+              <p className="text-c1 text-semantic-warning flex items-center gap-1">
                 <span>⚠</span> 当前基于本地规则引擎分析（无网络）
               </p>
             )}
@@ -356,8 +385,10 @@ export default function PomodoroSettingsPage() {
           </div>
         )}
       </Card>
+      </motion.div>
 
       {/* 音效设置 */}
+      <motion.div variants={{ hidden: { opacity: 0, y: 16, filter: 'blur(3px)' }, visible: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.35 } } }}>
       <Card variant="default" padding="lg" className="mb-kb-xl">
         <div className="flex items-center gap-2 mb-kb-sm">
           <Music className="w-icon-sm h-icon-sm text-brand-500" strokeWidth={1.5} />
@@ -436,6 +467,7 @@ export default function PomodoroSettingsPage() {
           </SettingRow>
         </div>
       </Card>
+      </motion.div>
 
       {/* Action buttons */}
       <div className="flex flex-col gap-kb-sm">
@@ -459,6 +491,6 @@ export default function PomodoroSettingsPage() {
           {resetDone ? '已重置 ✓' : '重置为默认'}
         </Button>
       </div>
-    </div>
+    </motion.div>
   );
 }

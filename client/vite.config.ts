@@ -84,6 +84,8 @@ export default defineConfig({
   },
   define: {
     'import.meta.env.VITE_API_BASE_URL': JSON.stringify(process.env.VITE_API_BASE_URL || ''),
+    'import.meta.env.VITE_API_HEALTH_URL': JSON.stringify(process.env.VITE_API_HEALTH_URL || ''),
+    'import.meta.env.VITE_AI_GATEWAY_URL': JSON.stringify(process.env.VITE_AI_GATEWAY_URL || ''),
   },
   resolve: {
     alias: {

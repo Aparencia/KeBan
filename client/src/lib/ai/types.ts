@@ -10,6 +10,8 @@ export interface AIPlugin {
   tagContent?(content: string): Promise<TagContentResult>;
   optimizeCard?(front: string, back: string): Promise<OptimizeCardResult>;
   sortInspiration?(content: string, existingTags?: Record<string, string>): Promise<SortResult>;
+  generateFeynmanQuestions(concept: string, explanation: string): Promise<FeynmanQuestionResult>;
+  evaluateFeynmanAnswers(concept: string, questions: string[], answers: string[]): Promise<FeynmanAnswerEvalResult>;
 }
 
 // === Summarize ===

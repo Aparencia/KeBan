@@ -10,6 +10,7 @@
  */
 
 import { desktopCapturer, DesktopCapturerSource, BrowserWindow } from 'electron';
+import { logger } from './logger';
 
 // ================================================================
 // 类型定义
@@ -132,13 +133,13 @@ export class AudioCapture {
         throw new Error('No audio source available');
       }
       resolvedSourceId = sources[0].id;
-      console.log(`[AudioCapture] 自动选择音频源: ${sources[0].name} (${resolvedSourceId})`);
+      logger.info(`[AudioCapture] 自动选择音频源: ${sources[0].name} (${resolvedSourceId})`);
     }
 
     this.capturing = true;
     this.boundWin = win;
 
-    console.log(
+    logger.info(
       `[AudioCapture] 开始捕获, sourceId=${resolvedSourceId}, ` +
       `chunkDurationMs=${this.options.chunkDurationMs}, ` +
       `sampleRate=${this.options.sampleRate}, channels=${this.options.channels}`,
@@ -160,7 +161,7 @@ export class AudioCapture {
     if (!this.capturing) return;
 
     this.capturing = false;
-    console.log('[AudioCapture] 停止捕获');
+    logger.info('[AudioCapture] 停止捕获');
 
     // 通知渲染进程停止音频采集
     if (this.boundWin && !this.boundWin.isDestroyed()) {
@@ -193,6 +194,6 @@ export class AudioCapture {
   dispose(): void {
     this.stop();
     this.disposed = true;
-    console.log('[AudioCapture] 已销毁');
+    logger.info('[AudioCapture] 已销毁');
   }
 }

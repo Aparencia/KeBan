@@ -1,4 +1,5 @@
-import { useRef, useEffect, useId } from 'react';
+﻿import { useRef, useEffect, useId } from 'react';
+import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 
 interface TimerRingProps {
@@ -9,14 +10,14 @@ interface TimerRingProps {
 }
 
 const PHASE_COLORS: Record<string, string> = {
-  work: '#FF6B6B',
-  short_break: '#00D2D3',
-  long_break: '#4FB0FF',
+  work: '#5B8A72',
+  short_break: '#7BC4B8',
+  long_break: '#6B9BD2',
 };
 
 // RGB tuples for interpolation
-const COLOR_WARM_START: [number, number, number] = [249, 115, 22];  // #F97316
-const COLOR_WARM_END:   [number, number, number] = [234, 88, 12];   // #EA580C
+const COLOR_WARM_START: [number, number, number] = [91, 138, 114];  // #5B8A72
+const COLOR_WARM_END:   [number, number, number] = [196, 149, 106];  // #C4956A
 
 function lerpColor(
   from: [number, number, number],
@@ -33,9 +34,9 @@ function getStrokeColor(
   phase: string,
   remainingSeconds: number,
 ): string {
-  const base = PHASE_COLORS[phase] ?? '#F43F5E';
+  const base = PHASE_COLORS[phase] ?? '#5B8A72';
   if (phase === 'work' && remainingSeconds <= 300 && remainingSeconds > 0) {
-    const t = 1 - remainingSeconds / 300; // 0 → 1 as time depletes
+    const t = 1 - remainingSeconds / 300;
     return lerpColor(COLOR_WARM_START, COLOR_WARM_END, t);
   }
   return base;
@@ -56,6 +57,7 @@ export default function TimerRing({
   const circleRef = useRef<SVGCircleElement>(null);
   const rafRef = useRef<number>(0);
   const gradientId = useId();
+  const glowGradientId = useId();
 
   const progress = totalSeconds > 0 ? remainingSeconds / totalSeconds : 0;
   const color = getStrokeColor(phase, remainingSeconds);
@@ -71,12 +73,11 @@ export default function TimerRing({
       const el = circleRef.current;
       if (!el) return;
 
-      const size = window.innerWidth < 768 ? 200 : 240;
-      const strokeWidth = 8;
+      const size = window.innerWidth < 768 ? 200 : 280;
+      const strokeWidth = 6;
       const r = (size - strokeWidth) / 2;
       const circumference = 2 * Math.PI * r;
 
-      // Read current remaining from DOM for smooth interpolation
       const currentProgress = totalSeconds > 0 ? remainingSeconds / totalSeconds : 0;
       const offset = circumference * (1 - currentProgress);
 
@@ -90,92 +91,126 @@ export default function TimerRing({
     return () => cancelAnimationFrame(rafRef.current);
   }, [remainingSeconds, totalSeconds]);
 
-  const size = 240;
-  const strokeWidth = 8;
+  const size = 280;
+  const strokeWidth = 6;
   const r = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * r;
   const offset = circumference * (1 - progress);
 
   return (
-    <>
-      <style>{`
-        @keyframes kb-pulse {
-          0%, 100% { opacity: 1; transform: scale(1); }
-          50% { opacity: 0.7; transform: scale(1.05); }
-        }
-        .kb-animate-pulse {
-          animation: kb-pulse 1s ease-in-out infinite;
-        }
-      `}</style>
+    <div className="relative flex items-center justify-center">
+      {/* 环境光晕 — 呼吸动画 */}
+      <motion.div
+        className="absolute rounded-full pointer-events-none"
+        style={{
+          width: size + 60,
+          height: size + 60,
+          background: `radial-gradient(circle, ${color}22 0%, transparent 70%)`,
+        }}
+        animate={{
+          scale: isRunning ? [1, 1.06, 1] : 1,
+          opacity: isRunning ? [0.4, 0.7, 0.4] : 0.2,
+        }}
+        transition={{
+          duration: 5,
+          repeat: Infinity,
+          ease: 'easeInOut',
+        }}
+      />
 
-      <div className="relative flex items-center justify-center bg-transparent border-none outline-none">
-        <svg
-          className="block w-[200px] h-[200px] md:w-[240px] md:h-[240px] bg-transparent"
-          viewBox={`0 0 ${size} ${size}`}
-          overflow="visible"
+      <svg
+        className="block w-[200px] h-[200px] md:w-[280px] md:h-[280px]"
+        viewBox={`0 0 ${size} ${size}`}
+        overflow="visible"
+      >
+        <defs>
+          {/* 主渐变 */}
+          <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor={PHASE_COLORS[phase]} stopOpacity={1} />
+            <stop offset="100%" stopColor={PHASE_COLORS[phase]} stopOpacity={0.3} />
+          </linearGradient>
+          {/* 光晕渐变 */}
+          <linearGradient id={glowGradientId} x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor={PHASE_COLORS[phase]} stopOpacity={0.15} />
+            <stop offset="100%" stopColor={PHASE_COLORS[phase]} stopOpacity={0.05} />
+          </linearGradient>
+        </defs>
+
+        {/* 刻度标记 — 12/3/6/9 位置 */}
+        {[0, 90, 180, 270].map((angle) => (
+          <line
+            key={angle}
+            x1={size / 2}
+            y1={strokeWidth + 2}
+            x2={size / 2}
+            y2={strokeWidth + 8}
+            stroke="var(--kb-text-tertiary)"
+            strokeWidth={1}
+            opacity={0.2}
+            transform={`rotate(${angle} ${size / 2} ${size / 2})`}
+          />
+        ))}
+
+        {/* 背景环 */}
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          fill="none"
+          strokeWidth={strokeWidth}
+          className="stroke-border/20"
+        />
+
+        {/* 进度环 — 带渐变 */}
+        <circle
+          ref={circleRef}
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          fill="none"
+          strokeWidth={strokeWidth}
+          stroke={`url(#${gradientId})`}
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          style={{
+            transform: 'rotate(-90deg)',
+            transformOrigin: '50% 50%',
+            transition: 'stroke-dashoffset 1s linear',
+            filter: `drop-shadow(0 0 6px ${color}40)`,
+          }}
+        />
+      </svg>
+
+      {/* 中心内容 */}
+      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+        <motion.span
+          className={cn(
+            'font-timer font-light tracking-tight leading-none',
+            isLast10 && 'animate-pulse',
+          )}
+          style={{
+            fontSize: 'clamp(3.5rem, 8vw, 5.5rem)',
+            color: isLast10 ? '#C4956A' : 'var(--kb-text-primary)',
+            fontVariantNumeric: 'tabular-nums',
+          }}
+          key={timeStr}
+          initial={{ opacity: 0.6, y: 2, filter: 'blur(1px)' }}
+          animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+          transition={{ duration: 0.15 }}
         >
-          {/* Brand gradient definition for work phase */}
-          <defs>
-            <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#4FB0FF" />
-              <stop offset="100%" stopColor="#FF7F50" />
-            </linearGradient>
-          </defs>
-
-          {/* Background ring - very faint */}
-          <circle
-            cx={size / 2}
-            cy={size / 2}
-            r={r}
-            fill="none"
-            strokeWidth={strokeWidth}
-            className="stroke-border/30"
-          />
-
-          {/* Progress ring */}
-          <circle
-            ref={circleRef}
-            cx={size / 2}
-            cy={size / 2}
-            r={r}
-            fill="none"
-            strokeWidth={strokeWidth}
-            stroke={phase === 'work' ? `url(#${gradientId})` : color}
-            strokeLinecap="round"
-            strokeDasharray={circumference}
-            strokeDashoffset={offset}
-            className="transition-[stroke-dashoffset] duration-1000 ease-linear"
-            style={{
-              transform: 'rotate(-90deg)',
-              transformOrigin: '50% 50%',
-              transition: 'stroke-dashoffset 1s linear',
-            }}
-          />
-        </svg>
-
-        {/* Center content overlay */}
-        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-          <span
-            className={cn(
-              'font-timer font-light tracking-tight leading-none',
-              'transition-colors duration-kb-normal ease-kb-default',
-              isLast10 && 'kb-animate-pulse',
-            )}
-            style={{
-              fontSize: 'clamp(4rem, 8vw, 6rem)',
-              color: isLast10 ? '#F43F5E' : undefined,
-            }}
-          >
-            {timeStr}
-          </span>
-          <span
-            className="text-b2 mt-kb-xs font-medium transition-colors duration-kb-normal"
-            style={{ color }}
-          >
-            {label}
-          </span>
-        </div>
+          {timeStr}
+        </motion.span>
+        <motion.span
+          className="text-[11px] mt-2 font-medium tracking-[0.08em] uppercase"
+          style={{ color }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.3 }}
+        >
+          {label}
+        </motion.span>
       </div>
-    </>
+    </div>
   );
 }

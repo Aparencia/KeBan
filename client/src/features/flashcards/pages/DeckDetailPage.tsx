@@ -1,4 +1,5 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
+import { motion } from 'framer-motion';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Button, Card, Modal, Input, Tag, EmptyState, Skeleton, useToast } from '@/components/ui';
 import { ContextMenu, type ContextMenuGroup } from '@/components/ui/ContextMenu';
@@ -19,6 +20,7 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { exportDeck, downloadDeckFile } from '@/lib/storage/exportImport';
 import { useFlashcardStore } from '../store/useFlashcardStore';
 import { useAIFlashcards } from '@/lib/ai/useAI';
@@ -26,6 +28,40 @@ import { useContextMenu } from '@/lib/contextMenu/useContextMenu';
 import type { Flashcard } from '@/types/models';
 import { createNewCardState } from '@/lib/sm2';
 import type { Flashcard as AIFlashcard } from '@/lib/ai/types';
+
+/** 堆叠卡片内部内容组件 */
+function StackCardContent({ card, i }: { card: Flashcard; i: number }) {
+  return (
+    <div className="p-4 h-full flex flex-col">
+      {/* 顶栏：编号 + 状态 */}
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-brand-50 text-brand-600 dark:bg-brand-900/30 dark:text-brand-300">
+          #{i + 1}
+        </span>
+        <span className={`text-[10px] px-1.5 py-0.5 rounded-md ${
+          card.repetitions === 0
+            ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-300'
+            : 'bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-300'
+        }`}>
+          {card.repetitions === 0 ? '新卡' : '复习'}
+        </span>
+      </div>
+
+      {/* 中间：正面内容 */}
+      <div className="flex-1 flex items-center justify-center">
+        <p className="text-sm font-medium text-center text-gray-900 dark:text-[#E8ECF0] line-clamp-3 leading-relaxed">
+          {card.front}
+        </p>
+      </div>
+
+      {/* 底栏：分隔线 + 元数据 */}
+      <div className="flex items-center justify-between text-[10px] text-gray-400 dark:text-text-tertiary border-t border-gray-100 dark:border-border-subtle/50 pt-2 mt-1">
+        <span>EF {card.easeFactor.toFixed(1)}</span>
+        <span>{card.repetitions > 0 ? `已复习 ${card.repetitions} 次` : '待首次学习'}</span>
+      </div>
+    </div>
+  );
+}
 
 export default function DeckDetailPage() {
   const { deckId } = useParams<{ deckId: string }>();
@@ -146,7 +182,14 @@ export default function DeckDetailPage() {
     }
   }, [deckId, loadDecks, selectDeck, loadCards]);
 
+  const prefersReduced = useReducedMotion();
   const stats = deckId ? getDeckStats(deckId) : { total: 0, due: 0, newCards: 0 };
+
+  // 待复习卡片（用于 3D 堆叠预览）：到期卡片 + 新卡
+  const dueCards = useMemo(() => {
+    const now = new Date();
+    return cards.filter((c) => new Date(c.dueDate) <= now || c.repetitions === 0);
+  }, [cards]);
 
   const statItems = [
     { label: '总卡片', value: stats.total, icon: BookOpen, color: 'text-flashcard' },
@@ -258,15 +301,24 @@ export default function DeckDetailPage() {
       </div>
 
       {/* 统计行 */}
-      <div className="grid grid-cols-4 gap-kb-sm px-kb-md py-kb-md flex-shrink-0">
+      <motion.div
+        className="grid grid-cols-4 gap-kb-sm px-kb-md py-kb-md flex-shrink-0"
+        initial="hidden"
+        animate="visible"
+        variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.06, delayChildren: 0.1 } } }}
+      >
         {statItems.map(({ label, value, icon: Icon, color }) => (
-          <Card key={label} padding="sm" className="flex flex-col items-center gap-1 text-center">
-            <Icon className={cn('w-icon-sm h-icon-sm', color)} strokeWidth={1.5} />
-            <span className={cn('text-h2 font-bold', color)}>{value}</span>
-            <span className="text-c1 text-text-tertiary">{label}</span>
-          </Card>
+          <motion.div key={label}
+            variants={{ hidden: { opacity: 0, y: 12, filter: 'blur(3px)' }, visible: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.3 } } }}
+          >
+            <Card padding="sm" className="flex flex-col items-center gap-1 text-center">
+              <Icon className={cn('w-icon-sm h-icon-sm', color)} strokeWidth={1.5} />
+              <span className={cn('text-h2 font-bold', color)}>{value}</span>
+              <span className="text-c1 text-text-tertiary">{label}</span>
+            </Card>
+          </motion.div>
         ))}
-      </div>
+      </motion.div>
 
       {/* 卡片列表 */}
       <div className="flex-1 overflow-y-auto px-kb-md pb-kb-md">
@@ -292,10 +344,114 @@ export default function DeckDetailPage() {
             }
           />
         ) : (
-          <div className="flex flex-col gap-kb-sm">
+          <>
+          {/* 3D 堆叠预览区 */}
+          {dueCards.length === 0 ? (
+            <div className="h-32 flex items-center justify-center text-text-tertiary text-sm mb-6">
+              所有卡片已复习 ✓
+            </div>
+          ) : (
+            <div className="relative h-52 flex items-center justify-center mb-6 rounded-xl bg-gradient-to-b from-gray-50 to-gray-100/50 dark:from-transparent dark:to-transparent mx-auto max-w-lg" style={{ perspective: '1200px' }}>
+              {/* 标题提示 */}
+              <div className="absolute top-0 left-4 text-xs font-medium text-text-secondary z-20">
+                待复习 · {dueCards.length} 张
+              </div>
+
+              {dueCards.slice(0, 5).map((card, i) => {
+                const bgClasses = [
+                  'bg-white dark:bg-[#242830]',
+                  'bg-blue-50/80 dark:bg-[#1E2228]',
+                  'bg-blue-100/60 dark:bg-[#1A1D23]/80',
+                  'bg-blue-100/40 dark:bg-[#1A1D23]/50',
+                  'bg-blue-100/40 dark:bg-[#1A1D23]/50',
+                ];
+                const borderClasses = [
+                  'border-l-[3px] border-l-brand-500 border border-gray-200 dark:border-border-subtle',
+                  'border border-blue-200/60 dark:border-border-subtle/60',
+                  'border border-blue-200/40 dark:border-border-subtle/30',
+                  'border border-blue-200/30 dark:border-border-subtle/20',
+                  'border border-blue-200/20 dark:border-border-subtle/20',
+                ];
+                const shadowStyles = [
+                  '0 8px 28px rgba(0,0,0,0.14)',
+                  '0 4px 16px rgba(0,0,0,0.08)',
+                  '0 2px 8px rgba(0,0,0,0.04)',
+                  '0 1px 4px rgba(0,0,0,0.02)',
+                  '0 1px 2px rgba(0,0,0,0.01)',
+                ];
+                // dark shadows handled via dark:* tailwind on container where possible
+                const depthY = [0, -10, -20, -28, -34];
+                const depthScale = [1, 0.92, 0.85, 0.80, 0.76];
+                const depthRotateX = [0, 4, 7, 9, 11];
+
+                return (
+                <motion.div
+                  key={card.id}
+                  className={cn(
+                    'absolute w-80 h-36 rounded-xl',
+                    bgClasses[i] ?? bgClasses[4],
+                    borderClasses[i] ?? borderClasses[4],
+                  )}
+                  style={{
+                    transformStyle: 'preserve-3d',
+                    zIndex: 10 - i,
+                    boxShadow: shadowStyles[i] ?? shadowStyles[4],
+                  }}
+                  initial={{
+                    y: depthY[i],
+                    scale: depthScale[i],
+                    rotateX: depthRotateX[i],
+                    opacity: i === 0 ? 1 : Math.max(0.45, 0.75 - i * 0.08),
+                  }}
+                  animate={{
+                    y: depthY[i],
+                    scale: depthScale[i],
+                    rotateX: depthRotateX[i],
+                    opacity: i === 0 ? 1 : Math.max(0.45, 0.75 - i * 0.08),
+                  }}
+                  transition={
+                    prefersReduced
+                      ? { duration: 0.01 }
+                      : { type: 'spring', stiffness: 300, damping: 25 }
+                  }
+                >
+                  {/* 第一张卡片浮动动画 */}
+                  {i === 0 && !prefersReduced ? (
+                    <motion.div
+                      className="absolute inset-0"
+                      animate={{ y: [0, -3, 0] }}
+                      transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+                    >
+                      <StackCardContent card={card} i={i} />
+                    </motion.div>
+                  ) : (
+                    <StackCardContent card={card} i={i} />
+                  )}
+                </motion.div>
+                );
+              })}
+
+              {/* 底部厚度指示 */}
+              <div className="absolute bottom-0 left-1/2 -translate-x-1/2 flex gap-[2px]">
+                {dueCards.slice(0, 5).map((_, i) => (
+                  <div key={i} className="w-10 h-[2px] rounded-full bg-gray-300/60 dark:bg-border-subtle/40" />
+                ))}
+              </div>
+            </div>
+          )}
+          <motion.div
+            className="flex flex-col gap-kb-sm"
+            initial="hidden"
+            animate="visible"
+            variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.03, delayChildren: 0.05 } } }}
+          >
             {cards.map((card) => (
+              <motion.div key={card.id}
+                variants={{ hidden: { opacity: 0, x: -12, filter: 'blur(3px)' }, visible: { opacity: 1, x: 0, filter: 'blur(0px)', transition: { duration: 0.25 } } }}
+                whileHover={prefersReduced ? undefined : { y: -3, transition: { type: 'spring', stiffness: 400, damping: 20 } }}
+                whileTap={prefersReduced ? undefined : { scale: 0.98, transition: { type: 'spring', stiffness: 500, damping: 30 } }}
+              >
               <Card
-                key={card.id}
                 padding="sm"
                 className="flex items-center gap-3"
                 onContextMenu={(e) => ctxHandleMenu(e, card)}
@@ -339,8 +495,10 @@ export default function DeckDetailPage() {
                   </button>
                 </div>
               </Card>
+              </motion.div>
             ))}
-          </div>
+            </motion.div>
+          </>
         )}
       </div>
 
@@ -447,7 +605,7 @@ export default function DeckDetailPage() {
                 />
               </div>
               {aiError && (
-                <div className="p-3 rounded-kb-md bg-rose-500/10 border border-rose-500/20 text-b2 text-rose-500">
+                <div className="p-3 rounded-kb-md bg-semantic-error/10 border border-semantic-error/20 text-b2 text-semantic-error">
                   {aiError}
                 </div>
               )}

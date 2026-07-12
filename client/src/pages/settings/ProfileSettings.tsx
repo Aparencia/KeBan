@@ -66,12 +66,35 @@ export default function ProfileSettings() {
     }
   }
 
+  /**
+   * 乐观更新保存 Profile：先更新 UI，再异步同步后端，失败时回滚
+   * @param e 表单提交事件
+   * @ai-context Profile 编辑保存核心逻辑，采用乐观更新 + 失败回滚模式
+   */
   async function handleSave(e: FormEvent) {
     e.preventDefault();
     if (!user || !profile) return;
+
+    // 1. 快照旧值，用于失败回滚
+    const previousProfile = { ...profile };
+    const previousDisplayName = displayName;
+    const previousBio = bio;
+    const previousAvatarUrl = avatarUrl;
+
+    // 2. 乐观更新 UI —— 立即反映用户修改
+    const optimisticProfile: UserProfile = {
+      ...profile,
+      displayName,
+      bio,
+      avatarUrl,
+      updatedAt: new Date().toISOString(),
+    };
+    setProfile(optimisticProfile);
+    setEditing(false);
     setSaving(true);
+
     try {
-      // 更新 Supabase user metadata
+      // 3. 异步同步 Supabase metadata
       const { error: updateError } = await supabase.auth.updateUser({
         data: { display_name: displayName, bio, avatar_url: avatarUrl },
       });
@@ -84,23 +107,20 @@ export default function ProfileSettings() {
       // 刷新 session 使侧边栏等组件立即获取最新 metadata
       await supabase.auth.refreshSession();
 
-      // 更新本地 Dexie
-      const updated: UserProfile = {
-        ...profile,
-        displayName,
-        bio,
-        avatarUrl,
-        updatedAt: new Date().toISOString(),
-      };
-      await db.userProfile.put(updated);
-      setProfile(updated);
-      setEditing(false);
+      // 4. 后端成功 → 持久化到本地 Dexie
+      await db.userProfile.put(optimisticProfile);
       toast({ type: 'success', message: '资料已保存' });
     } catch (err) {
+      // 5. 失败回滚到快照值
       const msg = err instanceof Error ? err.message : '未知错误';
       // eslint-disable-next-line no-console
-      console.error('[ProfileSave] Failed:', err);
-      toast({ type: 'error', message: `保存失败：${msg}` });
+      console.error('[ProfileSave] Failed, rolling back:', err);
+      setProfile(previousProfile);
+      setDisplayName(previousDisplayName);
+      setBio(previousBio);
+      setAvatarUrl(previousAvatarUrl);
+      setEditing(true);
+      toast({ type: 'error', message: `更新失败，请重试：${msg}` });
     } finally {
       setSaving(false);
     }
@@ -115,7 +135,11 @@ export default function ProfileSettings() {
     setEditing(false);
   }
 
-  // ---- 头像上传 ----
+  /**
+   * 头像上传乐观更新：先预览新头像，再异步上传，失败时回滚
+   * @param e 文件输入 change 事件
+   * @ai-context 头像上传逻辑，采用乐观更新 + 失败回滚模式
+   */
   async function handleAvatarUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file || !user) return;
@@ -138,9 +162,17 @@ export default function ProfileSettings() {
       return;
     }
 
+    // 1. 快照旧值，用于失败回滚
+    const previousAvatarUrl = avatarUrl;
+    const previousProfile = profile ? { ...profile } : null;
+
+    // 2. 乐观更新 UI —— 立即显示本地预览
+    const optimisticUrl = URL.createObjectURL(file);
+    setAvatarUrl(optimisticUrl);
     setUploading(true);
+
     try {
-      // 文件路径：avatars/{userId}/{timestamp}.{ext}
+      // 3. 异步上传到 Supabase Storage
       const ext = file.name.split('.').pop() || 'png';
       const filePath = `avatars/${user.id}/${Date.now()}.${ext}`;
 
@@ -160,7 +192,10 @@ export default function ProfileSettings() {
         .getPublicUrl(filePath);
 
       const newAvatarUrl = urlData.publicUrl;
+
+      // 4. 替换乐观预览 URL 为真实 URL
       setAvatarUrl(newAvatarUrl);
+      URL.revokeObjectURL(optimisticUrl);
 
       // 同步更新 Supabase user metadata
       const { error: updateError } = await supabase.auth.updateUser({
@@ -171,7 +206,7 @@ export default function ProfileSettings() {
         console.error('[AvatarUpload] updateUser error:', updateError);
       }
 
-      // 更新本地 Dexie
+      // 5. 持久化到本地 Dexie
       if (profile) {
         const updated = { ...profile, avatarUrl: newAvatarUrl, updatedAt: new Date().toISOString() };
         await db.userProfile.put(updated);
@@ -180,9 +215,13 @@ export default function ProfileSettings() {
 
       toast({ type: 'success', message: '头像上传成功' });
     } catch (err) {
+      // 6. 失败回滚到旧头像
       const msg = err instanceof Error ? err.message : '未知错误';
       // eslint-disable-next-line no-console
-      console.error('[AvatarUpload] Failed:', err);
+      console.error('[AvatarUpload] Failed, rolling back:', err);
+      URL.revokeObjectURL(optimisticUrl);
+      setAvatarUrl(previousAvatarUrl);
+      if (previousProfile) setProfile(previousProfile);
       toast({ type: 'error', message: `头像上传失败：${msg}` });
     } finally {
       setUploading(false);

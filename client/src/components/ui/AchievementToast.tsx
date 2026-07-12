@@ -7,6 +7,8 @@ import type { Achievement } from '@/types/models';
 import { soundPlayer } from '@/lib/audio/SoundPlayer';
 import { BrandLogo } from '@/components/ui/BrandLogo';
 
+const ACHIEVEMENT_TOAST_DURATION_MS = 4000;
+
 const ICON_MAP: Record<string, LucideIcon> = {
   Timer, Layers, Lightbulb, FileText, Flame, Trophy, Medal,
 };
@@ -39,7 +41,7 @@ export default function AchievementToast() {
       const localId = ++idRef.current;
       setToasts((prev) => [...prev, { ...a, localId, exiting: false }]);
       // Auto-dismiss after 4s
-      setTimeout(() => dismiss(localId), 4000);
+      setTimeout(() => dismiss(localId), ACHIEVEMENT_TOAST_DURATION_MS);
     };
     window.addEventListener('achievement-unlocked', handler);
     return () => window.removeEventListener('achievement-unlocked', handler);

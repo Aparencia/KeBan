@@ -73,12 +73,18 @@ export class KeBanDatabase extends Dexie {
       offlineQueue: 'id, entityType, entityId, createdAt, retryCount',
     }).upgrade(async (tx) => {
       // Schema v2 -> v3 迁移：自增 number ID -> UUID string
-      // eslint-disable-next-line no-console -- 数据库迁移日志，仅在 upgrade 时执行一次
-      console.log('[DB] Migrating to schema v3: number IDs -> UUID strings');
 
       // 由于 Dexie upgrade 函数中无法 import uuid，
       // 我们使用 crypto.randomUUID() 作为 UUID 生成器（浏览器原生支持）
       const genId = () => crypto.randomUUID();
+
+      // 持久化迁移记录到 appSettings，便于后续排障审计
+      await tx.table('appSettings').put({
+        id: genId(),
+        key: 'migration_v3_log',
+        value: JSON.stringify({ from: 2, to: 3, detail: 'number IDs -> UUID strings', timestamp: new Date().toISOString() }),
+        updatedAt: new Date(),
+      });
 
       // 迁移单张表：将 number ID 转为 string UUID
       const migrateTable = async (tableName: string) => {
@@ -88,7 +94,7 @@ export class KeBanDatabase extends Dexie {
 
         // 建立 oldId -> newId 映射
         const idMap = new Map<number, string>();
-        allItems.forEach((item: any) => {
+        allItems.forEach((item: Record<string, unknown>) => {
           if (typeof item.id === 'number') {
             idMap.set(item.id, genId());
           }
@@ -119,7 +125,6 @@ export class KeBanDatabase extends Dexie {
         try {
           await migrateTable(tableName);
         } catch (e) {
-          // eslint-disable-next-line no-console -- 迁移失败需记录警告
           console.warn(`[DB] Failed to migrate table ${tableName}:`, e);
         }
       }
@@ -139,7 +144,6 @@ export class KeBanDatabase extends Dexie {
           }
         }
       } catch (e) {
-        // eslint-disable-next-line no-console -- 迁移失败需记录警告
         console.warn('[DB] Failed to migrate operationLog:', e);
       }
     });

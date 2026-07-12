@@ -1,8 +1,8 @@
 import { supabase } from '../auth/supabaseClient';
-import { getAIConfig } from '../ai/config';
+import { requireGatewayUrl } from '../ai/config';
 import { getActiveUserKey } from '../ai/apiKeyManager';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://121.40.24.242:8080';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
 interface RequestOptions extends RequestInit {
   timeout?: number;
@@ -14,6 +14,10 @@ function createClient(baseUrlOrGetter: string | (() => string)) {
   async function request<T = unknown>(endpoint: string, options: RequestOptions = {}): Promise<T> {
     const { timeout = 30000, headers: customHeaders, ...rest } = options;
     const baseUrl = resolveUrl();
+
+    if (!baseUrl) {
+      throw new Error('[KeBan] API base URL not configured. Please set VITE_API_BASE_URL in .env');
+    }
 
     const {
       data: { session },
@@ -38,19 +42,30 @@ function createClient(baseUrlOrGetter: string | (() => string)) {
         signal: controller.signal,
       });
 
-      // 401 → attempt silent token refresh and retry once
+      // 401 → 尝试强制刷新 token 并重试一次
       if (response.status === 401) {
-        const {
-          data: { session: refreshed },
-        } = await supabase.auth.getSession();
-        if (refreshed?.access_token && refreshed.access_token !== token) {
+        const { data: { session: refreshed }, error: refreshError } = await supabase.auth.refreshSession();
+
+        // 刷新失败（包括 refresh token 过期）→ 派发 session-expired 事件引导重登
+        if (refreshError || !refreshed?.access_token) {
+          window.dispatchEvent(new CustomEvent('kb:session-expired'));
+          throw new Error('HTTP 401: 登录已过期');
+        }
+
+        // 拿到新 token，重试原请求
+        if (refreshed.access_token !== token) {
           headers.set('Authorization', `Bearer ${refreshed.access_token}`);
           const retryResponse = await fetch(`${baseUrl}${endpoint}`, {
             ...rest,
             headers,
             signal: controller.signal,
           });
-          if (!retryResponse.ok) throw new Error(`HTTP ${retryResponse.status}`);
+
+          // 重试仍失败 → 同样派发 session-expired
+          if (!retryResponse.ok) {
+            window.dispatchEvent(new CustomEvent('kb:session-expired'));
+            throw new Error(`HTTP ${retryResponse.status}`);
+          }
           return retryResponse.json() as Promise<T>;
         }
       }
@@ -76,4 +91,10 @@ function createClient(baseUrlOrGetter: string | (() => string)) {
 export const apiClient = createClient(API_BASE_URL);
 
 /** ai-gateway 客户端（URL 从 localStorage 配置动态读取） */
-export const aiClient = createClient(() => getAIConfig().gatewayUrl);
+export const aiClient = createClient(() => {
+  try {
+    return requireGatewayUrl();
+  } catch {
+    return ''; // request() will throw a clear error
+  }
+});

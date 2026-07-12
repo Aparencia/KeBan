@@ -1,7 +1,7 @@
 {
   "name": "client",
   "private": true,
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "课伴 - 跨端学习平台",
   "author": "KeBan Team",
   "main": "dist-electron/main.js",
@@ -16,6 +16,10 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@radix-ui/react-context-menu": "^2.3.3",
+    "@radix-ui/react-dialog": "^1.1.19",
+    "@radix-ui/react-slot": "^1.3.0",
+    "@radix-ui/react-toast": "^1.2.19",
     "@supabase/supabase-js": "^2.110.1",
     "@tanstack/react-query": "^5.101.2",
     "@tiptap/extension-color": "^3.27.3",
@@ -34,8 +38,10 @@
     "@tiptap/pm": "^3.27.3",
     "@tiptap/react": "^3.27.3",
     "@tiptap/starter-kit": "^3.27.3",
+    "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "dexie": "^4.4.4",
+    "electron-updater": "^6.3.9",
     "framer-motion": "^12.42.2",
     "lucide-react": "^1.23.0",
     "pixelmatch": "^7.2.0",
@@ -45,9 +51,9 @@
     "react-router-dom": "^7.18.1",
     "recharts": "^3.9.2",
     "tailwind-merge": "^3.6.0",
+    "tailwindcss-animate": "^1.0.7",
     "uuid": "^14.0.1",
-    "zustand": "^5.0.14",
-    "electron-updater": "^6.3.9"
+    "zustand": "^5.0.14"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",

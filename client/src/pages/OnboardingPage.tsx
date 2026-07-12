@@ -207,7 +207,7 @@ function StepMode({
             >
               {/* 头部 */}
               <div className="flex items-center justify-between w-full">
-                <div className={cn('p-2 rounded-kb-lg', mode.bg)}>
+                <div className={cn('p-kb-sm rounded-kb-lg', mode.bg)}>
                   <Icon className={cn('w-icon-md h-icon-md', mode.accent)} strokeWidth={1.5} />
                 </div>
                 <span
@@ -391,7 +391,7 @@ function StepFeature({
       {/* 图标 */}
       <div
         className={cn(
-          'p-4 rounded-kb-xl ring-2 transition-all duration-kb-normal',
+          'p-kb-md rounded-kb-xl ring-2 transition-all duration-kb-normal',
           step.bg,
           step.ringColor,
         )}
@@ -464,7 +464,7 @@ function StepReady({ onStart, onPrev }: { onStart: () => void; onPrev: () => voi
   return (
     <div className="flex flex-col items-center justify-center gap-kb-xl text-center px-kb-lg">
       {/* 大图标 */}
-      <div className="p-4 rounded-kb-xl bg-brand-600/10">
+      <div className="p-kb-md rounded-kb-xl bg-brand-600/10">
         <Rocket className="w-icon-xl h-icon-xl text-brand-600" strokeWidth={1.5} />
       </div>
 

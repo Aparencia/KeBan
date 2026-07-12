@@ -89,7 +89,7 @@ export default function AboutSettings() {
     window.electronAPI?.setAutoUpdate?.(enabled);
   }, []);
 
-  const displayVersion = appVersion || 'v0.6.0-alpha.1';
+  const displayVersion = appVersion || 'v0.8.0';
 
   /** 渲染更新状态区域 */
   const renderUpdateSection = () => {

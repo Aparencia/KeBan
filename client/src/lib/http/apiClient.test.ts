@@ -1,11 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Mock supabase before importing apiClient (vi.mock is hoisted)
-const { mockGetSession } = vi.hoisted(() => ({ mockGetSession: vi.fn() }));
+const { mockGetSession, mockRefreshSession } = vi.hoisted(() => ({
+  mockGetSession: vi.fn(),
+  mockRefreshSession: vi.fn(),
+}));
 vi.mock('../auth/supabaseClient', () => ({
   supabase: {
     auth: {
       getSession: mockGetSession,
+      refreshSession: mockRefreshSession,
     },
   },
 }));
@@ -21,10 +25,17 @@ beforeEach(() => {
   mockGetSession.mockResolvedValue({
     data: { session: { access_token: 'test-token-123' } },
   });
+  mockRefreshSession.mockResolvedValue({
+    data: { session: { access_token: 'new-token' } },
+    error: null,
+  });
+  // Set up AI gateway URL in localStorage for aiClient tests
+  localStorage.setItem('kb_ai_config', JSON.stringify({ gatewayUrl: 'http://localhost:8000' }));
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
+  localStorage.clear();
 });
 
 function jsonResponse(body: unknown, status = 200) {
@@ -66,15 +77,17 @@ describe('apiClient', () => {
   it('should retry on 401 with refreshed token', async () => {
     // First call returns 401
     mockFetch.mockResolvedValueOnce(jsonResponse({ error: 'unauthorized' }, 401));
-    // Second call (getSession refresh) returns new token
-    mockGetSession
-      .mockResolvedValueOnce({ data: { session: { access_token: 'old-token' } } })
-      .mockResolvedValueOnce({ data: { session: { access_token: 'new-token' } } });
+    // refreshSession returns new token
+    mockRefreshSession.mockResolvedValueOnce({
+      data: { session: { access_token: 'new-token' } },
+      error: null,
+    });
     // Retry succeeds
     mockFetch.mockResolvedValueOnce(jsonResponse({ data: 'refreshed' }));
 
     const result = await apiClient.get('/retry');
     expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(mockRefreshSession).toHaveBeenCalledTimes(1);
     expect(result).toEqual({ data: 'refreshed' });
   });
 

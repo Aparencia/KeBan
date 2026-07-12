@@ -58,7 +58,7 @@ export default function SyncSettings() {
               key={modeKey}
               onClick={() => handleModeClick(modeKey)}
               className={cn(
-                'flex flex-col items-start gap-2 p-4 rounded-kb-lg',
+                'flex flex-col items-start gap-2 p-kb-md rounded-kb-lg',
                 'border-2 transition-all duration-kb-normal',
                 'hover:-translate-y-0.5',
                 mode === modeKey

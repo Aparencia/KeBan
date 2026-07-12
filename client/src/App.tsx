@@ -7,14 +7,14 @@ import UpdateNotification from '@/components/ui/UpdateNotification';
 import ConsentModal, { CURRENT_CONSENT_VERSION } from '@/components/ui/ConsentModal';
 import { AuthProvider } from '@/lib/auth/AuthContext';
 import { SyncProvider } from '@/lib/sync/SyncContext';
+import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { router } from '@/routes';
 import { useTheme } from '@/hooks/useTheme';
 import { db } from '@/lib/storage/database';
 import { soundPlayer } from '@/lib/audio/SoundPlayer';
-import { initSoundPreferences } from '@/pages/settings/SoundSettings';
+import '@/stores/useSettingsStore'; // 导入以触发音效设置初始化
 
-// 启动时读取音效偏好并预加载所有音效（不阻塞渲染）
-initSoundPreferences();
+// 启动时预加载所有音效（不阻塞渲染）
 soundPlayer.preloadAll();
 
 const queryClient = new QueryClient({
@@ -57,18 +57,20 @@ function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <SyncProvider>
-          <ToastProvider>
+      <ToastProvider>
+        <AuthProvider>
+          <SyncProvider>
             {consentGiven === false && (
               <ConsentModal onAccept={handleAcceptConsent} />
             )}
-            <RouterProvider router={router} />
-            <AchievementToast />
-            <UpdateNotification />
-          </ToastProvider>
-        </SyncProvider>
-      </AuthProvider>
+            <ErrorBoundary>
+              <RouterProvider router={router} />
+              <AchievementToast />
+              <UpdateNotification />
+            </ErrorBoundary>
+          </SyncProvider>
+        </AuthProvider>
+      </ToastProvider>
     </QueryClientProvider>
   );
 }

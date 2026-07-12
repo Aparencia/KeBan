@@ -1,7 +1,7 @@
-import { db } from '../storage/database';
-import { generateId } from '../utils/uuid';
+import { db } from '@/lib/storage/database';
+import { generateId } from '@/lib/utils/uuid';
 import type { OfflineQueueItem } from '@/types/models';
-import { getDeviceId } from '../storage/operationLog';
+import { getDeviceId } from '@/lib/storage/operationLog';
 
 /**
  * 计算指数退避延迟（毫秒）

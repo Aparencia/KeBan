@@ -71,7 +71,12 @@ export default function AIProviderSettings() {
     setTestMessage('');
 
     try {
-      const gatewayUrl = aiConfig.gatewayUrl || 'http://121.40.24.242:8000';
+      const gatewayUrl = aiConfig.gatewayUrl || '';
+      if (!gatewayUrl) {
+        setTestStatus('error');
+        setTestMessage('请先配置 AI 网关地址');
+        return;
+      }
       const response = await fetch(`${gatewayUrl}/docs`, {
         method: 'GET',
         signal: AbortSignal.timeout(8000),

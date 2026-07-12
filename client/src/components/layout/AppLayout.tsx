@@ -53,7 +53,7 @@ export default function AppLayout() {
       <div className="flex flex-col h-screen bg-bg-primary">
         <CustomTitlebar />
         <main className="flex-1 overflow-hidden">
-          <AnimatePresence mode="wait">
+          <AnimatePresence mode="wait" initial={false}>
             <PageTransition key={pathname}>
               <Outlet />
             </PageTransition>
@@ -82,7 +82,7 @@ export default function AppLayout() {
 
           {/* Page content */}
           <main className="flex-1 overflow-y-auto overflow-x-hidden pb-16 md:pb-0 relative">
-            <AnimatePresence mode="wait">
+            <AnimatePresence mode="wait" initial={false}>
               <PageTransition key={pathname}>
                 <Outlet />
               </PageTransition>

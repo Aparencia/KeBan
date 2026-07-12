@@ -11,9 +11,6 @@ import type { UpdateInfo, ProgressInfo } from 'electron-updater';
 import { BrowserWindow, app } from 'electron';
 import { logger } from './logger.js';
 
-let updateCheckInterval: ReturnType<typeof setTimeout> | null = null;
-const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000; // 4 小时
-
 /** 自动检查开关（由渲染进程通过 IPC 设置，默认开启） */
 let autoCheckEnabled = true;
 
@@ -31,24 +28,6 @@ let isDownloading = false;
 export function setAutoCheckEnabled(enabled: boolean): void {
   autoCheckEnabled = enabled;
   logger.info(`[AutoUpdater] Auto check ${enabled ? 'enabled' : 'disabled'}`);
-
-  if (!enabled && updateCheckInterval) {
-    clearInterval(updateCheckInterval);
-    updateCheckInterval = null;
-  } else if (enabled && !updateCheckInterval && app.isPackaged) {
-    startPeriodicCheck();
-  }
-}
-
-/** 启动定期检查（4h 轮询） */
-function startPeriodicCheck(): void {
-  if (updateCheckInterval) return;
-  updateCheckInterval = setInterval(() => {
-    if (!autoCheckEnabled) return;
-    autoUpdater.checkForUpdates().catch((err) => {
-      logger.error('[AutoUpdater] Periodic check failed', err);
-    });
-  }, CHECK_INTERVAL_MS);
 }
 
 export function initAutoUpdater(mainWindow: BrowserWindow | null): void {
@@ -140,9 +119,6 @@ export function initAutoUpdater(mainWindow: BrowserWindow | null): void {
       logger.error('[AutoUpdater] Initial check failed', err);
     });
   }, 10_000);
-
-  // 启动定期检查（受 autoCheckEnabled 控制）
-  startPeriodicCheck();
 }
 
 export function checkForUpdate(): void {
@@ -164,10 +140,7 @@ export function installUpdate(): void {
 }
 
 export function destroyAutoUpdater(): void {
-  if (updateCheckInterval) {
-    clearInterval(updateCheckInterval);
-    updateCheckInterval = null;
-  }
+  // 清理由（当前无定时任务，保留以便未来扩展）
 }
 
 function sendToRenderer(win: BrowserWindow | null, channel: string, data: unknown): void {

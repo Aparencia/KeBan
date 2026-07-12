@@ -38,6 +38,9 @@ import { TodoStats } from '../components/TodoStats';
 import { useCaptureStore } from '@/stores/useCaptureStore';
 import { soundPlayer } from '@/lib/audio/SoundPlayer';
 
+const SAVE_STATUS_HIDE_DELAY_MS = 2000;
+const AUTOSAVE_DEBOUNCE_MS = 500;
+
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'failed';
 
 interface ToolbarButtonProps {
@@ -54,7 +57,7 @@ function ToolbarButton({ icon: Icon, label, isActive, onClick }: ToolbarButtonPr
       title={label}
       onClick={onClick}
       className={cn(
-        'p-2 rounded-kb-sm transition-all duration-kb-fast',
+        'p-kb-sm rounded-kb-sm transition-all duration-kb-fast',
         isActive
           ? 'bg-brand-50 text-brand-600'
           : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary',
@@ -162,12 +165,12 @@ export default function NoteEditPage() {
             soundPlayer.play('note_autosave');
             setSaveStatus('saved');
             if (saveStatusTimerRef.current) clearTimeout(saveStatusTimerRef.current);
-            saveStatusTimerRef.current = setTimeout(() => setSaveStatus('idle'), 2000);
+            saveStatusTimerRef.current = setTimeout(() => setSaveStatus('idle'), SAVE_STATUS_HIDE_DELAY_MS);
           } catch {
             setSaveStatus('failed');
           }
         }
-      }, 500);
+      }, AUTOSAVE_DEBOUNCE_MS);
     },
     [noteId, updateNote],
   );
@@ -607,7 +610,7 @@ export default function NoteEditPage() {
         <ToolbarDivider />
         <label
           title="文字颜色"
-          className="relative p-2 rounded-kb-sm cursor-pointer text-text-secondary hover:bg-bg-tertiary hover:text-text-primary active:bg-bg-secondary active:scale-95 transition-all duration-kb-fast"
+          className="relative p-kb-sm rounded-kb-sm cursor-pointer text-text-secondary hover:bg-bg-tertiary hover:text-text-primary active:bg-bg-secondary active:scale-95 transition-all duration-kb-fast"
         >
           <Palette className="w-icon-sm h-icon-sm" strokeWidth={1.5} />
           <input
@@ -731,7 +734,7 @@ export default function NoteEditPage() {
             )}
 
             {aiError && !aiLoading && (
-              <div className="mt-kb-md p-3 rounded-kb-md bg-rose-500/10 border border-rose-500/20 text-b2 text-rose-500">
+              <div className="mt-kb-md p-3 rounded-kb-md bg-semantic-error/10 border border-semantic-error/20 text-b2 text-semantic-error">
                 {aiError}
               </div>
             )}
@@ -766,7 +769,7 @@ export default function NoteEditPage() {
                             title={convertedKeys.has(i) ? '已生成闪卡' : '生成闪卡'}
                             className={`flex-shrink-0 p-1 rounded-kb-sm transition-all duration-kb-fast ${
                               convertedKeys.has(i)
-                                ? 'text-emerald-500 opacity-100'
+                                ? 'text-semantic-success opacity-100'
                                 : 'text-text-tertiary hover:text-brand-600 hover:bg-brand-50 opacity-0 group-hover:opacity-100'
                             } ${flashcardLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
                           >

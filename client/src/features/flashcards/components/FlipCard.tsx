@@ -1,4 +1,8 @@
+import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import { useReducedMotion } from '@/hooks/useReducedMotion';
+
+export type FlipCardGlow = 'correct' | 'wrong' | null;
 
 interface FlipCardProps {
   front: string;
@@ -9,9 +13,22 @@ interface FlipCardProps {
   onFlipEnd?: () => void;
   /** 卡片正在执行退出动画 */
   exiting?: boolean;
+  /** 评分结果光晕：correct=绿色 / wrong=红色 */
+  glow?: FlipCardGlow;
 }
 
-export function FlipCard({ front, back, isFlipped, onFlip, onFlipEnd, exiting }: FlipCardProps) {
+export function FlipCard({ front, back, isFlipped, onFlip, onFlipEnd, exiting, glow }: FlipCardProps) {
+  const prefersReduced = useReducedMotion();
+
+  const glowRing =
+    glow === 'correct'
+      ? 'ring-2 ring-emerald-400/40 shadow-[0_0_24px_rgba(16,185,129,0.2)]'
+      : glow === 'wrong'
+        ? 'ring-2 ring-rose-400/40 shadow-[0_0_24px_rgba(244,63,94,0.2)]'
+        : isFlipped
+          ? 'ring-2 ring-brand-400/30 shadow-[0_0_20px_rgba(59,130,246,0.15)]'
+          : '';
+
   return (
     <div
       className={cn(
@@ -25,20 +42,22 @@ export function FlipCard({ front, back, isFlipped, onFlip, onFlipEnd, exiting }:
       aria-label={isFlipped ? '显示正面' : '显示背面'}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onFlip(); } }}
     >
-      <div
-        className="relative w-full"
+      <motion.div
+        className={cn('relative w-full', glowRing)}
         style={{
           transformStyle: 'preserve-3d',
-          transform: isFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)',
-          transition: `transform 450ms var(--kb-ease-spring)`,
           willChange: 'transform',
           minHeight: '200px',
+          borderRadius: 'inherit',
         }}
-        onTransitionEnd={(e) => {
-          // 仅在翻转 transition 结束时触发（排除退出动画）
-          if (e.propertyName === 'transform' && !exiting) {
-            onFlipEnd?.();
-          }
+        animate={{ rotateY: isFlipped ? 180 : 0 }}
+        transition={
+          prefersReduced
+            ? { duration: 0.01 }
+            : { type: 'spring', stiffness: 200, damping: 20 }
+        }
+        onAnimationComplete={() => {
+          if (!exiting) onFlipEnd?.();
         }}
       >
         {/* 正面 */}
@@ -69,7 +88,7 @@ export function FlipCard({ front, back, isFlipped, onFlip, onFlipEnd, exiting }:
         >
           <p className="text-[1.05rem] text-text-secondary leading-relaxed text-center">{back}</p>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }

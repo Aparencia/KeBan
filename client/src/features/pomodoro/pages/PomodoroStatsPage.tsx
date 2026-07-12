@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { motion } from 'framer-motion';
 import { Clock, Target, Flame, TrendingUp } from 'lucide-react';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Card, Skeleton, EmptyState, RichTooltip } from '@/components/ui';
@@ -216,12 +217,23 @@ export default function PomodoroStatsPage() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto px-kb-md py-kb-lg">
+    <motion.div
+      className="max-w-2xl mx-auto px-kb-md py-kb-lg"
+      initial="hidden"
+      animate="visible"
+      variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.06, delayChildren: 0.08 } } }}
+    >
       {/* Page title */}
-      <h1 className="text-h1 font-semibold text-text-primary mb-kb-lg">专注统计</h1>
+      <motion.h1
+        className="text-h1 font-semibold text-text-primary mb-kb-lg"
+        variants={{ hidden: { opacity: 0, y: -12, filter: 'blur(3px)' }, visible: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.4 } } }}
+      >专注统计</motion.h1>
 
       {/* Time range selector - segmented control */}
-      <div className="flex items-center gap-kb-xs p-1 bg-bg-secondary rounded-kb-lg border border-border/40 mb-kb-lg w-fit">
+      <motion.div
+        className="flex items-center gap-kb-xs p-1 bg-bg-secondary/80 backdrop-blur-sm rounded-kb-lg border border-border/40 mb-kb-lg w-fit"
+        variants={{ hidden: { opacity: 0, y: 10 }, visible: { opacity: 1, y: 0, transition: { duration: 0.3 } } }}
+      >
         {(['today', 'week', 'month'] as TimeRange[]).map((r) => (
           <button
             key={r}
@@ -238,12 +250,18 @@ export default function PomodoroStatsPage() {
             {RANGE_LABELS[r]}
           </button>
         ))}
-      </div>
+      </motion.div>
 
       {/* Overview cards */}
-      <div className="grid grid-cols-3 gap-kb-md mb-kb-lg">
-        <Card variant="default" padding="md">
-          <div className="flex flex-col gap-kb-xs">
+      <motion.div
+        className="grid grid-cols-3 gap-kb-md mb-kb-lg"
+        variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.08, delayChildren: 0.1 } } }}
+      >
+        <motion.div variants={{ hidden: { opacity: 0, y: 16, filter: 'blur(4px)' }, visible: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.35 } } }}>
+        <Card variant="default" padding="md" className="relative overflow-hidden">
+          <div className="absolute inset-0 opacity-0 hover:opacity-100 transition-opacity duration-500 pointer-events-none"
+            style={{ background: 'linear-gradient(135deg, rgba(91,138,114,0.04) 0%, transparent 60%)' }} />
+          <div className="flex flex-col gap-kb-xs relative z-10">
             <div className="flex items-center gap-1.5 text-text-tertiary">
               <Clock className="w-icon-xs h-icon-xs" strokeWidth={1.5} />
               <span className="text-c1">专注时长</span>
@@ -255,9 +273,13 @@ export default function PomodoroStatsPage() {
             </RichTooltip>
           </div>
         </Card>
+        </motion.div>
 
-        <Card variant="default" padding="md">
-          <div className="flex flex-col gap-kb-xs">
+        <motion.div variants={{ hidden: { opacity: 0, y: 16, filter: 'blur(4px)' }, visible: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.35 } } }}>
+        <Card variant="default" padding="md" className="relative overflow-hidden">
+          <div className="absolute inset-0 opacity-0 hover:opacity-100 transition-opacity duration-500 pointer-events-none"
+            style={{ background: 'linear-gradient(135deg, rgba(91,138,114,0.04) 0%, transparent 60%)' }} />
+          <div className="flex flex-col gap-kb-xs relative z-10">
             <div className="flex items-center gap-1.5 text-text-tertiary">
               <Target className="w-icon-xs h-icon-xs" strokeWidth={1.5} />
               <span className="text-c1">完成番茄</span>
@@ -269,9 +291,13 @@ export default function PomodoroStatsPage() {
             </RichTooltip>
           </div>
         </Card>
+        </motion.div>
 
-        <Card variant="default" padding="md">
-          <div className="flex flex-col gap-kb-xs">
+        <motion.div variants={{ hidden: { opacity: 0, y: 16, filter: 'blur(4px)' }, visible: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.35 } } }}>
+        <Card variant="default" padding="md" className="relative overflow-hidden">
+          <div className="absolute inset-0 opacity-0 hover:opacity-100 transition-opacity duration-500 pointer-events-none"
+            style={{ background: 'linear-gradient(135deg, rgba(245,158,11,0.04) 0%, transparent 60%)' }} />
+          <div className="flex flex-col gap-kb-xs relative z-10">
             <div className="flex items-center gap-1.5 text-text-tertiary">
               <Flame className="w-icon-xs h-icon-xs" strokeWidth={1.5} />
               <span className="text-c1">连续天数</span>
@@ -281,9 +307,11 @@ export default function PomodoroStatsPage() {
             </span>
           </div>
         </Card>
-      </div>
+        </motion.div>
+      </motion.div>
 
       {/* Bar chart - weekly focus */}
+      <motion.div variants={{ hidden: { opacity: 0, y: 20, filter: 'blur(4px)' }, visible: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.4 } } }}>
       <Card variant="default" padding="lg" className="mb-kb-lg">
         <div className="flex items-center gap-2 mb-kb-md">
           <TrendingUp className="w-icon-sm h-icon-sm text-brand-600" strokeWidth={1.5} />
@@ -297,14 +325,17 @@ export default function PomodoroStatsPage() {
             return (
               <div key={`${d.day}-${i}`} className="flex flex-col items-center flex-1 gap-1">
                 <span className="text-c2 text-text-tertiary">{d.hours}h</span>
-                <div
+                <motion.div
                   className={cn(
-                    'w-full rounded-t-kb-sm transition-all duration-kb-normal',
+                    'w-full rounded-t-kb-sm transition-colors duration-kb-normal',
                     isToday
                       ? 'bg-brand-600'
                       : 'bg-brand-200/60',
                   )}
-                  style={{ height: `${Math.max(heightPct, 4)}%` }}
+                  initial={{ height: 0 }}
+                  animate={{ height: `${Math.max(heightPct, 4)}%` }}
+                  transition={{ duration: 0.6, ease: [0.25, 0.1, 0.25, 1] as const, delay: 0.2 + i * 0.06 }}
+                  whileHover={{ scaleX: 1.15, filter: 'brightness(1.15)' }}
                 />
                 <span className="text-c2 text-text-tertiary">{d.day}</span>
               </div>
@@ -312,8 +343,10 @@ export default function PomodoroStatsPage() {
           })}
         </div>
       </Card>
+      </motion.div>
 
       {/* Heatmap - focus intensity */}
+      <motion.div variants={{ hidden: { opacity: 0, y: 20, filter: 'blur(4px)' }, visible: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.4 } } }}>
       <Card variant="default" padding="lg" className="mb-kb-lg">
         <h2 className="text-h3 font-medium text-text-primary mb-kb-md">专注热力图</h2>
 
@@ -322,12 +355,14 @@ export default function PomodoroStatsPage() {
             {heatmap.map((week, wi) => (
               <div key={wi} className="flex flex-col gap-1">
                 {week.map((count, di) => (
-                  <div
+                  <motion.div
                     key={di}
                     className={cn(
                       'w-3 h-3 rounded-[3px] transition-colors duration-kb-fast',
                       getIntensityClass(count),
                     )}
+                    whileHover={{ scale: 1.8, borderRadius: '2px' }}
+                    transition={{ duration: 0.15 }}
                   />
                 ))}
               </div>
@@ -345,8 +380,10 @@ export default function PomodoroStatsPage() {
           <span>多</span>
         </div>
       </Card>
+      </motion.div>
 
       {/* 每日番茄数柱状图 */}
+      <motion.div variants={{ hidden: { opacity: 0, y: 20, filter: 'blur(4px)' }, visible: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.4 } } }}>
       <Card variant="default" padding="lg" className="mb-kb-lg">
         <div className="flex items-center justify-between mb-kb-md">
           <div className="flex items-center gap-2">
@@ -378,15 +415,17 @@ export default function PomodoroStatsPage() {
             <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: 'var(--kb-text-tertiary, #9ca3af)' }} tickLine={false} width={28} />
             <Tooltip
               contentStyle={{ background: 'var(--kb-bg-elevated, #fff)', border: '1px solid var(--kb-border, #e5e7eb)', borderRadius: 8, fontSize: 12 }}
-              formatter={(value: any) => [`${value} 个`, '番茄数']}
-              labelFormatter={(label: any) => `日期: ${label}`}
+              formatter={(value) => [`${value} 个`, '番茄数']}
+              labelFormatter={(label) => `日期: ${label}`}
             />
             <Bar dataKey="count" fill="#7C3AED" radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </Card>
+      </motion.div>
 
       {/* 每日专注时长折线图 */}
+      <motion.div variants={{ hidden: { opacity: 0, y: 20, filter: 'blur(4px)' }, visible: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.4 } } }}>
       <Card variant="default" padding="lg">
         <div className="flex items-center gap-2 mb-kb-md">
           <Clock className="w-icon-sm h-icon-sm text-brand-600" strokeWidth={1.5} />
@@ -400,8 +439,8 @@ export default function PomodoroStatsPage() {
             <YAxis tick={{ fontSize: 11, fill: 'var(--kb-text-tertiary, #9ca3af)' }} tickLine={false} width={36} unit="m" />
             <Tooltip
               contentStyle={{ background: 'var(--kb-bg-elevated, #fff)', border: '1px solid var(--kb-border, #e5e7eb)', borderRadius: 8, fontSize: 12 }}
-              formatter={(value: any) => [`${value} 分钟`, '专注时长']}
-              labelFormatter={(label: any) => `日期: ${label}`}
+              formatter={(value) => [`${value} 分钟`, '专注时长']}
+              labelFormatter={(label) => `日期: ${label}`}
             />
             <Line
               type="monotone"
@@ -414,6 +453,7 @@ export default function PomodoroStatsPage() {
           </LineChart>
         </ResponsiveContainer>
       </Card>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }

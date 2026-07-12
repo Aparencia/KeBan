@@ -81,9 +81,13 @@ export default function DataSettings() {
 
     try {
       setIsChanging(true);
+      if (!window.electronAPI) {
+        toast({ type: 'error', message: '请在桌面端使用此功能' });
+        return;
+      }
       const result = await window.electronAPI.invoke('dialog:selectDirectory', {
         title: '选择数据存储目录',
-      });
+      }) as { canceled: boolean; path?: string };
 
       if (!result.canceled && result.path) {
         const confirmed = window.confirm(

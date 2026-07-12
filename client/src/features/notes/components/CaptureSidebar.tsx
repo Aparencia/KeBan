@@ -111,7 +111,7 @@ function WindowSelector({ windows, selected, onSelect, onRefresh, loading }: Win
                 key={win.id}
                 onClick={() => { onSelect(win); setExpanded(false); }}
                 className={cn(
-                  'flex items-start gap-2 p-2 rounded-kb-sm text-left transition-colors',
+                  'flex items-start gap-2 p-kb-sm rounded-kb-sm text-left transition-colors',
                   selected?.id === win.id
                     ? 'bg-brand-50 text-brand-700 ring-1 ring-brand-200'
                     : 'hover:bg-bg-tertiary text-text-secondary hover:text-text-primary',

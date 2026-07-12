@@ -1,4 +1,4 @@
-import { useState, useEffect, type FormEvent } from 'react';
+import { useState, useEffect, useRef, type FormEvent } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { Mail, Lock, AlertCircle, CheckCircle2, ArrowLeft } from 'lucide-react';
 import { Button, Input, Card } from '@/components/ui';
@@ -22,10 +22,17 @@ export default function ResetPassword() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
+  const navigateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (isResetMode) setViewMode('reset');
   }, [isResetMode]);
+
+  useEffect(() => {
+    return () => {
+      if (navigateTimerRef.current) clearTimeout(navigateTimerRef.current);
+    };
+  }, []);
 
   async function handleRequestReset(e: FormEvent) {
     e.preventDefault();
@@ -70,7 +77,7 @@ export default function ResetPassword() {
       const { error: updateError } = await supabase.auth.updateUser({ password });
       if (updateError) throw updateError;
       setSuccess(true);
-      setTimeout(() => navigate('/login', { replace: true }), 2000);
+      navigateTimerRef.current = setTimeout(() => navigate('/login', { replace: true }), 2000);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '重置失败，请稍后重试';
       setError(msg);

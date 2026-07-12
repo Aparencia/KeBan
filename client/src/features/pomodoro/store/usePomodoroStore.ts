@@ -244,18 +244,21 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
             }).catch(() => {});
           }).catch(() => {});
         }
-        // 播放提示音
-        if (settings.soundEnabled) {
-          playCompletionSound();
-        }
-        // 播放阶段完成音效
-        if (phase === 'work') {
-          soundPlayer.play('pomodoro_work_complete');
-        } else {
-          soundPlayer.play('pomodoro_break_end');
-          // 长休结束 = 一整轮完成
-          if (phase === 'long_break') {
-            soundPlayer.play('pomodoro_complete');
+        // BUG-005 fix: 上课模式（静默模式）跳过所有提示音播放
+        if (mode !== 'class') {
+          // 播放提示音
+          if (settings.soundEnabled) {
+            playCompletionSound();
+          }
+          // 播放阶段完成音效
+          if (phase === 'work') {
+            soundPlayer.play('pomodoro_work_complete');
+          } else {
+            soundPlayer.play('pomodoro_break_end');
+            // 长休结束 = 一整轮完成
+            if (phase === 'long_break') {
+              soundPlayer.play('pomodoro_complete');
+            }
           }
         }
         // 发送浏览器通知
@@ -279,13 +282,16 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
         });
       } else {
         const nextRemaining = remainingSeconds - 1;
-        // 5 分钟预警（工作阶段）
-        if (phase === 'work' && nextRemaining === 300) {
-          soundPlayer.play('pomodoro_5min_warning');
-        }
-        // 最后 10 秒滴答
-        if (phase === 'work' && nextRemaining <= 10 && nextRemaining > 0) {
-          soundPlayer.play('pomodoro_tick_final');
+        // BUG-005 fix: 上课模式跳过预警和滴答音
+        if (mode !== 'class') {
+          // 5 分钟预警（工作阶段）
+          if (phase === 'work' && nextRemaining === 300) {
+            soundPlayer.play('pomodoro_5min_warning');
+          }
+          // 最后 10 秒滴答
+          if (phase === 'work' && nextRemaining <= 10 && nextRemaining > 0) {
+            soundPlayer.play('pomodoro_tick_final');
+          }
         }
         set({ remainingSeconds: nextRemaining });
       }

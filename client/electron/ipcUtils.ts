@@ -4,13 +4,95 @@
  * 在注册新 handler 前先 removeHandler，确保幂等注册，
  * 防止 macOS activate 事件导致 createWindow() 被多次调用时
  * 触发 "Attempted to register a second handler" 崩溃。
+ *
+ * SEC-005: 新增 IPC sender 验证机制，仅允许主窗口的 webContents
+ * 调用已注册的 IPC handler，防止恶意渲染进程注入调用。
+ *
+ * @ai-context Electron 主进程 IPC 安全加固
  */
-import { ipcMain } from 'electron';
 
-export function safeHandle(
+import { ipcMain } from 'electron';
+import { logger } from './logger.js';
+
+// ================================================================
+// 主窗口 webContents ID 管理（SEC-005）
+// ================================================================
+
+/** 主窗口 webContents.id，用于 IPC sender 验证；null 表示未设置（跳过验证） */
+let mainWindowWebContentsId: number | null = null;
+
+/**
+ * 设置主窗口 webContents.id，用于 IPC sender 验证。
+ * 应在 main.ts 中创建主窗口后立即调用。
+ *
+ * @param id - 主窗口 webContents.id
+ * @ai-context main.ts 在 app.whenReady() 中调用
+ */
+export function setMainWindowId(id: number): void {
+  mainWindowWebContentsId = id;
+  logger.info(`[IPC] Main window ID set: ${id}`);
+}
+
+/**
+ * 获取当前主窗口 webContents.id。
+ *
+ * @returns 主窗口 webContents.id，未设置时返回 null
+ * @ai-context 用于调试或外部模块查询
+ */
+export function getMainWindowId(): number | null {
+  return mainWindowWebContentsId;
+}
+
+// ================================================================
+// 类型安全 handler 签名
+// ================================================================
+
+/**
+ * 支持类型安全的 handler 签名：
+ * 允许 handler 声明具体参数类型，内部通过断言适配 ipcMain.handle 的 unknown[] 签名。
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type TypedHandler<T extends any[]> = (
+  event: Electron.IpcMainInvokeEvent,
+  ...args: T
+) => Promise<unknown>;
+
+// ================================================================
+// 安全注册
+// ================================================================
+
+/**
+ * 幂等注册 IPC handler，并可选启用 sender 验证。
+ *
+ * - 注册前先 removeHandler，防止重复注册崩溃。
+ * - 若已调用 setMainWindowId，则执行 sender 验证：
+ *   不匹配的 sender 将被拒绝并记录告警日志。
+ * - 若 mainWindowId 未设置（null），则跳过验证（开发容错）。
+ *
+ * @param channel - IPC 频道名称
+ * @param handler - 处理函数
+ * @ai-context main.ts 中所有 safeHandle 调用均经过此函数
+ */
+export function safeHandle<T extends any[]>(
   channel: string,
-  handler: (event: Electron.IpcMainInvokeEvent, ...args: any[]) => Promise<any>,
+  handler: TypedHandler<T>,
 ): void {
   ipcMain.removeHandler(channel);
-  ipcMain.handle(channel, handler);
+
+  // 包装 handler 以执行 sender 验证
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const wrappedHandler = async (event: Electron.IpcMainInvokeEvent, ...args: any[]): Promise<unknown> => {
+    // sender 验证：仅允许主窗口 webContents 调用
+    if (mainWindowWebContentsId !== null && event.sender.id !== mainWindowWebContentsId) {
+      logger.warn(
+        `[IPC] Sender verification failed for channel "${channel}": ` +
+        `expected sender.id=${mainWindowWebContentsId}, got ${event.sender.id}`
+      );
+      throw new Error(`IPC sender verification failed for channel: ${channel}`);
+    }
+
+    return handler(event, ...args as T);
+  };
+
+  ipcMain.handle(channel, wrappedHandler as any);
 }

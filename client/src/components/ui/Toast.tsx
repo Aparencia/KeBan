@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useRef } from 'react';
+import * as RadixToast from '@radix-ui/react-toast';
 import { CheckCircle, XCircle, AlertTriangle, Info, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -9,7 +10,7 @@ interface ToastItem {
   id: number;
   type: ToastType;
   message: string;
-  exiting?: boolean;
+  duration: number;
 }
 
 interface ToastContextValue {
@@ -34,6 +35,14 @@ const defaultDuration: Record<ToastType, number> = {
   warning: 5000,
 };
 
+// Radix toast type mapping
+const radixTypeMap: Record<ToastType, RadixToast.ToastProps['type']> = {
+  success: 'foreground',
+  info: 'foreground',
+  error: 'background',
+  warning: 'background',
+};
+
 // Config per type
 const typeConfig: Record<
   ToastType,
@@ -46,35 +55,45 @@ const typeConfig: Record<
 };
 
 // ToastItem component
-const ToastItemCard: React.FC<{ item: ToastItem; onClose: (id: number) => void }> = ({ item, onClose }) => {
+const ToastItemCard: React.FC<{
+  item: ToastItem;
+  onOpenChange: (id: number, open: boolean) => void;
+}> = ({ item, onOpenChange }) => {
   const { icon: Icon, color, bg } = typeConfig[item.type];
 
   return (
-    <div
+    <RadixToast.Root
+      type={radixTypeMap[item.type]}
+      duration={item.duration}
+      onOpenChange={(open) => { if (!open) onOpenChange(item.id, false); }}
       className={cn(
         'flex items-center gap-kb-sm px-kb-md py-kb-sm',
         'bg-bg-elevated/90 backdrop-blur-md rounded-kb-md shadow-kb-lg',
         'border border-border/40',
         'min-w-[260px] max-w-sm',
-        'transition-all duration-kb-normal ease-kb-out',
-        item.exiting ? 'opacity-0 translate-y-2' : 'opacity-100 translate-y-0',
       )}
+      style={{
+        animation: 'toast-slide-in 0.25s ease-out',
+      }}
     >
       {/* Left color bar */}
       <div className={cn('w-1 h-8 rounded-kb-full flex-shrink-0', bg)} />
       {/* Icon */}
       <Icon className={cn('w-icon-md h-icon-md flex-shrink-0', color)} />
       {/* Message */}
-      <span className="text-b2 text-text-primary flex-1">{item.message}</span>
+      <RadixToast.Title className="text-b2 text-text-primary flex-1 font-normal">
+        {item.message}
+      </RadixToast.Title>
       {/* Close button */}
-      <button
-        onClick={() => onClose(item.id)}
-        className="flex-shrink-0 p-0.5 rounded hover:bg-bg-secondary/60 transition-colors"
-        aria-label="关闭"
-      >
-        <X className="w-3.5 h-3.5 text-text-tertiary hover:text-text-secondary" strokeWidth={2} />
-      </button>
-    </div>
+      <RadixToast.Close asChild>
+        <button
+          className="flex-shrink-0 p-0.5 rounded hover:bg-bg-secondary/60 transition-colors"
+          aria-label="关闭"
+        >
+          <X className="w-3.5 h-3.5 text-text-tertiary hover:text-text-secondary" strokeWidth={2} />
+        </button>
+      </RadixToast.Close>
+    </RadixToast.Root>
   );
 };
 
@@ -82,45 +101,30 @@ const ToastItemCard: React.FC<{ item: ToastItem; onClose: (id: number) => void }
 export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const idRef = useRef(0);
-  const timersRef = useRef<Map<number, ReturnType<typeof setTimeout>[]>>(new Map());
-
-  const dismiss = useCallback((id: number) => {
-    // Clear any pending timers for this toast
-    const timers = timersRef.current.get(id);
-    if (timers) {
-      timers.forEach(clearTimeout);
-      timersRef.current.delete(id);
-    }
-    // Start exit animation
-    setToasts((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, exiting: true } : t)),
-    );
-    // Remove after animation
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 300);
-  }, []);
 
   const toast = useCallback(({ type, message, duration }: { type: ToastType; message: string; duration?: number }) => {
     const id = ++idRef.current;
     const d = duration ?? defaultDuration[type];
+    setToasts((prev) => [...prev, { id, type, message, duration: d }]);
+  }, []);
 
-    setToasts((prev) => [...prev, { id, type, message }]);
-
-    // Schedule auto-dismiss
-    const exitTimer = setTimeout(() => dismiss(id), d);
-    timersRef.current.set(id, [exitTimer]);
-  }, [dismiss]);
+  const handleOpenChange = useCallback((id: number, open: boolean) => {
+    if (!open) {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }
+  }, []);
 
   return (
     <ToastContext.Provider value={{ toast }}>
-      {children}
-      {/* Toast container */}
-      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-kb-sm items-center">
+      <RadixToast.Provider swipeDirection="down">
+        {children}
+
         {toasts.map((t) => (
-          <ToastItemCard key={t.id} item={t} onClose={dismiss} />
+          <ToastItemCard key={t.id} item={t} onOpenChange={handleOpenChange} />
         ))}
-      </div>
+
+        <RadixToast.Viewport className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-kb-sm items-center outline-none" />
+      </RadixToast.Provider>
 
       <style>{`
         @keyframes toast-slide-in {

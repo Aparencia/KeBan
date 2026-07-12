@@ -1,4 +1,5 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+﻿import { useEffect, useState, useCallback, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Button, Card, Input, Tag, EmptyState, Modal } from '@/components/ui';
 import { useToast } from '@/components/ui';
 import { ContextMenu } from '@/components/ui/ContextMenu';
@@ -46,6 +47,28 @@ function stripHtml(html: string): string {
   }
 }
 
+/* ── 动画 variants ── */
+const listVariants = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.04 } },
+};
+const noteCardVariants = {
+  hidden: { opacity: 0, y: 12, scale: 0.98, filter: 'blur(3px)' },
+  visible: {
+    opacity: 1, y: 0, scale: 1, filter: 'blur(0px)',
+    transition: { type: 'spring', stiffness: 350, damping: 28 },
+  },
+};
+
+function colorForType(template: string): string {
+  switch (template) {
+    case 'cornell': return 'rgb(91,138,114)';   // brand-500
+    case 'outline': return 'rgb(96,165,250)';   // accent-400
+    case 'mindmap': return 'rgb(251,191,36)';   // note
+    default:        return 'rgb(156,163,175)';  // border
+  }
+}
+
 export default function NotesPage() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [templateOpen, setTemplateOpen] = useState(false);
@@ -61,26 +84,16 @@ export default function NotesPage() {
   } = useNoteStore();
 
   const { toast } = useToast();
-
-  // AI hooks
   const { summarize } = useAISummarize();
   const { generate: aiGenerateCards } = useAIFlashcards();
 
-  // 右键菜单 hook
   const {
-    isOpen: ctxMenuOpen,
-    position: ctxMenuPos,
-    context: ctxMenuNote,
-    handleContextMenu: handleNoteContextMenu,
-    close: closeCtxMenu,
+    isOpen: ctxMenuOpen, position: ctxMenuPos, context: ctxMenuNote,
+    handleContextMenu: handleNoteContextMenu, close: closeCtxMenu,
   } = useContextMenu<Note>();
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
 
-  // 初始化加载
-  useEffect(() => {
-    loadNotes();
-    loadFolders();
-  }, [loadNotes, loadFolders]);
+  useEffect(() => { loadNotes(); loadFolders(); }, [loadNotes, loadFolders]);
 
   const filteredNotes = getFilteredNotes();
   const allTags = getAllTags();
@@ -88,63 +101,27 @@ export default function NotesPage() {
 
   const handleTemplateSelect = async (tpl: NoteTemplate) => {
     const id = await createFromTemplate(tpl, selectedFolderId ?? undefined);
-    selectNote(id);
-    navigate(`/notes/${id}`);
+    selectNote(id); navigate(`/notes/${id}`);
   };
-
   const handleCreateNote = async () => {
-    const id = await createNote({
-      title: '新笔记',
-      template: 'blank',
-      folderId: selectedFolderId ?? undefined,
-    });
-    selectNote(id);
-    navigate(`/notes/${id}`);
+    const id = await createNote({ title: '新笔记', template: 'blank', folderId: selectedFolderId ?? undefined });
+    selectNote(id); navigate(`/notes/${id}`);
   };
-
   const handleCreateFolder = async () => {
-    if (newFolderName.trim()) {
-      await createFolder(newFolderName.trim());
-      setNewFolderName('');
-      setShowNewFolder(false);
-    }
+    if (newFolderName.trim()) { await createFolder(newFolderName.trim()); setNewFolderName(''); setShowNewFolder(false); }
   };
+  const handleSelectNote = (noteId: string) => { selectNote(noteId); navigate(`/notes/${noteId}`); };
 
-  const handleSelectNote = (noteId: string) => {
-    selectNote(noteId);
-    navigate(`/notes/${noteId}`);
-  };
-
-  // === 卡片操作函数 ===
-
-  const handleTogglePin = useCallback((noteId: string) => {
-    togglePin(noteId);
-    toast({ type: 'success', message: '已更新置顶状态' });
-  }, [togglePin, toast]);
-
-  const handleDeleteNote = useCallback((id: string) => {
-    setDeleteTargetId(id);
-  }, []);
-
+  const handleTogglePin = useCallback((noteId: string) => { togglePin(noteId); toast({ type: 'success', message: '已更新置顶状态' }); }, [togglePin, toast]);
+  const handleDeleteNote = useCallback((id: string) => { setDeleteTargetId(id); }, []);
   const handleConfirmDelete = useCallback(async () => {
-    if (deleteTargetId) {
-      await deleteNote(deleteTargetId);
-      toast({ type: 'success', message: '笔记已删除' });
-    }
+    if (deleteTargetId) { await deleteNote(deleteTargetId); toast({ type: 'success', message: '笔记已删除' }); }
     setDeleteTargetId(null);
   }, [deleteTargetId, deleteNote, toast]);
-
   const handleDuplicateNote = useCallback(async (note: Note) => {
-    await createNote({
-      title: note.title + ' (副本)',
-      content: note.content,
-      folderId: note.folderId,
-      tags: note.tags,
-      template: note.template,
-    });
+    await createNote({ title: note.title + ' (副本)', content: note.content, folderId: note.folderId, tags: note.tags, template: note.template });
     toast({ type: 'success', message: '笔记已复制' });
   }, [createNote, toast]);
-
   const handleExportNote = useCallback((note: Note) => {
     let text = note.title + '\n\n';
     try {
@@ -162,233 +139,202 @@ export default function NotesPage() {
         };
         text += extract(json.content);
       }
-    } catch {
-      text += note.content;
-    }
+    } catch { text += note.content; }
     const url = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${note.title || 'note'}-${Date.now()}.txt`;
-    a.click();
+    const a = document.createElement('a'); a.href = url; a.download = `${note.title || 'note'}-${Date.now()}.txt`; a.click();
     URL.revokeObjectURL(url);
     toast({ type: 'success', message: '笔记已导出' });
   }, [toast]);
 
-  // 右键菜单分组定义
   const ctxMenuGroups = useMemo<ContextMenuGroup[]>(() => [
-    {
-      label: '笔记操作',
-      items: [
-        { key: 'open', label: '打开编辑', icon: <BookOpen className="w-4 h-4" strokeWidth={1.5} /> },
-        { key: 'pin', label: '置顶/取消置顶', icon: <Pin className="w-4 h-4" strokeWidth={1.5} /> },
-        { key: 'duplicate', label: '复制', icon: <Copy className="w-4 h-4" strokeWidth={1.5} /> },
-        { key: 'export', label: '导出', icon: <Download className="w-4 h-4" strokeWidth={1.5} /> },
-      ],
-    },
-    {
-      label: 'AI 操作',
-      items: [
-        { key: 'ai-summary', label: '生成摘要', icon: <Sparkles className="w-4 h-4" strokeWidth={1.5} /> },
-        { key: 'ai-flashcard', label: '生成闪卡', icon: <BookOpen className="w-4 h-4" strokeWidth={1.5} /> },
-      ],
-    },
-    {
-      items: [
-        { key: 'delete', label: '删除', icon: <Trash2 className="w-4 h-4" strokeWidth={1.5} />, danger: true },
-      ],
-    },
+    { label: '笔记操作', items: [
+      { key: 'open', label: '打开编辑', icon: <BookOpen className="w-4 h-4" strokeWidth={1.5} /> },
+      { key: 'pin', label: '置顶/取消置顶', icon: <Pin className="w-4 h-4" strokeWidth={1.5} /> },
+      { key: 'duplicate', label: '复制', icon: <Copy className="w-4 h-4" strokeWidth={1.5} /> },
+      { key: 'export', label: '导出', icon: <Download className="w-4 h-4" strokeWidth={1.5} /> },
+    ]},
+    { label: 'AI 操作', items: [
+      { key: 'ai-summary', label: '生成摘要', icon: <Sparkles className="w-4 h-4" strokeWidth={1.5} /> },
+      { key: 'ai-flashcard', label: '生成闪卡', icon: <BookOpen className="w-4 h-4" strokeWidth={1.5} /> },
+    ]},
+    { items: [
+      { key: 'delete', label: '删除', icon: <Trash2 className="w-4 h-4" strokeWidth={1.5} />, danger: true },
+    ]},
   ], []);
 
-  // 右键菜单选中回调
   const handleCtxMenuSelect = useCallback(async (itemKey: string, noteCtx: Note) => {
     switch (itemKey) {
-      case 'open':
-        handleSelectNote(noteCtx.id!);
-        break;
-      case 'pin':
-        handleTogglePin(noteCtx.id!);
-        break;
-      case 'duplicate':
-        handleDuplicateNote(noteCtx);
-        break;
-      case 'export':
-        handleExportNote(noteCtx);
-        break;
-      case 'delete':
-        handleDeleteNote(noteCtx.id!);
-        break;
+      case 'open': handleSelectNote(noteCtx.id!); break;
+      case 'pin': handleTogglePin(noteCtx.id!); break;
+      case 'duplicate': handleDuplicateNote(noteCtx); break;
+      case 'export': handleExportNote(noteCtx); break;
+      case 'delete': handleDeleteNote(noteCtx.id!); break;
       case 'ai-summary': {
         const text = stripHtml(noteCtx.content);
-        if (text.length < 10) {
-          toast({ type: 'warning', message: '笔记内容太少，无法生成摘要' });
-          break;
-        }
+        if (text.length < 10) { toast({ type: 'warning', message: '笔记内容太少，无法生成摘要' }); break; }
         toast({ type: 'info', message: 'AI 正在生成摘要...' });
         try {
-          const result = await summarize(text, { max_length: 200, style: 'bullet', language: 'zh' });
-          if (result?.summary) {
-            await navigator.clipboard.writeText(result.summary);
-            toast({ type: 'success', message: 'AI 摘要已生成并复制到剪贴板' });
-          } else {
-            toast({ type: 'warning', message: 'AI 未能生成摘要，请检查内容或稍后重试' });
-          }
-        } catch {
-          toast({ type: 'error', message: 'AI 摘要生成失败，请检查网络后重试' });
-        }
+          const result = await summarize(text, { maxLength: 200, style: 'bullet', language: 'zh' });
+          if (result?.summary) { await navigator.clipboard.writeText(result.summary); toast({ type: 'success', message: 'AI 摘要已生成并复制到剪贴板' }); }
+          else { toast({ type: 'warning', message: 'AI 未能生成摘要，请检查内容或稍后重试' }); }
+        } catch { toast({ type: 'error', message: 'AI 摘要生成失败，请检查网络后重试' }); }
         break;
       }
       case 'ai-flashcard': {
         const text = stripHtml(noteCtx.content);
-        if (text.length < 20) {
-          toast({ type: 'warning', message: '笔记内容太少，无法生成闪卡' });
-          break;
-        }
+        if (text.length < 20) { toast({ type: 'warning', message: '笔记内容太少，无法生成闪卡' }); break; }
         toast({ type: 'info', message: 'AI 正在生成闪卡...' });
         try {
-          const result = await aiGenerateCards(text, { max_cards: 10, difficulty: 'medium' });
-          if (result?.cards?.length) {
-            // TODO [v0.5.0-B2.3]: 自动写入牌组 — 将生成的闪卡写入以笔记标题命名的牌组
-            toast({ type: 'success', message: `AI 已生成 ${result.cards.length} 张闪卡，请在笔记编辑页中使用右键菜单逐张添加` });
-          } else {
-            toast({ type: 'warning', message: 'AI 未能生成闪卡，请检查内容或稍后重试' });
-          }
-        } catch {
-          toast({ type: 'error', message: 'AI 闪卡生成失败，请检查网络后重试' });
-        }
+          const result = await aiGenerateCards(text, { count: 10, difficulty: 'medium' });
+          if (result?.cards?.length) { toast({ type: 'success', message: `AI 已生成 ${result.cards.length} 张闪卡，请在笔记编辑页中使用右键菜单逐张添加` }); }
+          else { toast({ type: 'warning', message: 'AI 未能生成闪卡，请检查内容或稍后重试' }); }
+        } catch { toast({ type: 'error', message: 'AI 闪卡生成失败，请检查网络后重试' }); }
         break;
       }
     }
   }, [handleSelectNote, handleTogglePin, handleDuplicateNote, handleExportNote, handleDeleteNote, toast, summarize, aiGenerateCards]);
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] overflow-hidden">
+    <div className="flex h-[calc(100vh-3rem)] overflow-hidden">
       {/* ── 左栏：文件夹 ── */}
-      {sidebarOpen && (
-        <aside className="hidden md:flex flex-col w-60 flex-shrink-0 border-r border-border/50 bg-bg-secondary p-kb-md gap-kb-md overflow-y-auto">
-          <div className="flex items-center justify-between">
-            <span className="text-b2 font-semibold text-text-primary">文件夹</span>
-            <button
-              onClick={() => setShowNewFolder((v) => !v)}
-              className="p-1.5 rounded-kb-full text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-kb-fast"
-            >
-              <FolderPlus className="w-icon-sm h-icon-sm" strokeWidth={1.5} />
-            </button>
-          </div>
-
-          {showNewFolder && (
-            <div className="flex items-center gap-1.5">
-              <input
-                autoFocus
-                value={newFolderName}
-                onChange={(e) => setNewFolderName(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleCreateFolder(); if (e.key === 'Escape') setShowNewFolder(false); }}
-                placeholder="文件夹名称"
-                className="flex-1 min-w-0 px-2 py-1 text-b2 bg-bg-tertiary border border-border/50 rounded-kb-sm outline-none focus:border-brand-400 text-text-primary"
-              />
-              <button
-                onClick={handleCreateFolder}
-                className="px-2 py-1 text-c1 text-brand-600 font-medium hover:bg-brand-50 rounded-kb-sm transition-all duration-kb-fast"
+      <AnimatePresence>
+        {sidebarOpen && (
+          <motion.aside
+            initial={{ width: 0, opacity: 0 }}
+            animate={{ width: 200, opacity: 1 }}
+            exit={{ width: 0, opacity: 0 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 28 }}
+            className="relative z-0 hidden md:flex flex-col flex-shrink-0 border-r border-border/30 bg-bg-primary/60 backdrop-blur-xl overflow-y-auto overflow-x-hidden"
+          >
+            <div className="opacity-[0.85] hover:opacity-100 transition-opacity duration-300 flex flex-col h-full">
+            <div className="flex items-center justify-between p-kb-md pb-2">
+              <span className="text-[13px] font-semibold text-text-primary">文件夹</span>
+              <motion.button
+                whileTap={{ scale: 0.9, rotate: 90 }}
+                onClick={() => setShowNewFolder((v) => !v)}
+                className="p-1.5 rounded-full text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary/50 transition-all duration-200"
               >
-                确定
-              </button>
+                <FolderPlus className="w-4 h-4" strokeWidth={1.5} />
+              </motion.button>
             </div>
-          )}
 
-          <nav className="flex flex-col gap-1">
-            {/* 全部笔记 */}
-            <button
-              onClick={() => selectFolder(null)}
-              className={cn(
-                'flex items-center justify-between px-3 py-2 rounded-kb-md text-b2',
-                'transition-all duration-kb-fast',
-                selectedFolderId === null
-                  ? 'bg-brand-50 text-brand-700 font-medium'
-                  : 'text-text-secondary hover:bg-bg-tertiary',
-              )}
-            >
-              <span>全部笔记</span>
-              <span className="text-c1 text-text-tertiary">{useNoteStore.getState().notes.length}</span>
-            </button>
-            {folders.map((f) => (
-              <button
-                key={f.id}
-                onClick={() => selectFolder(f.id!)}
+            {showNewFolder && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ type: 'spring', stiffness: 400, damping: 28 }}
+                className="flex items-center gap-1.5 px-4 pb-2"
+              >
+                <input
+                  autoFocus value={newFolderName}
+                  onChange={(e) => setNewFolderName(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleCreateFolder(); if (e.key === 'Escape') setShowNewFolder(false); }}
+                  placeholder="文件夹名称"
+                  className="flex-1 min-w-0 px-2 py-1 text-[13px] bg-bg-tertiary/50 border border-border/40 rounded-[var(--kb-radius-sm)] outline-none focus:border-brand-400 text-text-primary transition-colors duration-200"
+                />
+                <button onClick={handleCreateFolder} className="px-2 py-1 text-[11px] text-brand-600 font-medium hover:bg-brand-50 rounded-[var(--kb-radius-sm)] transition-all duration-200">
+                  确定
+                </button>
+              </motion.div>
+            )}
+
+            <nav className="flex flex-col gap-0.5 px-2">
+              <motion.button
+                whileTap={{ scale: 0.98 }}
+                onClick={() => selectFolder(null)}
                 className={cn(
-                  'flex items-center justify-between px-3 py-2 rounded-kb-md text-b2',
-                  'transition-all duration-kb-fast',
-                  selectedFolderId === f.id
-                    ? 'bg-brand-50 text-brand-700 font-medium'
-                    : 'text-text-secondary hover:bg-bg-tertiary',
+                  'flex items-center justify-between px-3 py-2 rounded-[var(--kb-radius-sm)] text-[13px] relative transition-all duration-200',
+                  selectedFolderId === null
+                    ? 'bg-brand-50/80 text-brand-700 font-medium shadow-[inset_0_0_0_1px_rgba(91,138,114,0.08)]'
+                    : 'text-text-secondary hover:bg-bg-tertiary/40',
                 )}
               >
-                <span className="flex items-center gap-2">
-                  <ChevronRight className="w-3.5 h-3.5 opacity-50" strokeWidth={1.5} />
-                  {f.name}
-                </span>
-              </button>
-            ))}
-          </nav>
+                {selectedFolderId === null && (
+                  <motion.span layoutId="folder-active" className="absolute left-0 top-1/2 -translate-y-1/2 w-[2px] h-4 bg-brand-500 rounded-[1px]" transition={{ type: 'spring', stiffness: 350, damping: 30 }} />
+                )}
+                <span>全部笔记</span>
+                <span className="text-[11px] text-text-tertiary font-mono">{useNoteStore.getState().notes.length}</span>
+              </motion.button>
+              {folders.map((f) => (
+                <motion.button
+                  key={f.id}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => selectFolder(f.id!)}
+                  className={cn(
+                    'flex items-center justify-between px-3 py-2 rounded-[var(--kb-radius-sm)] text-[13px] relative transition-all duration-200',
+                    selectedFolderId === f.id
+                      ? 'bg-brand-50/80 text-brand-700 font-medium shadow-[inset_0_0_0_1px_rgba(91,138,114,0.08)]'
+                      : 'text-text-secondary hover:bg-bg-tertiary/40',
+                  )}
+                >
+                  {selectedFolderId === f.id && (
+                    <motion.span layoutId="folder-active" className="absolute left-0 top-1/2 -translate-y-1/2 w-[2px] h-4 bg-brand-500 rounded-[1px]" transition={{ type: 'spring', stiffness: 350, damping: 30 }} />
+                  )}
+                  <span className="flex items-center gap-2">
+                    <ChevronRight className="w-3.5 h-3.5 opacity-40" strokeWidth={1.5} />
+                    {f.name}
+                  </span>
+                </motion.button>
+              ))}
+            </nav>
 
-          <div className="mt-auto pt-kb-md border-t border-border/40">
-            <span className="text-c1 text-text-tertiary">标签筛选</span>
-            {allTags.length > 0 ? (
-              <div className="flex flex-wrap gap-1.5 mt-2">
-                {allTags.map((tag) => {
-                  const isActive = selectedTags.includes(tag);
-                  return (
-                    <button
-                      key={tag}
-                      onClick={() => toggleTag(tag)}
-                      className={cn(
-                        'px-2 py-0.5 text-c1 rounded-kb-md border transition-all duration-kb-fast',
-                        isActive
-                          ? 'bg-brand-50 text-brand-700 border-brand-300 font-medium'
-                          : 'bg-bg-tertiary text-text-secondary border-border/50 hover:bg-bg-secondary',
-                      )}
-                    >
-                      {tag}
-                    </button>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="text-c1 text-text-tertiary mt-2">暂无标签</p>
-            )}
+
           </div>
-        </aside>
-      )}
+          </motion.aside>
+        )}
+      </AnimatePresence>
 
       {/* ── 中栏：笔记列表 ── */}
-      <main className="flex-1 flex flex-col overflow-hidden">
+      <main className="relative z-10 flex-1 flex flex-col overflow-hidden">
         {/* 工具栏 */}
-        <div className="flex items-center gap-kb-sm px-kb-md py-3 border-b border-border/50 flex-shrink-0">
-          <button
+        <div className="sticky top-0 z-20 flex items-center gap-2 px-4 py-3 border-b border-border/30 flex-shrink-0 backdrop-blur-md bg-bg-primary/80">
+          <motion.button
+            whileTap={{ scale: 0.9 }}
             onClick={() => setSidebarOpen((v) => !v)}
-            className="hidden md:flex p-1.5 rounded-kb-full text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-kb-fast"
+            className="hidden md:flex p-1.5 rounded-full text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary/40 transition-all duration-200"
           >
-            {sidebarOpen
-              ? <PanelLeftClose className="w-icon-md h-icon-md" strokeWidth={1.5} />
-              : <PanelLeft className="w-icon-md h-icon-md" strokeWidth={1.5} />}
-          </button>
+            {sidebarOpen ? <PanelLeftClose className="w-5 h-5" strokeWidth={1.5} /> : <PanelLeft className="w-5 h-5" strokeWidth={1.5} />}
+          </motion.button>
           <Input
             placeholder="搜索笔记..."
-            prefix={<Search className="w-icon-sm h-icon-sm" strokeWidth={1.5} />}
+            prefix={<Search className="w-4 h-4" strokeWidth={1.5} />}
             size="sm"
             className="flex-1 min-w-0"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
-          <Button
-            size="sm"
-            icon={<Plus className="w-icon-sm h-icon-sm" strokeWidth={2} />}
-            onClick={() => setTemplateOpen(true)}
-          >
-            新建笔记
-          </Button>
+          {allTags.length > 0 && (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {allTags.map((tag) => {
+                const isActive = selectedTags.includes(tag);
+                return (
+                  <motion.button
+                    key={tag}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => toggleTag(tag)}
+                    className={cn(
+                      'px-2 py-0.5 text-[11px] rounded-full border transition-all duration-200 whitespace-nowrap',
+                      isActive
+                        ? 'bg-brand-500/10 text-brand-600 border-brand-300/50 font-medium'
+                        : 'bg-bg-tertiary/30 text-text-secondary border-border/30 hover:bg-bg-tertiary/60',
+                    )}
+                  >
+                    {tag}
+                  </motion.button>
+                );
+              })}
+            </div>
+          )}
+          <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}>
+            <Button size="sm" icon={<Plus className="w-4 h-4" strokeWidth={2} />} onClick={() => setTemplateOpen(true)}>
+              新建笔记
+            </Button>
+          </motion.div>
         </div>
 
         {/* 列表 */}
-        <div className="flex-1 overflow-y-auto px-kb-md py-3 space-y-3">
+        <div className="flex-1 overflow-y-auto px-4 py-3">
           {filteredNotes.length === 0 ? (
             <div className="flex items-center justify-center min-h-[40vh]">
               <EmptyState
@@ -398,130 +344,151 @@ export default function NotesPage() {
               />
             </div>
           ) : (
-            filteredNotes.map((note) => (
-              <Card
-                key={note.id}
-                hoverable
-                padding="md"
-                onClick={() => handleSelectNote(note.id!)}
-                onContextMenu={(e) => handleNoteContextMenu(e, note)}
-                className={cn(
-                  'group relative',
-                  selectedNoteId === note.id && 'border-brand-400 bg-brand-50/30',
-                )}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      {note.pinned && <Pin className="w-3.5 h-3.5 text-brand-500 flex-shrink-0" strokeWidth={1.5} />}
-                      <h3 className="text-b1 font-medium text-text-primary truncate">{note.title}</h3>
-                    </div>
-                    <p className="text-b2 text-text-secondary mt-1 line-clamp-2 leading-relaxed">
-                      {stripHtml(note.content)}
-                    </p>
-                    <div className="flex items-center gap-2 mt-2 flex-wrap">
-                      <Tag color="note">{templateLabels[note.template as NoteTemplate]}</Tag>
-                      {note.tags.map((tag) => (
-                        <Tag key={tag} color="default">{tag}</Tag>
-                      ))}
-                      <span className="text-c1 text-text-tertiary ml-auto">{formatDate(note.updatedAt)}</span>
-                    </div>
-                  </div>
-                  {/* MoreVertical 按钮（触发同一右键菜单） */}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      // 模拟右键菜单，位置在按钮右下方
-                      const rect = e.currentTarget.getBoundingClientRect();
-                      handleNoteContextMenu(
-                        { ...e, clientX: rect.right, clientY: rect.bottom, preventDefault: () => {}, stopPropagation: () => {} } as unknown as React.MouseEvent,
-                        note,
-                      );
-                    }}
-                    className="p-1 rounded hover:bg-bg-tertiary opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+            <motion.div variants={listVariants} initial="hidden" animate="visible" className="space-y-2">
+              {filteredNotes.map((note) => (
+                <motion.div
+                  key={note.id}
+                  variants={noteCardVariants}
+                  whileHover={{
+                    y: -4,
+                    rotateX: 1,
+                    rotateY: -1,
+                    transition: { type: 'spring', stiffness: 400, damping: 25 },
+                  }}
+                  style={{ perspective: '800px' }}
+                >
+                  <Card
+                    hoverable
+                    padding="md"
+                    onClick={() => handleSelectNote(note.id!)}
+                    onContextMenu={(e) => handleNoteContextMenu(e, note)}
+                    className={cn(
+                      'group relative transition-all duration-300',
+                      'hover:-translate-y-[2px] hover:shadow-[0_4px_16px_-4px_rgba(0,0,0,0.08)]',
+                      selectedNoteId === note.id && 'border-brand-400/60 bg-brand-50/20 shadow-[inset_0_0_0_1px_rgba(91,138,114,0.08)]',
+                    )}
                   >
-                    <MoreVertical className="w-4 h-4 text-text-secondary" strokeWidth={1.5} />
-                  </button>
-                </div>
-              </Card>
-            ))
+                    {/* 左侧色条 — 模板色 + 微发光 */}
+                    <div
+                      className="absolute left-0 top-2 bottom-2 w-[3px] rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                      style={{
+                        background: colorForType(note.template),
+                        boxShadow: `0 0 8px ${colorForType(note.template)}40`,
+                      }}
+                    />
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          {note.pinned && <Pin className="w-3.5 h-3.5 text-accent-400 flex-shrink-0" strokeWidth={1.5} />}
+                          <h3 className="text-[14px] font-medium text-text-primary truncate">{note.title}</h3>
+                        </div>
+                        <p className="text-[13px] text-text-secondary mt-1 line-clamp-2 leading-relaxed">
+                          {stripHtml(note.content)}
+                        </p>
+                        <div className="flex items-center gap-2 mt-2 flex-wrap">
+                          <Tag color="note">{templateLabels[note.template as NoteTemplate]}</Tag>
+                          {note.tags.map((tag) => (
+                            <Tag key={tag} color="default">{tag}</Tag>
+                          ))}
+                          <span className="text-[11px] text-text-tertiary ml-auto font-mono tabular-nums">{formatDate(note.updatedAt)}</span>
+                        </div>
+                      </div>
+                      <motion.button
+                        whileTap={{ scale: 0.85 }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          handleNoteContextMenu(
+                            { ...e, clientX: rect.right, clientY: rect.bottom, preventDefault: () => {}, stopPropagation: () => {} } as unknown as React.MouseEvent,
+                            note,
+                          );
+                        }}
+                        className="p-1 rounded hover:bg-bg-tertiary/50 opacity-0 group-hover:opacity-100 transition-all duration-200 flex-shrink-0"
+                      >
+                        <MoreVertical className="w-4 h-4 text-text-secondary" strokeWidth={1.5} />
+                      </motion.button>
+                    </div>
+                  </Card>
+                </motion.div>
+              ))}
+            </motion.div>
           )}
         </div>
 
-        {/* 右键菜单 */}
         {ctxMenuOpen && ctxMenuNote && (
           <ContextMenu<Note>
-            groups={ctxMenuGroups}
-            position={ctxMenuPos}
-            context={ctxMenuNote}
-            onSelect={handleCtxMenuSelect}
-            onClose={closeCtxMenu}
+            groups={ctxMenuGroups} position={ctxMenuPos}
+            context={ctxMenuNote} onSelect={handleCtxMenuSelect} onClose={closeCtxMenu}
           />
         )}
       </main>
 
-      {/* ── 右栏：预览（桌面） ── */}
-      <aside className="hidden lg:flex flex-col w-80 flex-shrink-0 border-l border-border/50 bg-bg-secondary overflow-y-auto">
-        {selectedNote ? (
-          <div className="p-kb-md flex flex-col gap-kb-md">
+      {/* ── 右栏：预览 ── */}
+      <aside className="relative z-[5] hidden lg:flex flex-col w-80 flex-shrink-0 border-l border-border/30 bg-bg-primary/40 backdrop-blur-xl overflow-y-auto" style={{ filter: 'saturate(0.9) brightness(0.98)' }}>
+        <AnimatePresence mode="wait">
+          {selectedNote ? (
+            <motion.div
+              key={selectedNote.id}
+              initial={{ opacity: 0, x: 12, filter: 'blur(4px)' }}
+              animate={{ opacity: 1, x: 0, filter: 'blur(0px)' }}
+              exit={{ opacity: 0, x: -8, filter: 'blur(3px)' }}
+              transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+              className="p-kb-md flex flex-col gap-4"
+          >
             <div>
-              <h2 className="text-h2 font-semibold text-text-primary">{selectedNote.title}</h2>
+              <h2 className="text-[18px] font-semibold text-text-primary">{selectedNote.title}</h2>
               <div className="flex items-center gap-2 mt-2 flex-wrap">
                 <Tag color="note">{templateLabels[selectedNote.template as NoteTemplate]}</Tag>
                 {selectedNote.tags.map((tag) => (
                   <Tag key={tag} color="default">{tag}</Tag>
                 ))}
               </div>
-              <span className="text-c1 text-text-tertiary block mt-2">{formatDate(selectedNote.updatedAt)}</span>
+              <span className="text-[11px] text-text-tertiary block mt-2 font-mono">{formatDate(selectedNote.updatedAt)}</span>
             </div>
-            <div className="border-t border-border/40 pt-kb-md">
-              <p className="text-b2 text-text-secondary leading-relaxed line-clamp-[12]">
+            <div className="border-t border-border/30 pt-4">
+              <p className="text-[13px] text-text-secondary leading-relaxed line-clamp-[12]">
                 {stripHtml(selectedNote.content)}
               </p>
             </div>
-            <Button
-              size="sm"
-              variant="secondary"
+            <motion.button
+              whileHover={{ scale: 1.01 }}
+              whileTap={{ scale: 0.98 }}
               onClick={() => navigate(`/notes/${selectedNote.id}`)}
+              className="w-full py-2 rounded-[var(--kb-radius-sm)] text-[13px] font-medium border border-border/40 text-text-secondary hover:text-text-primary hover:bg-bg-tertiary/30 transition-all duration-200"
             >
               打开编辑
-            </Button>
-          </div>
+            </motion.button>
+          </motion.div>
         ) : (
-          <div className="flex-1 flex items-center justify-center">
+          <motion.div
+            key="empty-preview"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="flex-1 flex items-center justify-center"
+          >
             <EmptyState
               icon={<FileText className="w-12 h-12" strokeWidth={1.2} />}
               title="选择一篇笔记查看详情"
               description="点击左侧列表中的任意笔记，在此处预览其内容"
             />
-          </div>
+          </motion.div>
         )}
+        </AnimatePresence>
       </aside>
 
-      {/* ── 移动端浮动新建按钮 ── */}
-      <button
+      {/* 移动端浮动新建 */}
+      <motion.button
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.9 }}
         onClick={handleCreateNote}
-        className={cn(
-          'md:hidden fixed bottom-20 right-5 z-40',
-          'w-14 h-14 rounded-kb-full',
-          'bg-brand-600 text-white shadow-kb-lg',
-          'flex items-center justify-center',
-          'hover:bg-brand-700 active:scale-95',
-          'transition-all duration-kb-fast',
-        )}
-        aria-label="新建笔记"
+        className="md:hidden fixed bottom-20 right-5 z-40 w-14 h-14 rounded-full bg-brand-500 text-white shadow-[0_4px_16px_rgba(91,138,114,0.35)] flex items-center justify-center transition-shadow duration-200"
       >
         <Plus className="w-6 h-6" strokeWidth={2} />
-      </button>
+      </motion.button>
 
-      {/* ── 模板选择器 ── */}
-      <TemplateSelector
-        open={templateOpen}
-        onClose={() => setTemplateOpen(false)}
-        onSelect={handleTemplateSelect}
-      />
+      <TemplateSelector open={templateOpen} onClose={() => setTemplateOpen(false)} onSelect={handleTemplateSelect} />
 
-      {/* ── 删除确认 Modal ── */}
       <Modal
         open={!!deleteTargetId}
         onClose={() => setDeleteTargetId(null)}
@@ -529,16 +496,8 @@ export default function NotesPage() {
         description="确定要删除这条笔记吗？此操作不可撤销。"
         footer={
           <>
-            <Button variant="secondary" onClick={() => setDeleteTargetId(null)}>
-              取消
-            </Button>
-            <Button
-              variant="danger"
-              icon={<Trash2 className="w-icon-sm h-icon-sm" strokeWidth={1.5} />}
-              onClick={handleConfirmDelete}
-            >
-              删除
-            </Button>
+            <Button variant="secondary" onClick={() => setDeleteTargetId(null)}>取消</Button>
+            <Button variant="danger" icon={<Trash2 className="w-4 h-4" strokeWidth={1.5} />} onClick={handleConfirmDelete}>删除</Button>
           </>
         }
       >

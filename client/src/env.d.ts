@@ -10,6 +10,8 @@
 interface ImportMetaEnv {
   /** API 基础地址（sync-service / ai-gateway 共享前缀） */
   readonly VITE_API_BASE_URL: string;
+  /** AI 网关地址 */
+  readonly VITE_AI_GATEWAY_URL: string;
   /** 健康检查端点完整 URL（可选，默认从 VITE_API_BASE_URL 派生） */
   readonly VITE_API_HEALTH_URL: string;
   /** Supabase 项目 URL */

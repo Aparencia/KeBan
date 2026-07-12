@@ -3,11 +3,12 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import { ArrowLeftRight } from 'lucide-react';
+import type { JSONContent } from '@tiptap/core';
 
 interface CornellContent {
-  cues?: any;
-  notes?: any;
-  summary?: any;
+  cues?: JSONContent;
+  notes?: JSONContent;
+  summary?: JSONContent;
 }
 
 interface CornellLayoutProps {
@@ -18,9 +19,9 @@ interface CornellLayoutProps {
 const STORAGE_KEY = 'kb_cornell_cue_position';
 
 function useCornellEditor(
-  initialContent: any,
+  initialContent: JSONContent | undefined,
   placeholder: string,
-  onChange: (json: any) => void,
+  onChange: (json: JSONContent) => void,
 ) {
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
@@ -71,7 +72,7 @@ export function CornellLayout({ content, onChange }: CornellLayoutProps) {
     summary: content.summary,
   });
 
-  const triggerChange = (field: keyof CornellContent, data: any) => {
+  const triggerChange = (field: keyof CornellContent, data: JSONContent) => {
     latestDataRef.current = { ...latestDataRef.current, [field]: data };
     onChange(latestDataRef.current);
   };

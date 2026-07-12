@@ -2,6 +2,9 @@ import { useState, useCallback, useEffect } from 'react';
 import { X, Bug, Lightbulb, Star, Send, CheckCircle, Copy, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
+const SUCCESS_TOAST_DURATION_MS = 4000;
+const COPY_TOAST_DURATION_MS = 2000;
+
 // ─── Types ──────────────────────────────────────────────────────
 
 type FeedbackType = 'bug' | 'suggestion' | 'experience';
@@ -184,7 +187,7 @@ function FeedbackForm({ onSubmit }: FeedbackFormProps) {
     setRating(0);
     setSuccessInfo({ id: shortId(item.id), time: now.toLocaleString('zh-CN') });
     // 成功提示 4 秒后消失
-    setTimeout(() => setSuccessInfo(null), 4000);
+    setTimeout(() => setSuccessInfo(null), SUCCESS_TOAST_DURATION_MS);
   }, [type, description, rating, isValid, onSubmit]);
 
   return (
@@ -314,7 +317,7 @@ function FeedbackHistory({ items, onDelete }: FeedbackHistoryProps) {
     const ok = await copyToClipboard(formatFeedbackText(item));
     if (ok) {
       setCopiedId(item.id);
-      setTimeout(() => setCopiedId(null), 2000);
+      setTimeout(() => setCopiedId(null), COPY_TOAST_DURATION_MS);
     }
   }, []);
 

@@ -1,4 +1,4 @@
-import { apiClient } from '../http/apiClient';
+import { apiClient } from '@/lib/http/apiClient';
 import { getDeviceId, getUnsyncedLogsBatch, markLogsSynced } from '../storage/operationLog';
 import { offlineQueue } from './OfflineQueue';
 import { networkManager } from './NetworkManager';

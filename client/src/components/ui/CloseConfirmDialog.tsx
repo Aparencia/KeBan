@@ -21,11 +21,20 @@ interface CloseConfirmDialogProps {
 export function CloseConfirmDialog({ open, onClose }: CloseConfirmDialogProps) {
   const [remember, setRemember] = useState(false);
 
+  /**
+   * 处理关闭行为选择，向 Electron 主进程发送对应 action
+   * @param action - 用户选择的关闭行为
+   * @ai-context Electron IPC: window:close-action
+   */
   const handleAction = async (action: 'quit' | 'minimize' | 'cancel') => {
-    if (action !== 'cancel') {
-      await window.electronAPI?.closeAction(action, remember);
+    try {
+      const shouldRemember = action === 'cancel' ? false : remember;
+      await window.electronAPI?.closeAction(action, shouldRemember);
+    } catch (err) {
+      console.error('[CloseConfirmDialog] closeAction failed:', err);
+    } finally {
+      onClose();
     }
-    onClose();
   };
 
   return (

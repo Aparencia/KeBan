@@ -152,7 +152,7 @@ class AIPluginLoader {
       () => (async () => {
         const plugin = await this.getAIPlugin();
         // RemoteAIPlugin has the method; AIPlugin interface may not require it
-        return (plugin as any).generateFeynmanQuestions(concept, explanation);
+        return plugin.generateFeynmanQuestions(concept, explanation);
       })(),
       { contentCheck: explanation, feature: 'feynman_question' }
     );
@@ -169,7 +169,7 @@ class AIPluginLoader {
     return this.withGuard(
       () => (async () => {
         const plugin = await this.getAIPlugin();
-        return (plugin as any).evaluateFeynmanAnswers(concept, questions, answers);
+        return plugin.evaluateFeynmanAnswers(concept, questions, answers);
       })(),
       { feature: 'feynman_evaluate' }
     );

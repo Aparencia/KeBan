@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { motion, useMotionValue, useTransform, type PanInfo } from 'framer-motion';
 import { Button, EmptyState, useToast } from '@/components/ui';
 import { ContextMenu, type ContextMenuGroup } from '@/components/ui/ContextMenu';
-import { FlipCard } from '../components/FlipCard';
+import { FlipCard, type FlipCardGlow } from '../components/FlipCard';
 import { X, RotateCcw, BookOpen, PauseCircle, AlertTriangle, Sparkles, ExternalLink, Loader2, Check, XIcon, Star } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useStudySessionStore } from '../store/useStudySessionStore';
@@ -13,6 +13,9 @@ import { Rating, calculateIntervals } from '@/lib/sm2';
 import type { Flashcard } from '@/types/models';
 import { useAIFlashcards, useAIOptimizeCard } from '@/lib/ai/useAI';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
+
+const ENTER_ANIMATION_DURATION_MS = 300;
+const PLUS_ONE_ANIMATION_DURATION_MS = 800;
 
 function formatInterval(days: number): string {
   if (days === 0) return '<1d';
@@ -60,6 +63,10 @@ export default function StudySessionPage() {
   const [flipDone, setFlipDone] = useState(false);
   // Card exit animation flag
   const [exiting, setExiting] = useState(false);
+  // Fly-out direction for button-based rating
+  const [exitDir, setExitDir] = useState<'left' | 'right' | null>(null);
+  // Rating glow for FlipCard
+  const [cardGlow, setCardGlow] = useState<FlipCardGlow>(null);
   // Hovered rating for interval preview
   const [hoveredRating, setHoveredRating] = useState<number | null>(null);
   // New card entrance animation
@@ -100,9 +107,11 @@ export default function StudySessionPage() {
       setEntering(true);
       setFlipDone(false);   // Bug 5a: 确保新卡片不显示上一张的评分按钮
       setExiting(false);    // Bug 5a: 确保退出状态被重置
+      setExitDir(null);
+      setCardGlow(null);
       exitingRef.current = false;
       prevIndexRef.current = currentIndex;
-      const timer = setTimeout(() => setEntering(false), 300);
+      const timer = setTimeout(() => setEntering(false), ENTER_ANIMATION_DURATION_MS);
       return () => clearTimeout(timer);
     }
   }, [currentIndex]);
@@ -218,17 +227,22 @@ export default function StudySessionPage() {
     if (current && current.repetitions === 0 && rating !== Rating.Again) {
       setSessionMastered((n) => n + 1);
       setShowPlusOne(true);
-      setTimeout(() => setShowPlusOne(false), 800);
+      setTimeout(() => setShowPlusOne(false), PLUS_ONE_ANIMATION_DURATION_MS);
     }
+    // Set glow and fly direction
+    setCardGlow(rating === Rating.Again ? 'wrong' : 'correct');
+    setExitDir(rating === Rating.Again ? 'left' : 'right');
     setExiting(true);
     exitingRef.current = true;
-    // 等待卡片退出动画完成后再执行评分（350ms）
+    // 等待卡片飞出动画完成后再执行评分（400ms）
     setTimeout(() => {
       setExiting(false);
       exitingRef.current = false;
       setFlipDone(false);
+      setExitDir(null);
+      setCardGlow(null);
       rateCard(rating);
-    }, 350);
+    }, 400);
   };
 
   // Drag gesture handlers (only when card is flipped and reduced-motion is off)
@@ -398,9 +412,22 @@ export default function StudySessionPage() {
             className={cn('w-full max-w-xl relative', entering && 'animate-fade-in-up')}
             drag={isFlipped && !prefersReduced && !exiting ? 'x' : false}
             dragConstraints={{ left: 0, right: 0 }}
-            dragElastic={0.8}
+            dragElastic={0.3}
             dragSnapToOrigin
+            dragTransition={{ bounceStiffness: 600, bounceDamping: 20 }}
             style={{ x: isFlipped && !prefersReduced ? dragX : undefined }}
+            animate={
+              exitDir === 'right'
+                ? { x: 500, opacity: 0, rotateZ: 15 }
+                : exitDir === 'left'
+                  ? { x: -500, opacity: 0, rotateZ: -15 }
+                  : { x: 0, opacity: 1, rotateZ: 0 }
+            }
+            transition={
+              exitDir
+                ? { type: 'spring', stiffness: 300, damping: 25 }
+                : undefined
+            }
             onDragStart={handleDragStart}
             onDrag={handleDrag}
             onDragEnd={handleDragEnd}
@@ -432,6 +459,7 @@ export default function StudySessionPage() {
               onFlip={flipCard}
               onFlipEnd={() => setFlipDone(true)}
               exiting={exiting}
+              glow={cardGlow}
             />
             {isFlipped && (
               <div className="flex justify-center gap-3 mt-3">
@@ -530,29 +558,32 @@ export default function StudySessionPage() {
               )}
               <div className="grid grid-cols-4 gap-2">
                 {ratingStyles.map(({ label, rating, color }, i) => (
-                  <button
+                  <motion.button
                     ref={(el) => { btnRefs.current[i] = el; }}
                     key={label}
                     onClick={(e) => { handleBtnClick(i, e); handleRate(rating); }}
                     onMouseEnter={() => setHoveredRating(i)}
                     onMouseLeave={() => setHoveredRating(null)}
+                    initial={prefersReduced ? false : { y: 20, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    transition={
+                      prefersReduced
+                        ? { duration: 0.01 }
+                        : { type: 'spring', stiffness: 400, damping: 25, delay: i * 0.05 }
+                    }
+                    whileHover={{ scale: 1.04 }}
+                    whileTap={{ scale: 0.96 }}
                     className={cn(
                       'relative overflow-hidden flex flex-col items-center gap-0.5 py-3 rounded-kb-lg',
                       'text-white font-semibold text-b2',
-                      'opacity-0 animate-stagger-in',
                       'transition-[background-color,box-shadow] duration-kb-fast',
-                      'hover:scale-[1.04] active:scale-[0.96]',
                       'shadow-kb-sm',
                       color,
                     )}
-                    style={{
-                      animationDelay: `${i * 75}ms`,
-                      animationFillMode: 'forwards',
-                    }}
                   >
                     <span className="text-c1 opacity-75">{formatInterval(intervalValues[i])}</span>
                     {label}
-                  </button>
+                  </motion.button>
                 ))}
               </div>
               {/* 重学按钮 */}

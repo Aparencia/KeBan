@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useMemo } from 'react';
+﻿import { useEffect, useRef, useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Play, Pause, RotateCcw, SkipForward, GraduationCap, BookOpen, Clock, Volume2, VolumeX, Focus } from 'lucide-react';
@@ -15,28 +15,16 @@ import { audioTracks, loadAudioPreferences, saveAudioPreferences } from '@/lib/a
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import type { AudioPreferences } from '@/lib/audio/audioConfig';
 
+const WHITE_NOISE_FADE_MS = 1000;
+const WHITE_NOISE_FADE_OUT_MS = 1500;
+const TIMER_TICK_INTERVAL_MS = 1000;
+
 export default function PomodoroPage() {
   const {
-    phase,
-    isRunning,
-    isPaused,
-    remainingSeconds,
-    totalSeconds,
-    completedCount,
-    mode,
-    settings,
-    currentGoal,
-    isImmersive,
-    start,
-    pause,
-    resume,
-    reset,
-    skip,
-    setMode,
-    setCurrentGoal,
-    enterImmersive,
-    exitImmersive,
-    tick,
+    phase, isRunning, isPaused, remainingSeconds, totalSeconds,
+    completedCount, mode, settings, currentGoal, isImmersive,
+    start, pause, resume, reset, skip, setMode, setCurrentGoal,
+    enterImmersive, exitImmersive, tick,
   } = usePomodoroStore();
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -45,86 +33,58 @@ export default function PomodoroPage() {
 
   // ── 白噪音 ──
   const [audioPrefs, setAudioPrefs] = useState<AudioPreferences>(() => loadAudioPreferences());
-
   const whiteNoiseTrack = useMemo(
     () => audioTracks.find((t) => t.id === audioPrefs.whiteNoiseTrackId) ?? audioTracks[0],
     [audioPrefs.whiteNoiseTrackId],
   );
-
   const whiteNoisePlayer = useAudioPlayer({
-    src: whiteNoiseTrack.src,
-    volume: audioPrefs.whiteNoiseVolume,
-    loop: true,
-    fadeInMs: 1000,
-    fadeOutMs: 1500,
+    src: whiteNoiseTrack.src, volume: audioPrefs.whiteNoiseVolume,
+    loop: true, fadeInMs: WHITE_NOISE_FADE_MS, fadeOutMs: WHITE_NOISE_FADE_OUT_MS,
   });
 
-  // 工作阶段且白噪音开启时自动播放
   useEffect(() => {
     if (isRunning && phase === 'work' && audioPrefs.whiteNoiseEnabled) {
       whiteNoisePlayer.play();
     } else {
       whiteNoisePlayer.pause();
     }
-  }, [isRunning, phase, audioPrefs.whiteNoiseEnabled]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isRunning, phase, audioPrefs.whiteNoiseEnabled]); // eslint-disable-line
 
   const toggleWhiteNoise = () => {
     const next = { ...audioPrefs, whiteNoiseEnabled: !audioPrefs.whiteNoiseEnabled };
-    setAudioPrefs(next);
-    saveAudioPreferences(next);
+    setAudioPrefs(next); saveAudioPreferences(next);
   };
-
   const handleWhiteNoiseVolume = (vol: number) => {
     const next = { ...audioPrefs, whiteNoiseVolume: vol };
-    setAudioPrefs(next);
-    saveAudioPreferences(next);
+    setAudioPrefs(next); saveAudioPreferences(next);
     whiteNoisePlayer.setVolume(vol);
   };
 
-  // Timer interval
   useEffect(() => {
     if (isRunning) {
-      intervalRef.current = setInterval(() => {
-        tick();
-      }, 1000);
+      intervalRef.current = setInterval(() => tick(), TIMER_TICK_INTERVAL_MS);
     } else {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
+      if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
     }
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-    };
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [isRunning, tick]);
 
-  // Update document title
   useEffect(() => {
     if (isRunning || isPaused) {
       const m = Math.floor(remainingSeconds / 60);
       const s = remainingSeconds % 60;
-      const phaseLabel =
-        phase === 'work' ? '专注' : phase === 'short_break' ? '短休' : '长休';
+      const phaseLabel = phase === 'work' ? '专注' : phase === 'short_break' ? '短休' : '长休';
       document.title = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')} - ${phaseLabel} | 番茄钟`;
     } else {
       document.title = '番茄钟 - 课伴';
     }
-    return () => {
-      document.title = '课伴 KeBan';
-    };
+    return () => { document.title = '课伴 KeBan'; };
   }, [remainingSeconds, phase, isRunning, isPaused]);
 
   const handleMainButton = () => {
-    if (isRunning) {
-      pause();
-    } else if (isPaused) {
-      resume();
-    } else {
-      // 弹出目标输入框
-      setGoalModalOpen(true);
-    }
+    if (isRunning) pause();
+    else if (isPaused) resume();
+    else setGoalModalOpen(true);
   };
 
   const handleGoalSubmit = async (goal: string) => {
@@ -132,91 +92,44 @@ export default function PomodoroPage() {
     setGoalModalOpen(false);
     start();
     enterImmersive();
-
-    // 若启用了记住目标，保存到 Dexie
     if (rememberGoal) {
       try {
         const existing = await db.pomodoroGoals.where('text').equals(goal).first();
         if (existing) {
-          await db.pomodoroGoals.update(existing.id, {
-            useCount: existing.useCount + 1,
-            lastUsedAt: new Date(),
-          });
+          await db.pomodoroGoals.update(existing.id, { useCount: existing.useCount + 1, lastUsedAt: new Date() });
         } else {
-          await db.pomodoroGoals.add({
-            id: crypto.randomUUID(),
-            text: goal,
-            useCount: 1,
-            lastUsedAt: new Date(),
-          });
+          await db.pomodoroGoals.add({ id: crypto.randomUUID(), text: goal, useCount: 1, lastUsedAt: new Date() });
         }
-      } catch (e) {
-        // eslint-disable-next-line no-console -- 保存目标失败错误记录
-        console.error('[Pomodoro] Failed to save goal:', e);
-      }
+      } catch (e) { console.error('[Pomodoro] Failed to save goal:', e); }
     }
   };
 
   const mainButtonLabel = isRunning ? '暂停' : isPaused ? '继续' : '开始';
-  const mainButtonIcon = isRunning ? (
-    <Pause className="w-icon-md h-icon-md" />
-  ) : (
-    <Play className="w-icon-md h-icon-md" />
-  );
-
-  // ── 减弱动效偏好 ──
+  const mainButtonIcon = isRunning ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />;
   const prefersReduced = useReducedMotion();
 
-  // ── 过渡动画配置 ──
-  const immersiveEnter = prefersReduced
-    ? {}
-    : { opacity: 0, scale: 0.9 };
-  const immersiveAnimate = { opacity: 1, scale: 1 };
-  const immersiveExit = prefersReduced
-    ? {}
-    : { opacity: 0, scale: 0.95 };
-  const immersiveTransition = prefersReduced
-    ? { duration: 0 }
-    : { duration: 0.45, ease: [0.4, 0, 0.2, 1] };
-
-  const normalEnter = prefersReduced
-    ? {}
-    : { opacity: 0 };
-  const normalAnimate = { opacity: 1 };
-  const normalExit = prefersReduced
-    ? {}
-    : { opacity: 0 };
-  const normalTransition = prefersReduced
-    ? { duration: 0 }
-    : { duration: 0.35, ease: [0.4, 0, 0.2, 1] };
+  const immersiveEnter = prefersReduced ? {} : { opacity: 0, scale: 0.9, filter: 'blur(8px)' };
+  const immersiveAnimate = { opacity: 1, scale: 1, filter: 'blur(0px)' };
+  const immersiveExit = prefersReduced ? {} : { opacity: 0, scale: 0.95, filter: 'blur(4px)' };
+  const immersiveTransition = prefersReduced ? { duration: 0 } : { duration: 0.5, ease: [0.25, 0.1, 0.25, 1] as const };
 
   return (
     <AnimatePresence mode="wait">
       {isImmersive ? (
-        /* ── 沉浸模式全屏覆盖（Portal 到 body，避免祖先 transform 破坏 fixed 定位） ── */
         createPortal(
           <motion.div
             key="immersive"
-            className="fixed inset-0 z-40 flex flex-col overflow-hidden border-none outline-none ring-0 shadow-none"
-            style={{ background: '#1A1D23' }}
+            className="fixed inset-0 z-40 flex flex-col overflow-hidden"
+            style={{ background: 'linear-gradient(180deg, #1C1B19 0%, #242320 50%, #1C1B19 100%)' }}
             initial={immersiveEnter}
             animate={immersiveAnimate}
             exit={immersiveExit}
             transition={immersiveTransition}
           >
-            {/* 顶部滑动退出条 */}
-            <div className="pt-kb-lg">
-              <SlideToExit onExit={exitImmersive} />
-            </div>
-
-            {/* 当前目标文字 */}
+            <div className="pt-6"><SlideToExit onExit={exitImmersive} /></div>
             {currentGoal && (
-              <p className="text-center text-b3 text-text-tertiary/60 mt-kb-sm truncate px-kb-xl">
-                {currentGoal}
-              </p>
+              <p className="text-center text-[12px] text-white/30 mt-2 truncate px-16">{currentGoal}</p>
             )}
-
-            {/* 圆环居中 */}
             <div className="flex-1 flex items-center justify-center">
               <ImmersiveTimer />
             </div>
@@ -224,180 +137,207 @@ export default function PomodoroPage() {
           document.body,
         )
       ) : (
-        /* ── 普通视图 ── */
         <motion.div
           key="normal"
-          className="flex flex-col items-center min-h-[calc(100vh-4rem)] md:min-h-[calc(100vh-4rem)] px-kb-md py-kb-lg"
-          initial={normalEnter}
-          animate={normalAnimate}
-          exit={normalExit}
-          transition={normalTransition}
+          className="flex flex-col items-center min-h-[calc(100vh-12rem)] px-4 py-8 relative"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.3 }}
         >
-      {/* Mode tabs */}
-      <div className="flex items-center gap-kb-xs p-1 bg-bg-secondary rounded-kb-full border border-border/40">
-        <button
-          onClick={() => setMode('class')}
-          className={cn(
-            'flex items-center gap-kb-xs px-4 py-2 rounded-kb-full text-b2 font-medium',
-            'transition-all duration-kb-fast ease-kb-default',
-            'hover:scale-[1.02] active:scale-[0.98]',
-            mode === 'class'
-              ? 'bg-brand-600 text-white shadow-kb-sm'
-              : 'text-text-secondary hover:text-text-primary',
-          )}
-        >
-          <GraduationCap className="w-icon-sm h-icon-sm" strokeWidth={1.5} />
-          上课模式
-        </button>
-        <button
-          onClick={() => setMode('self_study')}
-          className={cn(
-            'flex items-center gap-kb-xs px-4 py-2 rounded-kb-full text-b2 font-medium',
-            'transition-all duration-kb-fast ease-kb-default',
-            'hover:scale-[1.02] active:scale-[0.98]',
-            mode === 'self_study'
-              ? 'bg-brand-600 text-white shadow-kb-sm'
-              : 'text-text-secondary hover:text-text-primary',
-          )}
-        >
-          <BookOpen className="w-icon-sm h-icon-sm" strokeWidth={1.5} />
-          自习模式
-        </button>
-      </div>
+          {/* 背景环境光 */}
+          <div className="fixed inset-0 pointer-events-none -z-10 overflow-hidden">
+            <div
+              className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full kb-ambient-glow"
+              style={{ background: `radial-gradient(circle, ${phase === 'work' ? 'rgba(91,138,114,0.06)' : phase === 'short_break' ? 'rgba(123,196,184,0.06)' : 'rgba(107,155,210,0.06)'} 0%, transparent 70%)` }}
+            />
+          </div>
 
-      {/* 模式提示标签 */}
-      <div className="mt-kb-md flex items-center gap-1.5 text-c1 text-text-tertiary">
-        {mode === 'class' ? (
-          <>
+          {/* Mode tabs — 胶囊切换 */}
+          <motion.div
+            className="flex items-center gap-0.5 p-1 bg-bg-secondary/80 backdrop-blur-sm rounded-full border border-border/30"
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1, duration: 0.3 }}
+          >
+            {([
+              { key: 'class' as const, label: '上课模式', sub: `${settings.classDuration}min`, Icon: GraduationCap },
+              { key: 'self_study' as const, label: '自习模式', sub: `${settings.workDuration}min`, Icon: BookOpen },
+            ]).map(({ key, label, sub, Icon }) => (
+              <motion.button
+                key={key}
+                onClick={() => setMode(key)}
+                whileTap={{ scale: 0.97 }}
+                className={cn(
+                  'relative flex items-center gap-1.5 px-5 py-2 rounded-full text-[13px] font-medium transition-all duration-300',
+                  mode === key
+                    ? 'text-white shadow-[0_2px_12px_rgba(91,138,114,0.3)]'
+                    : 'text-text-secondary hover:text-text-primary',
+                )}
+              >
+                {mode === key && (
+                  <motion.div
+                    layoutId="pomo-mode-bg"
+                    className="absolute inset-0 rounded-full bg-brand-500"
+                    transition={{ type: 'spring', stiffness: 350, damping: 30 }}
+                  />
+                )}
+                <span className="relative flex items-center gap-1.5">
+                  <Icon className="w-4 h-4" strokeWidth={1.5} />
+                  {label}
+                  <span className={cn('text-[10px] opacity-60', mode === key && 'opacity-80')}>· {sub}</span>
+                </span>
+              </motion.button>
+            ))}
+          </motion.div>
+
+          {/* 模式提示 */}
+          <motion.div
+            className="mt-3 flex items-center gap-1.5 text-[11px] text-text-tertiary/70"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.2 }}
+          >
             <Clock className="w-3.5 h-3.5" strokeWidth={1.5} />
-            <span>课堂时长 {settings.classDuration}min · 课间短休 {settings.shortBreakDuration}min</span>
-          </>
-        ) : (
-          <>
-            <Clock className="w-3.5 h-3.5" strokeWidth={1.5} />
-            <span>专注 {settings.workDuration}min · 多番茄连续，支持长休息</span>
-          </>
-        )}
-      </div>
+            <span>{mode === 'class' ? `课堂 ${settings.classDuration}min · 短休 ${settings.shortBreakDuration}min` : `专注 ${settings.workDuration}min · 连续番茄+长休`}</span>
+          </motion.div>
 
-      {/* Spacer to push ring to center */}
-      <div className="flex-1" />
+          <div className="flex-1" />
 
-      {/* Timer Ring */}
-      <div className="my-kb-xl">
-        {currentGoal && (
-          <p className="text-sm text-text-tertiary text-center mb-2 truncate">{currentGoal}</p>
-        )}
-        <TimerRing
-          totalSeconds={totalSeconds}
-          remainingSeconds={remainingSeconds}
-          phase={phase}
-          isRunning={isRunning}
-        />
-      </div>
-
-      {/* Completed count indicators */}
-      <div className="flex items-center gap-2 mb-kb-xl">
-        {Array.from({ length: settings.longBreakInterval }).map((_, i) => (
-          <div
-            key={i}
-            className={cn(
-              'w-2.5 h-2.5 rounded-kb-full transition-all duration-kb-normal',
-              i < completedCount
-                ? 'bg-pomodoro shadow-[0_0_6px_rgba(244,63,94,0.4)]'
-                : 'border-2 border-border/50',
+          {/* Timer Ring */}
+          <motion.div
+            className="my-8 relative"
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.15, duration: 0.4, ease: [0.25, 0.1, 0.25, 1] as const }}
+          >
+            {currentGoal && (
+              <p className="text-[12px] text-text-tertiary text-center mb-3 truncate max-w-[280px]">{currentGoal}</p>
             )}
+            <TimerRing
+              totalSeconds={totalSeconds}
+              remainingSeconds={remainingSeconds}
+              phase={phase}
+              isRunning={isRunning}
+            />
+          </motion.div>
+
+          {/* Session dots */}
+          <motion.div
+            className="flex items-center gap-2 mb-8"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.25 }}
+          >
+            {Array.from({ length: settings.longBreakInterval }).map((_, i) => (
+              <motion.div
+                key={i}
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ delay: 0.3 + i * 0.05, type: 'spring', stiffness: 400 }}
+                className={cn(
+                  'w-2.5 h-2.5 rounded-full transition-all duration-300',
+                  i < completedCount
+                    ? 'bg-brand-500 shadow-[0_0_8px_rgba(91,138,114,0.4)]'
+                    : 'border-2 border-border/40',
+                )}
+              />
+            ))}
+            <span className="text-[11px] text-text-tertiary ml-1 font-mono tabular-nums">
+              {completedCount}/{settings.longBreakInterval}
+            </span>
+          </motion.div>
+
+          {/* 白噪音控制 */}
+          <motion.div
+            className="flex items-center gap-2 mb-8 px-4 py-2 bg-bg-elevated/60 backdrop-blur-sm rounded-full border border-border/30"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+          >
+            <motion.button
+              whileTap={{ scale: 0.9 }}
+              onClick={toggleWhiteNoise}
+              className={cn(
+                'p-1.5 rounded-full transition-all duration-200',
+                audioPrefs.whiteNoiseEnabled ? 'text-brand-500' : 'text-text-tertiary hover:text-text-secondary',
+              )}
+            >
+              {audioPrefs.whiteNoiseEnabled
+                ? <Volume2 className="w-4 h-4" strokeWidth={1.5} />
+                : <VolumeX className="w-4 h-4" strokeWidth={1.5} />}
+            </motion.button>
+            <span className="text-[11px] text-text-tertiary select-none">🎵 {whiteNoiseTrack.nameZh}</span>
+            <input
+              type="range" min={0} max={1} step={0.05}
+              value={audioPrefs.whiteNoiseVolume}
+              onChange={(e) => handleWhiteNoiseVolume(parseFloat(e.target.value))}
+              className="w-16 h-1 accent-brand-500 cursor-pointer"
+            />
+          </motion.div>
+
+          {/* Controls */}
+          <motion.div
+            className="flex items-center gap-4 mb-8"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.35 }}
+          >
+            <motion.button
+              whileTap={{ scale: 0.9, rotate: -180 }}
+              onClick={reset}
+              className="w-10 h-10 rounded-full border border-border/40 flex items-center justify-center text-text-tertiary hover:text-text-secondary hover:border-text-tertiary/50 transition-all duration-200"
+            >
+              <RotateCcw className="w-4 h-4" strokeWidth={1.5} />
+            </motion.button>
+
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={handleMainButton}
+              className={cn(
+                'w-14 h-14 rounded-full flex items-center justify-center',
+                'bg-brand-500 text-white',
+                'shadow-[0_4px_16px_rgba(91,138,114,0.35)]',
+                'hover:shadow-[0_6px_24px_rgba(91,138,114,0.45)]',
+                'transition-shadow duration-300',
+              )}
+            >
+              {mainButtonIcon}
+            </motion.button>
+
+            <motion.button
+              whileTap={{ scale: 0.9, x: 3 }}
+              onClick={skip}
+              className="w-10 h-10 rounded-full border border-border/40 flex items-center justify-center text-text-tertiary hover:text-text-secondary hover:border-text-tertiary/50 transition-all duration-200"
+            >
+              <SkipForward className="w-4 h-4" strokeWidth={1.5} />
+            </motion.button>
+          </motion.div>
+
+          {/* 沉浸模式入口 */}
+          {(isRunning || isPaused) && (
+            <motion.button
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.4 }}
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
+              onClick={() => enterImmersive()}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-medium text-text-tertiary hover:text-text-primary hover:bg-bg-secondary/60 transition-all duration-200 mb-6"
+            >
+              <Focus className="w-4 h-4" strokeWidth={1.5} />
+              进入专注模式
+            </motion.button>
+          )}
+
+          <GoalInput
+            open={goalModalOpen}
+            onClose={() => setGoalModalOpen(false)}
+            onSubmit={handleGoalSubmit}
+            rememberGoal={rememberGoal}
+            onRememberChange={setRememberGoal}
           />
-        ))}
-        <span className="text-c1 text-text-tertiary ml-1">
-          {completedCount}/{settings.longBreakInterval}
-        </span>
-      </div>
-
-      {/* 白噪音控制区 */}
-      <div className="flex items-center gap-kb-sm mb-kb-xl px-kb-md py-2 bg-bg-secondary/60 rounded-kb-full border border-border/30">
-        <button
-          onClick={toggleWhiteNoise}
-          className={cn(
-            'p-1.5 rounded-kb-full transition-colors duration-kb-fast',
-            audioPrefs.whiteNoiseEnabled ? 'text-brand-500' : 'text-text-tertiary hover:text-text-secondary',
-          )}
-          title={audioPrefs.whiteNoiseEnabled ? '关闭白噪音' : '开启白噪音'}
-        >
-          {audioPrefs.whiteNoiseEnabled
-            ? <Volume2 className="w-icon-sm h-icon-sm" strokeWidth={1.5} />
-            : <VolumeX className="w-icon-sm h-icon-sm" strokeWidth={1.5} />}
-        </button>
-        <span className="text-c1 text-text-tertiary select-none">🎵 {whiteNoiseTrack.nameZh}</span>
-        <input
-          type="range"
-          min={0}
-          max={1}
-          step={0.05}
-          value={audioPrefs.whiteNoiseVolume}
-          onChange={(e) => handleWhiteNoiseVolume(parseFloat(e.target.value))}
-          className="w-16 h-1 accent-brand-500 cursor-pointer"
-        />
-      </div>
-
-      {/* Controls */}
-      <div className="flex items-center gap-kb-md mb-kb-2xl">
-        <Button
-          variant="ghost"
-          size="md"
-          onClick={reset}
-          icon={<RotateCcw className="w-icon-sm h-icon-sm" strokeWidth={1.5} />}
-          className="text-text-secondary"
-        >
-          重置
-        </Button>
-
-        <Button
-          variant="primary"
-          size="lg"
-          onClick={handleMainButton}
-          icon={mainButtonIcon}
-          className="px-8 min-w-[140px]"
-        >
-          {mainButtonLabel}
-        </Button>
-
-        <Button
-          variant="ghost"
-          size="md"
-          onClick={skip}
-          icon={<SkipForward className="w-icon-sm h-icon-sm" strokeWidth={1.5} />}
-          iconRight={undefined}
-          className="text-text-secondary"
-        >
-          跳过
-        </Button>
-      </div>
-
-      {/* 沉浸模式入口：计时器运行中或暂停时均可进入 */}
-      {(isRunning || isPaused) && (
-        <button
-          onClick={() => enterImmersive()}
-          className={cn(
-            'flex items-center gap-kb-xs px-4 py-2 rounded-kb-full text-b2 font-medium',
-            'text-text-tertiary hover:text-text-primary hover:bg-bg-secondary/80',
-            'transition-all duration-kb-fast ease-kb-default',
-            'mb-kb-lg',
-          )}
-        >
-          <Focus className="w-icon-sm h-icon-sm" strokeWidth={1.5} />
-          进入专注模式
-        </button>
-      )}
-
-      {/* Goal Input Modal */}
-      <GoalInput
-        open={goalModalOpen}
-        onClose={() => setGoalModalOpen(false)}
-        onSubmit={handleGoalSubmit}
-        rememberGoal={rememberGoal}
-        onRememberChange={setRememberGoal}
-      />
         </motion.div>
       )}
     </AnimatePresence>

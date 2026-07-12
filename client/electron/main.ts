@@ -1,334 +1,46 @@
 /**
  * Electron 主进程入口
  *
- * 创建 BrowserWindow，注册 IPC handler 代理 AI 网关请求。
+ * 应用生命周期管理、单实例锁、IPC handler 注册。
+ * 窗口创建 → windowManager.ts
+ * 托盘管理 → trayManager.ts
+ * AI 网关代理 → ai/index.ts + ai/handlers/*.ts
+ * 截图/音频采集 → captureHandlers.ts
  */
 
-import { app, BrowserWindow, ipcMain, desktopCapturer, Tray, Menu, nativeImage, dialog } from 'electron';
-import { ScreenCapture } from './screenCapture.js';
-import type { ScreenCaptureOptions, ScreenshotFrameData } from './screenCapture.js';
-import { AudioCapture, listAudioSources } from './audioCapture.js';
-import type { AudioCaptureOptions, AudioChunk } from './audioCapture.js';
-import * as path from 'path';
-import * as fs from 'fs';
-import { safeHandle } from './ipcUtils.js';
+import { app, BrowserWindow, Menu, dialog, session } from 'electron';
+import { safeHandle, setMainWindowId } from './ipcUtils.js';
 import { logger } from './logger.js';
-import { registerAIHandlers } from './aiHandlers.js';
+import { registerAIHandlers } from './ai/index.js';
 import { initAutoUpdater, checkForUpdate, downloadUpdate, installUpdate, destroyAutoUpdater, setAutoCheckEnabled } from './updater.js';
+import { createMainWindow, saveCloseChoice } from './windowManager.js';
+import { destroyTray } from './trayManager.js';
+import { registerCaptureHandlers, disposeCaptureHandlers } from './captureHandlers.js';
 
 // 仅开发模式禁用 Electron 安全警告，生产环境保留
 if (process.env.NODE_ENV === 'development' || !app.isPackaged) {
   process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
 }
 
-// CommonJS 模式下 __filename 和 __dirname 全局可用，无需额外声明
-
 // ================================================================
-// 常量与辅助函数
+// 模块级状态
 // ================================================================
 
 /** 标记应用是否正在退出（区分"最小化到托盘"与"真正退出"） */
-let isQuitting = false;
-
-/** 系统托盘实例 */
-let tray: Tray | null = null;
+const isQuittingRef = { value: false };
 
 /** 主窗口引用 */
 let mainWindow: BrowserWindow | null = null;
 
 // ================================================================
-// 关闭偏好持久化
+// 退出辅助
 // ================================================================
 
-/** 读取保存的关闭选择 */
-function getCloseChoice(): string | null {
-  try {
-    const configPath = path.join(app.getPath('userData'), 'close-preference.json');
-    if (fs.existsSync(configPath)) {
-      const data = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-      return data.choice || null;
-    }
-  } catch { /* ignore */ }
-  return null;
+/** 确认退出应用 */
+function performQuit(): void {
+  isQuittingRef.value = true;
+  app.quit();
 }
-
-/** 保存关闭选择到配置文件 */
-function saveCloseChoice(choice: string): void {
-  try {
-    const configPath = path.join(app.getPath('userData'), 'close-preference.json');
-    fs.writeFileSync(configPath, JSON.stringify({ choice }), 'utf-8');
-  } catch { /* ignore */ }
-}
-
-// ================================================================
-// 系统托盘
-// ================================================================
-
-/** 创建系统托盘图标及右键菜单 */
-function createTray(win: BrowserWindow): void {
-  const iconPath = path.join(__dirname, '..', 'app-icon.png');
-  let trayIcon = nativeImage.createFromPath(iconPath);
-
-  // 如果图标加载失败则创建 16x16 空白图标作为 fallback
-  if (trayIcon.isEmpty()) {
-    trayIcon = nativeImage.createEmpty();
-  } else {
-    trayIcon = trayIcon.resize({ width: 16, height: 16 });
-  }
-
-  tray = new Tray(trayIcon);
-  tray.setToolTip('课伴 KeBan');
-
-  const contextMenu = Menu.buildFromTemplate([
-    {
-      label: '显示窗口',
-      click: () => {
-        win.show();
-        win.focus();
-      },
-    },
-    { type: 'separator' },
-    {
-      label: '退出',
-      click: () => {
-        isQuitting = true;
-        app.quit();
-      },
-    },
-  ]);
-
-  tray.setContextMenu(contextMenu);
-
-  // 双击托盘图标恢复窗口
-  tray.on('double-click', () => {
-    if (win.isMinimized()) win.restore();
-    if (!win.isVisible()) win.show();
-    win.focus();
-  });
-}
-
-// ================================================================
-// 创建主窗口
-// ================================================================
-
-function createWindow(): void {
-  const win = new BrowserWindow({
-    width: 1200,
-    height: 800,
-    minWidth: 800,
-    minHeight: 600,
-    title: '课伴',
-    frame: false,
-    icon: path.join(__dirname, '..', 'app-icon.png'),
-    webPreferences: {
-      contextIsolation: true,
-      nodeIntegration: false,
-      preload: path.join(__dirname, 'preload.js'),
-    },
-  });
-
-  mainWindow = win;
-
-  // 窗口最大化状态变化时通知前端
-  win.on('maximize', () => {
-    win.webContents.send('window:maximized-changed', true);
-  });
-  win.on('unmaximize', () => {
-    win.webContents.send('window:maximized-changed', false);
-  });
-
-  // 判断开发/生产模式
-  const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
-
-  if (isDev) {
-    // 开发模式：连接 Vite 开发服务器
-    win.loadURL('http://localhost:5173');
-    win.webContents.openDevTools();
-  } else {
-    // 生产模式：加载打包后的 index.html
-    win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
-  }
-
-  // 关闭窗口时根据用户偏好决定行为
-  win.on('close', (event) => {
-    if (!isQuitting) {
-      event.preventDefault();
-      const savedChoice = getCloseChoice();
-      if (savedChoice === 'quit') {
-        isQuitting = true;
-        app.quit();
-      } else if (savedChoice === 'minimize') {
-        win.hide();
-      } else {
-        // 无记忆选择，通知前端弹出确认对话框
-        win.webContents.send('window:closing');
-      }
-    }
-  });
-
-  // 创建系统托盘
-  createTray(win);
-}
-
-// ================================================================
-// IPC Handler — 屏幕截图采集
-// ================================================================
-
-/** 当前活跃的截图采集实例 */
-let activeCapture: ScreenCapture | null = null;
-
-/**
- * screen_capture_start — 开始截图采集
- * 创建 ScreenCapture 实例，定时截图并通过 IPC 推送到渲染进程
- */
-safeHandle(
-  'screen_capture_start',
-  async (event, options: ScreenCaptureOptions) => {
-    // 先停止已有实例
-    if (activeCapture) {
-      activeCapture.dispose();
-      activeCapture = null;
-    }
-
-    const senderWin = BrowserWindow.fromWebContents(event.sender);
-
-    activeCapture = new ScreenCapture(options, (frame: ScreenshotFrameData) => {
-      // 通过 IPC event 将截图帧推送到渲染进程
-      if (senderWin && !senderWin.isDestroyed()) {
-        senderWin.webContents.send('screen_capture_frame', frame);
-      }
-    });
-
-    activeCapture.start();
-    logger.info('[IPC] screen_capture_start 已启动');
-    return { success: true };
-  },
-);
-
-/**
- * screen_capture_stop — 停止截图采集
- */
-safeHandle('screen_capture_stop', async () => {
-  if (activeCapture) {
-    activeCapture.dispose();
-    activeCapture = null;
-    logger.info('[IPC] screen_capture_stop 已停止');
-  }
-  return { success: true };
-});
-
-/**
- * screen_list_windows — 获取可捕获窗口列表
- * 返回窗口 id、标题、缩略图（base64）
- */
-safeHandle('screen_list_windows', async () => {
-  try {
-    const sources = await desktopCapturer.getSources({
-      types: ['window'],
-      thumbnailSize: { width: 240, height: 135 },
-    });
-
-    return sources.map((src) => ({
-      id: src.id,
-      title: src.name,
-      thumbnail: src.thumbnail.toDataURL(),
-    }));
-  } catch (err) {
-    logger.error('[IPC] screen_list_windows failed:', err);
-    return [];
-  }
-});
-
-// ================================================================
-// IPC Handler — 系统音频捕获
-// ================================================================
-
-/** 当前活跃的音频捕获实例 */
-let activeAudioCapture: AudioCapture | null = null;
-
-/**
- * audio_list_sources — 列出可用的系统音频源
- * 使用 desktopCapturer.getSources({ audio: true })
- */
-safeHandle('audio_list_sources', async () => {
-  try {
-    return await listAudioSources();
-  } catch (err) {
-    logger.error('[IPC] audio_list_sources failed:', err);
-    return [];
-  }
-});
-
-/**
- * audio_capture_start — 开始系统音频捕获
- * 创建 AudioCapture 实例，通过 desktopCapturer 发现音频源，
- * 委托渲染进程执行 getUserMedia 采集
- */
-safeHandle(
-  'audio_capture_start',
-  async (event, options?: Partial<AudioCaptureOptions> & { sourceId?: string }) => {
-    // 先停止已有实例
-    if (activeAudioCapture) {
-      activeAudioCapture.dispose();
-      activeAudioCapture = null;
-    }
-
-    const senderWin = BrowserWindow.fromWebContents(event.sender);
-    if (!senderWin || senderWin.isDestroyed()) {
-      return { success: false, error: 'No valid window' };
-    }
-
-    const captureOptions: Partial<AudioCaptureOptions> = {
-      chunkDurationMs: options?.chunkDurationMs,
-      sampleRate: options?.sampleRate,
-      channels: options?.channels,
-    };
-
-    activeAudioCapture = new AudioCapture(captureOptions, (chunk: AudioChunk) => {
-      // 通过 IPC event 将音频块推送到渲染进程
-      if (senderWin && !senderWin.isDestroyed()) {
-        senderWin.webContents.send('audio_capture_chunk', chunk);
-      }
-    });
-
-    try {
-      await activeAudioCapture.start(senderWin, options?.sourceId);
-      logger.info('[IPC] audio_capture_start 已启动');
-      return { success: true };
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      logger.error('[IPC] audio_capture_start failed:', message);
-      activeAudioCapture.dispose();
-      activeAudioCapture = null;
-      return { success: false, error: message };
-    }
-  },
-);
-
-/**
- * audio_capture_stop — 停止系统音频捕获
- */
-safeHandle('audio_capture_stop', async () => {
-  if (activeAudioCapture) {
-    activeAudioCapture.dispose();
-    activeAudioCapture = null;
-    logger.info('[IPC] audio_capture_stop 已停止');
-  }
-  return { success: true };
-});
-
-/**
- * audio_capture_chunk — 接收渲染进程上报的音频块
- * 渲染进程完成 getUserMedia + Web Audio 切片后，通过此 channel 回传数据
- */
-ipcMain.on(
-  'audio_capture_chunk',
-  (_event, data: { audioBuffer: ArrayBuffer; sampleRate: number; channels: number; durationMs: number }) => {
-    if (activeAudioCapture && activeAudioCapture.isCapturing) {
-      activeAudioCapture.handleRendererChunk(data);
-    }
-  },
-);
 
 // ================================================================
 // 单实例锁 — 防止重复启动导致多个后台进程
@@ -337,10 +49,8 @@ ipcMain.on(
 const gotTheLock = app.requestSingleInstanceLock();
 
 if (!gotTheLock) {
-  // 已有实例运行，立即退出
   app.quit();
 } else {
-  // 监听第二个实例启动事件，聚焦已有窗口
   app.on('second-instance', () => {
     const win = BrowserWindow.getAllWindows()[0];
     if (win) {
@@ -365,17 +75,44 @@ if (!gotTheLock) {
 
   app.whenReady().then(() => {
     logger.info('App ready');
+
+    // ================================================================
+    // SEC-005: CSP 安全策略注入
+    // ================================================================
+    const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+
+    try {
+      session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+        // 开发环境：允许 unsafe-inline/unsafe-eval（Vite HMR 需要）
+        // 生产环境：禁止 unsafe-eval，保留 unsafe-inline（Tailwind 运行时需要）
+        const csp = isDev
+          ? "default-src 'self' 'unsafe-inline' 'unsafe-eval' http://localhost:* ws://localhost:*; connect-src 'self' http://localhost:* ws://localhost:* https://*.supabase.co wss://*.supabase.co; img-src 'self' data: blob: https://*.supabase.co; font-src 'self' data:;"
+          : "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co; font-src 'self' data:; connect-src 'self' https://*.supabase.co wss://*.supabase.co; frame-ancestors 'none';";
+
+        callback({
+          responseHeaders: {
+            ...details.responseHeaders,
+            'Content-Security-Policy': [csp],
+          },
+        });
+      });
+      logger.info(`[SEC] CSP policy injected (${isDev ? 'development' : 'production'} mode)`);
+    } catch (err) {
+      // CSP 注入失败时记录错误但不阻塞启动
+      logger.error('[SEC] Failed to inject CSP policy', err);
+    }
+
     registerAIHandlers();
+    registerCaptureHandlers();
 
     // 隐藏默认 Electron 菜单栏
     Menu.setApplicationMenu(null);
 
-    // 新增：get-app-version handler
+    // 通用 IPC handlers
     safeHandle('get-app-version', async () => {
       return app.getVersion();
     });
 
-    // 新增：dialog:selectDirectory handler — 允许用户选择数据存储目录
     safeHandle('dialog:selectDirectory', async (_event, options?: { title?: string; defaultPath?: string }) => {
       const result = await dialog.showOpenDialog({
         title: options?.title || '选择数据存储目录',
@@ -390,58 +127,52 @@ if (!gotTheLock) {
       return { canceled: false, path: result.filePaths[0] };
     });
 
-    createWindow();
+    // 创建主窗口（内部会创建托盘）
+    mainWindow = createMainWindow(isQuittingRef, performQuit);
+
+    // SEC-005: 设置主窗口 ID 以启用 IPC sender 验证
+    setMainWindowId(mainWindow.webContents.id);
+
     initAutoUpdater(mainWindow);
 
     // ---- 窗口控制 IPC handlers ----
     safeHandle('window:minimize', async () => {
-      const win = mainWindow;
-      if (win) win.minimize();
+      if (mainWindow) mainWindow.minimize();
       return { success: true };
     });
 
     safeHandle('window:maximize', async () => {
-      const win = mainWindow;
-      if (win) {
-        if (win.isMaximized()) {
-          win.unmaximize();
+      if (mainWindow) {
+        if (mainWindow.isMaximized()) {
+          mainWindow.unmaximize();
         } else {
-          win.maximize();
+          mainWindow.maximize();
         }
       }
       return { success: true };
     });
 
     safeHandle('window:close', async () => {
-      const win = mainWindow;
-      if (win) {
-        // 触发 close 事件，走 FEAT-028 的确认流程
-        win.close();
-      }
+      if (mainWindow) mainWindow.close();
       return { success: true };
     });
 
     safeHandle('window:isMaximized', async () => {
-      const win = mainWindow;
-      return win ? win.isMaximized() : false;
+      return mainWindow ? mainWindow.isMaximized() : false;
     });
 
-    // 关闭窗口行为选择回调
     safeHandle('window:close-action', async (_event, action: 'quit' | 'minimize' | 'cancel', remember: boolean) => {
-      const win = mainWindow;
-      if (!win) return;
+      if (!mainWindow) return;
 
       if (remember) {
         saveCloseChoice(action);
       }
 
       if (action === 'quit') {
-        isQuitting = true;
-        app.quit();
+        performQuit();
       } else if (action === 'minimize') {
-        win.hide();
+        mainWindow.hide();
       }
-      // cancel: 什么都不做
     });
 
     // 更新相关 IPC handler
@@ -467,37 +198,25 @@ if (!gotTheLock) {
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {
-        createWindow();
+        mainWindow = createMainWindow(isQuittingRef, performQuit);
+        // SEC-005: macOS activate 重新创建窗口时同步更新 sender ID
+        setMainWindowId(mainWindow.webContents.id);
       }
     });
   });
 
-  // 标记应用即将退出，让 close 事件不再拦截
+  // 标记应用即将退出
   app.on('before-quit', () => {
-    isQuitting = true;
+    isQuittingRef.value = true;
   });
 
   // 所有窗口关闭时退出应用
   app.on('window-all-closed', () => {
     logger.info('All windows closed');
 
-    // 清理截图采集实例
-    if (activeCapture) {
-      activeCapture.dispose();
-      activeCapture = null;
-    }
-    // 清理音频捕获实例
-    if (activeAudioCapture) {
-      activeAudioCapture.dispose();
-      activeAudioCapture = null;
-    }
-    // 清理自动更新定时器
+    disposeCaptureHandlers();
     destroyAutoUpdater();
-    // 清理托盘
-    if (tray) {
-      tray.destroy();
-      tray = null;
-    }
+    destroyTray();
     mainWindow = null;
     app.quit();
   });

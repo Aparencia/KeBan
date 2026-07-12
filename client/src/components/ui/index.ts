@@ -7,7 +7,7 @@ export { IconButton } from './IconButton';
 export type { IconButtonProps, IconButtonSize, IconButtonVariant } from './IconButton';
 
 // Card
-export { Card } from './Card';
+export { Card, CardHeader, CardContent, CardFooter } from './Card';
 export type { CardProps, CardVariant, CardPadding } from './Card';
 
 // Modal

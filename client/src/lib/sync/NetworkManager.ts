@@ -29,11 +29,11 @@ export class NetworkManager {
     heartbeatIntervalMs?: number;
     weakThresholdMs?: number;
   }) {
-    const apiBase = import.meta.env.VITE_API_BASE_URL || 'http://121.40.24.242:8080';
-    this.heartbeatUrl = options?.heartbeatUrl || `${apiBase}/api/health`;
+    const apiBase = import.meta.env.VITE_API_BASE_URL || '';
+    this.heartbeatUrl = options?.heartbeatUrl || (apiBase ? `${apiBase}/api/health` : '');
     // 桌面环境（Electron）下心跳 URL 必须是绝对 URL，避免协议拦截
-    if (isDesktop() && !this.heartbeatUrl.startsWith('http')) {
-      this.heartbeatUrl = 'http://121.40.24.242:8080/api/health';
+    if (isDesktop() && this.heartbeatUrl && !this.heartbeatUrl.startsWith('http')) {
+      this.heartbeatUrl = apiBase ? `${apiBase}/api/health` : '';
     }
     this.heartbeatIntervalMs = options?.heartbeatIntervalMs || 30000; // 30秒
     this.weakThresholdMs = options?.weakThresholdMs || 5000; // 5秒超时视为弱网
@@ -119,6 +119,11 @@ export class NetworkManager {
   }
 
   private async ping(): Promise<void> {
+    // 心跳 URL 未配置时跳过检测
+    if (!this.heartbeatUrl) {
+      return;
+    }
+
     const start = performance.now();
     try {
       const controller = new AbortController();
@@ -164,7 +169,7 @@ export class NetworkManager {
 
 // 单例导出
 export const networkManager = new NetworkManager({
-  heartbeatUrl: import.meta.env.VITE_API_HEALTH_URL || `${import.meta.env.VITE_API_BASE_URL || 'http://121.40.24.242:8080'}/api/health`,
+  heartbeatUrl: import.meta.env.VITE_API_HEALTH_URL || (import.meta.env.VITE_API_BASE_URL ? `${import.meta.env.VITE_API_BASE_URL}/api/health` : ''),
   heartbeatIntervalMs: 30000,
   weakThresholdMs: 5000,
 });

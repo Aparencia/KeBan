@@ -1,5 +1,11 @@
 import { db } from './database';
-import type { KbanDeckFile, FlashcardDeck, Flashcard } from '@/types/models';
+import type {
+  KbanDeckFile, FlashcardDeck, Flashcard,
+  PomodoroSession, PomodoroSettings, Note, NoteFolder,
+  FlashcardReview, FeynmanNote, FeynmanSummary, FeynmanWeakPoint,
+  OperationLog, AppSettings, StudyCheckIn, Achievement,
+  PomodoroGoal, SyncConflict, OfflineQueueItem, WindowCapture,
+} from '@/types/models';
 
 /**
  * 导出牌组为 .kban-deck 文件结构（v1.1 增强版）
@@ -25,7 +31,8 @@ export async function exportDeck(deckId: string): Promise<KbanDeckFile> {
     cards: cards.map((card) => ({
       front: card.front,
       back: card.back,
-      tags: (card as any).tags || [],
+      // TODO: Flashcard 类型尚未定义 tags 字段，此处兼容旧数据
+      tags: ('tags' in card ? (card as Flashcard & { tags?: string[] }).tags : undefined) || [],
       type: card.type,
       sourceNoteId: card.sourceNoteId,
     })),
@@ -179,25 +186,25 @@ export interface ExportData {
   version: string;
   exportedAt: string;
   data: {
-    pomodoroSessions: any[];
-    pomodoroSettings: any[];
-    notes: any[];
-    noteFolders: any[];
-    flashcardDecks: any[];
-    flashcards: any[];
-    flashcardReviews: any[];
-    feynmanNotes: any[];
-    feynmanSummaries: any[];
-    feynmanWeakPoints: any[];
-    operationLog: any[];
-    appSettings: any[];
+    pomodoroSessions: PomodoroSession[];
+    pomodoroSettings: PomodoroSettings[];
+    notes: Note[];
+    noteFolders: NoteFolder[];
+    flashcardDecks: FlashcardDeck[];
+    flashcards: Flashcard[];
+    flashcardReviews: FlashcardReview[];
+    feynmanNotes: FeynmanNote[];
+    feynmanSummaries: FeynmanSummary[];
+    feynmanWeakPoints: FeynmanWeakPoint[];
+    operationLog: OperationLog[];
+    appSettings: AppSettings[];
     // v0.5.0 A1.3 补全：
-    studyCheckIns: any[];
-    achievements: any[];
-    pomodoroGoals: any[];
-    syncConflicts: any[];
-    offlineQueue: any[];
-    windowCaptures: any[];
+    studyCheckIns: StudyCheckIn[];
+    achievements: Achievement[];
+    pomodoroGoals: PomodoroGoal[];
+    syncConflicts: SyncConflict[];
+    offlineQueue: OfflineQueueItem[];
+    windowCaptures: WindowCapture[];
   };
 }
 

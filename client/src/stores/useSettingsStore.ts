@@ -3,6 +3,38 @@ import { getAIConfig, saveAIConfig as persistAIConfig, updateAIGatewayUrl } from
 import type { AIConfig } from '@/lib/ai/config';
 import { saveUserKeys as persistUserKeys, getUserKeys, clearUserKeys as persistClearUserKeys } from '@/lib/ai/apiKeyManager';
 import type { AIProviderKeys } from '@/lib/ai/apiKeyManager';
+import {
+  DEFAULT_SOUND_SETTINGS,
+  SOUND_SETTINGS_KEY,
+  type SoundSettings,
+} from '@/lib/audio/audioConfig';
+import { soundPlayer } from '@/lib/audio/SoundPlayer';
+
+/**
+ * 从 localStorage 加载音效设置
+ * @returns 音效设置
+ */
+function loadSoundSettings(): SoundSettings {
+  try {
+    const saved = localStorage.getItem(SOUND_SETTINGS_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved) as Partial<SoundSettings>;
+      return {
+        masterMute: parsed.masterMute ?? DEFAULT_SOUND_SETTINGS.masterMute,
+        categories: { ...DEFAULT_SOUND_SETTINGS.categories, ...parsed.categories },
+      };
+    }
+  } catch { /* 静默降级 */ }
+  return { ...DEFAULT_SOUND_SETTINGS };
+}
+
+/**
+ * 持久化音效设置到 localStorage
+ * @param settings - 音效设置
+ */
+function persistSoundSettings(settings: SoundSettings): void {
+  try { localStorage.setItem(SOUND_SETTINGS_KEY, JSON.stringify(settings)); } catch { /* ignore */ }
+}
 
 interface SettingsState {
   /** AI 服务配置 */
@@ -13,6 +45,8 @@ interface SettingsState {
   userKeys: AIProviderKeys;
   /** 各 provider Key 可见性 */
   showUserKey: Record<string, boolean>;
+  /** 音效设置（分类控制） */
+  soundSettings: SoundSettings;
 
   /** 更新 AI 配置（内存态） */
   setAIConfig: (config: AIConfig) => void;
@@ -22,6 +56,11 @@ interface SettingsState {
   setUserKeys: (keys: AIProviderKeys | ((prev: AIProviderKeys) => AIProviderKeys)) => void;
   /** 切换指定 provider Key 可见性 */
   toggleUserKeyVisibility: (provider: string) => void;
+  /**
+   * 更新音效设置（合并更新 + 同步到 SoundPlayer + 持久化）
+   * @param partial - 部分音效设置
+   */
+  updateSoundSettings: (partial: Partial<SoundSettings>) => void;
 
   /** 保存 AI 配置到 localStorage */
   saveAIConfigAction: () => void;
@@ -31,11 +70,16 @@ interface SettingsState {
   clearUserKeysAction: () => void;
 }
 
+/** 初始化时加载音效设置并同步到 SoundPlayer */
+const initialSoundSettings = loadSoundSettings();
+soundPlayer.updateSettings(initialSoundSettings);
+
 export const useSettingsStore = create<SettingsState>((set, get) => ({
   aiConfig: getAIConfig(),
   showApiKey: false,
   userKeys: getUserKeys(),
   showUserKey: {},
+  soundSettings: initialSoundSettings,
 
   setAIConfig: (config) => set({ aiConfig: config }),
 
@@ -53,6 +97,19 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     set((state) => ({
       showUserKey: { ...state.showUserKey, [provider]: !state.showUserKey[provider] },
     })),
+
+  updateSoundSettings: (partial) => {
+    const current = get().soundSettings;
+    const next: SoundSettings = {
+      masterMute: partial.masterMute ?? current.masterMute,
+      categories: partial.categories
+        ? { ...current.categories, ...partial.categories }
+        : current.categories,
+    };
+    set({ soundSettings: next });
+    soundPlayer.updateSettings(next);
+    persistSoundSettings(next);
+  },
 
   saveAIConfigAction: () => {
     const { aiConfig } = get();

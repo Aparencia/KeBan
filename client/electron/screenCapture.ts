@@ -6,6 +6,7 @@
  */
 
 import { desktopCapturer, DesktopCapturerSource, BrowserWindow } from 'electron';
+import { logger } from './logger';
 
 // ================================================================
 // 类型定义
@@ -92,7 +93,7 @@ export class ScreenCapture {
   start(): void {
     if (this.timer !== null || this.disposed) return;
 
-    console.log(
+    logger.info(
       `[ScreenCapture] 开始采集, interval=${this.options.interval}ms, windowId=${this.options.windowId ?? 'auto'}`,
     );
 
@@ -110,7 +111,7 @@ export class ScreenCapture {
     if (this.timer !== null) {
       clearInterval(this.timer);
       this.timer = null;
-      console.log('[ScreenCapture] 停止采集');
+      logger.info('[ScreenCapture] 停止采集');
     }
   }
 
@@ -134,7 +135,7 @@ export class ScreenCapture {
     this.stop();
     this.disposed = true;
     this.lastFrameHash = '';
-    console.log('[ScreenCapture] 已销毁');
+    logger.info('[ScreenCapture] 已销毁');
   }
 
   // ================================================================

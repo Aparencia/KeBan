@@ -1,9 +1,46 @@
 import React from 'react';
+import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '@/lib/utils';
 
-export type InputSize = 'sm' | 'md' | 'lg';
+export type InputSize = NonNullable<VariantProps<typeof inputVariants>['size']>;
 
-export interface InputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'size' | 'prefix'> {
+const inputVariants = cva(
+  [
+    'flex items-center rounded-kb-md',
+    'bg-bg-secondary border',
+    'transition-all duration-kb-fast ease-kb-default',
+    'focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-200/50',
+  ].join(' '),
+  {
+    variants: {
+      size: {
+        sm: 'h-8 px-2.5 text-b3 gap-1.5',
+        md: 'h-10 px-3 text-b2 gap-2',
+        lg: 'h-12 px-4 text-b1 gap-2.5',
+      },
+      error: {
+        true: 'border-semantic-error/60 focus-within:border-semantic-error focus-within:ring-semantic-error/20',
+        false: 'border-border/70',
+      },
+    },
+    defaultVariants: {
+      size: 'md',
+      error: false,
+    },
+  },
+);
+
+/**
+ * 输入框组件 props
+ * @param label - 输入框标签文本
+ * @param error - 错误提示文本
+ * @param prefix - 输入框前缀节点（图标等）
+ * @param suffix - 输入框后缀节点（图标等）
+ * @param size - 尺寸变体：sm(32px) | md(40px) | lg(48px)
+ * @ai-context 深海静谧主题输入框，4px 基准网格，双主题色板
+ */
+export interface InputProps
+  extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'size' | 'prefix'> {
   label?: string;
   error?: string;
   prefix?: React.ReactNode;
@@ -11,14 +48,14 @@ export interface InputProps extends Omit<React.InputHTMLAttributes<HTMLInputElem
   size?: InputSize;
 }
 
-const sizeStyles: Record<InputSize, string> = {
-  sm: 'h-8 px-2.5 text-b3 gap-1.5',
-  md: 'h-10 px-3 text-b2 gap-2',
-  lg: 'h-12 px-4 text-b1 gap-2.5',
-};
-
+/**
+ * 课伴通用输入框组件
+ * @param props - InputProps
+ * @returns React 输入框元素
+ * @ai-context 使用 cva 变体，支持错误态/正常态边框色切换
+ */
 export const Input = React.forwardRef<HTMLInputElement, InputProps>(
-  ({ label, error, prefix, suffix, size = 'md', className, id, ...props }, ref) => {
+  ({ label, error, prefix, suffix, size, className, id, ...props }, ref) => {
     const inputId = id || label?.toLowerCase().replace(/\s+/g, '-');
 
     return (
@@ -29,19 +66,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
           </label>
         )}
 
-        <div
-          className={cn(
-            'flex items-center rounded-kb-md',
-            'bg-bg-secondary border',
-            'transition-all duration-kb-fast ease-kb-default',
-            'focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-200/50',
-            error
-              ? 'border-[#F43F5E]/60 focus-within:border-[#F43F5E] focus-within:ring-rose-200/50'
-              : 'border-border/70',
-            sizeStyles[size],
-            className,
-          )}
-        >
+        <div className={cn(inputVariants({ size, error: !!error }), className)}>
           {prefix && <span className="text-text-tertiary flex-shrink-0">{prefix}</span>}
 
           <input
@@ -59,7 +84,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
         </div>
 
         {error && (
-          <p className="text-c1 text-[#F43F5E]">{error}</p>
+          <p className="text-c1 text-semantic-error">{error}</p>
         )}
       </div>
     );

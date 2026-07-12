@@ -1,39 +1,65 @@
 /* ============================================
-   课伴 KeBan - Design Tokens
+   课伴 KeBan - Design Tokens (深海静谧主题)
    前缀: --kb-
+   双主题: 浅色(暖色奶油调, 默认) + 深色(深海静谧)
    ============================================ */
 
-/* ---- 品牌色（全局，与主题无关） ---- */
+/* ---- 浅色主题（默认 — 暖色奶油调） ---- */
 :root {
-  /* 品牌主色 - 橙色系（活力橙） */
-  --kb-brand-50: #FFF0EB;
-  --kb-brand-100: #FFE0D4;
-  --kb-brand-200: #FFC1A8;
-  --kb-brand-300: #FFA27C;
-  --kb-brand-400: #FF8D64;
-  --kb-brand-500: #FF7F50;
-  --kb-brand-600: #FF6347;
-  --kb-brand-700: #E04E3A;
-  --kb-brand-800: #C0392B;
-  --kb-brand-900: #962D22;
+  /* 品牌主色 - 蓝色系（专注/平静） */
+  --kb-brand-50: #EFF6FF;
+  --kb-brand-100: #DBEAFE;
+  --kb-brand-200: #BFDBFE;
+  --kb-brand-300: #93C5FD;
+  --kb-brand-400: #60A5FA;
+  --kb-brand-500: #3B82F6;
+  --kb-brand-600: #2563EB;
+  --kb-brand-700: #1D4ED8;
+  --kb-brand-800: #1E40AF;
+  --kb-brand-900: #1E3A8A;
 
-  /* 品牌辅色 - 青色系（智慧青） */
-  --kb-accent-50: #EBF5FF;
-  --kb-accent-100: #D6EBFF;
-  --kb-accent-200: #ADD6FF;
-  --kb-accent-300: #85C2FF;
-  --kb-accent-400: #6AB4FF;
-  --kb-accent-500: #4FB0FF;
-  --kb-accent-600: #3498DB;
-  --kb-accent-700: #2980B9;
-  --kb-accent-800: #1F6391;
-  --kb-accent-900: #164B6E;
+  /* 品牌辅色 - 琥珀/青色系（成就/温暖） */
+  --kb-accent-50: #FFF7ED;
+  --kb-accent-100: #FFEDD5;
+  --kb-accent-200: #FED7AA;
+  --kb-accent-300: #FDBA74;
+  --kb-accent-400: #FB923C;
+  --kb-accent-500: #F59E0B;
+  --kb-accent-600: #D97706;
+  --kb-accent-700: #B45309;
+  --kb-accent-800: #92400E;
+  --kb-accent-900: #78350F;
 
-  /* 语义色 */
-  --kb-color-success: #66D9A0;
-  --kb-color-warning: #FFB84D;
-  --kb-color-error: #FF6B6B;
-  --kb-color-info: #4FB0FF;
+  /* 功能色 */
+  --kb-focus-blue: #3B82F6;
+  --kb-amber: #F59E0B;
+  --kb-moss-green: #22C55E;
+  --kb-cyber-cyan: #06B6D4;
+  --kb-color-error: #EF4444;
+  --kb-color-warning: #F97316;
+  --kb-color-success: #22C55E;
+  --kb-color-info: #3B82F6;
+
+  /* 背景色 — 暖色奶油调 */
+  --kb-bg-primary: #FAF8F5;
+  --kb-bg-secondary: #F2EDE6;
+  --kb-bg-tertiary: #EBE5DC;
+  --kb-bg-elevated: #FFFFFF;
+
+  /* 文字色 */
+  --kb-text-primary: #2C2720;
+  --kb-text-secondary: #7A7570;
+  --kb-text-tertiary: #9C9590;
+  --kb-text-inverse: #FFFFFF;
+
+  /* 边框 */
+  --kb-border-default: #DDD5CA;
+  --kb-border-strong: #CCC3B7;
+
+  /* 阴影（暖色调阴影） */
+  --kb-shadow-sm: 0 1px 2px rgba(30, 27, 24, 0.04);
+  --kb-shadow-md: 0 4px 6px -1px rgba(30, 27, 24, 0.06), 0 2px 4px -2px rgba(30, 27, 24, 0.04);
+  --kb-shadow-lg: 0 4px 12px rgba(30, 27, 24, 0.06);
 
   /* 字体系统 */
   --kb-font-sans: 'Inter', 'PingFang SC', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -61,25 +87,25 @@
   --kb-space-xl: 2rem;      /* 32px */
   --kb-space-2xl: 3rem;     /* 48px */
 
-  /* 圆角系统（偏大，圆润风格） */
+  /* 圆角系统（大圆角，柔和风格） */
   --kb-radius-sm: 0.5rem;      /* 8px */
   --kb-radius-md: 0.75rem;     /* 12px */
   --kb-radius-lg: 1rem;        /* 16px */
-  --kb-radius-xl: 1.5rem;      /* 24px */
+  --kb-radius-xl: 1.25rem;     /* 20px */
   --kb-radius-full: 9999px;    /* 圆形/胶囊 */
 
   /* 动效系统 */
   --kb-duration-fast: 150ms;
   --kb-duration-normal: 250ms;
   --kb-duration-slow: 400ms;
-  --kb-duration-stagger: 75ms;  /* stagger 项间延迟 */
+  --kb-duration-stagger: 75ms;
   --kb-ease-default: cubic-bezier(0.4, 0, 0.2, 1);
   --kb-ease-in: cubic-bezier(0.4, 0, 1, 1);
   --kb-ease-out: cubic-bezier(0, 0, 0.2, 1);
   --kb-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
-  --kb-ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);  /* 物理回弹 */
-  --kb-ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);         /* 平滑过渡 */
-  --kb-ease-spring: cubic-bezier(0.175, 0.885, 0.32, 1.275); /* 弹性 */
+  --kb-ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --kb-ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+  --kb-ease-spring: cubic-bezier(0.175, 0.885, 0.32, 1.275);
 
   /* 图标系统 (Lucide Icons, 线性风格) */
   --kb-icon-default: currentColor;
@@ -100,15 +126,36 @@
   --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
 
   /* 品牌阴影 */
-  --kb-shadow-brand: 0 4px 12px rgba(255, 127, 80, 0.3);
-  --kb-shadow-accent: 0 4px 12px rgba(79, 176, 255, 0.3);
-  --kb-shadow-brand-hover: 0 6px 20px rgba(255, 127, 80, 0.4);
-  --kb-shadow-accent-hover: 0 6px 20px rgba(79, 176, 255, 0.4);
+  --kb-shadow-brand: 0 4px 12px rgba(59, 130, 246, 0.2);
+  --kb-shadow-accent: 0 4px 12px rgba(245, 158, 11, 0.2);
+  --kb-shadow-brand-hover: 0 6px 20px rgba(59, 130, 246, 0.3);
+  --kb-shadow-accent-hover: 0 6px 20px rgba(245, 158, 11, 0.3);
+
+  /* ---- shadcn/ui 兼容层（映射到 --kb-* 令牌）---- */
+  --background: var(--kb-bg-primary);
+  --foreground: var(--kb-text-primary);
+  --card: var(--kb-bg-elevated);
+  --card-foreground: var(--kb-text-primary);
+  --popover: var(--kb-bg-elevated);
+  --popover-foreground: var(--kb-text-primary);
+  --primary: var(--kb-brand-600);
+  --primary-foreground: #FFFFFF;
+  --secondary: var(--kb-bg-tertiary);
+  --secondary-foreground: var(--kb-text-primary);
+  --muted: var(--kb-bg-secondary);
+  --muted-foreground: var(--kb-text-secondary);
+  --accent: var(--kb-brand-600);
+  --accent-foreground: #FFFFFF;
+  --destructive: var(--kb-color-error);
+  --destructive-foreground: #FFFFFF;
+  --border: var(--kb-border-default);
+  --input: var(--kb-border-default);
+  --ring: var(--kb-brand-300);
+  --radius: 0.75rem;
 }
 
 /* ========== 动画 @keyframes ========== */
 
-/* 按钮按压回弹 */
 @keyframes scale-bounce {
   0% { transform: scale(1); }
   40% { transform: scale(0.92); }
@@ -116,148 +163,135 @@
   100% { transform: scale(1); }
 }
 
-/* 错落入场 */
 @keyframes stagger-in {
   0% { opacity: 0; transform: translateY(8px) scale(0.95); }
   100% { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-/* 卡片退出（缩小飞出） */
 @keyframes card-exit {
   0% { opacity: 1; transform: scale(1) translateY(0); }
   100% { opacity: 0; transform: scale(0.85) translateY(-24px); }
 }
 
-/* 骨架屏脉动 */
 @keyframes pulse-skeleton {
   0%, 100% { opacity: 0.4; }
   50% { opacity: 0.8; }
 }
 
-/* Shimmer 效果（AI 加载） */
 @keyframes shimmer {
   0% { background-position: -200% 0; }
   100% { background-position: 200% 0; }
 }
 
-/* 淡入上移 */
 @keyframes fade-in-up {
   0% { opacity: 0; transform: translateY(12px); }
   100% { opacity: 1; transform: translateY(0); }
 }
 
-/* 卡片退出（缩小+淡出） */
 @keyframes card-exit {
   0% { opacity: 1; transform: scale(1); }
   100% { opacity: 0; transform: scale(0.92); }
 }
 
-/* 品牌书写动画 */
 @keyframes brand-draw {
   0% { stroke-dashoffset: 50; }
   100% { stroke-dashoffset: 0; }
 }
 
-/* 品牌浮动动画 */
 @keyframes brand-float {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-3px); }
 }
 
-/* 知识星河入场（opacity + scale） */
 @keyframes kb-galaxy-enter {
   0% { opacity: 0; transform: scale(0); }
   100% { opacity: 1; transform: scale(1); }
 }
 
-/* 知识星河呼吸闪烁 */
 @keyframes kb-galaxy-twinkle {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.6; }
 }
 
-/* Modal 入场 */
 @keyframes modal-enter {
   0% { opacity: 0; transform: scale(0.95) translateY(8px); }
   100% { opacity: 1; transform: scale(1) translateY(0); }
 }
 
-/* 呼吸动效（沉浸模式圆环） */
 @keyframes breathe {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.7; }
 }
 
-/* 光环呼吸（沉浸模式外圈光晕） */
 @keyframes halo-breathe {
   0%, 100% { opacity: 0.3; transform: scale(0.98); }
   50% { opacity: 0.6; transform: scale(1.02); }
 }
 
-/* ---- 亮色主题 ---- */
-[data-theme="light"] {
-  --kb-bg-primary: #FFFFFF;
-  --kb-bg-secondary: #F8FAFC;
-  --kb-bg-tertiary: #F1F5F9;
-  --kb-bg-elevated: #FFFFFF;
-  --kb-text-primary: #0F172A;
-  --kb-text-secondary: #475569;
-  --kb-text-tertiary: #94A3B8;
-  --kb-text-inverse: #FFFFFF;
-  --kb-border-default: #E2E8F0;
-  --kb-border-strong: #CBD5E1;
-  --kb-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
-  --kb-shadow-md: 0 4px 6px -1px rgba(15, 23, 42, 0.07), 0 2px 4px -2px rgba(15, 23, 42, 0.05);
-  --kb-shadow-lg: 0 10px 15px -3px rgba(15, 23, 42, 0.08), 0 4px 6px -4px rgba(15, 23, 42, 0.04);
-}
-
-/* ---- 暗色主题 ---- */
+/* ---- 深色主题（深海静谧） ---- */
 [data-theme="dark"] {
-  /* 品牌色在深色模式下提亮 */
-  --kb-brand-50: #2D1810;
-  --kb-brand-100: #3D2118;
-  --kb-brand-200: #5A3225;
-  --kb-brand-300: #7A4835;
-  --kb-brand-400: #A0624A;
-  --kb-brand-500: #FF9070;
-  --kb-brand-600: #FF7F50;
-  --kb-brand-700: #FF6347;
-  --kb-brand-800: #E04E3A;
-  --kb-brand-900: #C0392B;
+  /* 品牌主色 - 深空蓝紫（深色模式） */
+  --kb-brand-50: #1A1B3A;
+  --kb-brand-100: #252755;
+  --kb-brand-200: #353878;
+  --kb-brand-300: #4A4E9E;
+  --kb-brand-400: #6366F1;
+  --kb-brand-500: #818CF8;
+  --kb-brand-600: #6366F1;
+  --kb-brand-700: #5558E0;
+  --kb-brand-800: #4649C8;
+  --kb-brand-900: #373AB0;
 
-  /* 辅色在深色模式下调整 */
-  --kb-accent-50: #0D2233;
-  --kb-accent-100: #153347;
-  --kb-accent-200: #1F4D6B;
-  --kb-accent-300: #2A6B95;
-  --kb-accent-400: #3690C4;
-  --kb-accent-500: #00D2D3;
-  --kb-accent-600: #4FB0FF;
-  --kb-accent-700: #3498DB;
-  --kb-accent-800: #2980B9;
-  --kb-accent-900: #1F6391;
+  /* 品牌辅色 - 赛博青（深色模式） */
+  --kb-accent-50: #0A1E28;
+  --kb-accent-100: #0E2E3C;
+  --kb-accent-200: #164E63;
+  --kb-accent-300: #0E7490;
+  --kb-accent-400: #0891B2;
+  --kb-accent-500: #06B6D4;
+  --kb-accent-600: #22D3EE;
+  --kb-accent-700: #67E8F9;
+  --kb-accent-800: #A5F3FC;
+  --kb-accent-900: #CFFAFE;
 
-  /* 背景色 */
-  --kb-bg-primary: #1A1D23;
-  --kb-bg-secondary: #242830;
-  --kb-bg-tertiary: #2F343D;
-  --kb-bg-elevated: #242830;
+  /* 功能色（深色模式微调亮度） */
+  --kb-focus-blue: #60A5FA;
+  --kb-amber: #FBBF24;
+  --kb-moss-green: #4ADE80;
+  --kb-cyber-cyan: #22D3EE;
+  --kb-color-error: #F87171;
+  --kb-color-warning: #FB923C;
+  --kb-color-success: #4ADE80;
+  --kb-color-info: #60A5FA;
+
+  /* 背景色 — 深海静谧 */
+  --kb-bg-primary: #0C1524;
+  --kb-bg-secondary: #12203A;
+  --kb-bg-tertiary: #182A48;
+  --kb-bg-elevated: #12203A;
 
   /* 文字色 */
-  --kb-text-primary: #E8ECF0;
-  --kb-text-secondary: #9BA8B7;
-  --kb-text-tertiary: #6B7C93;
-  --kb-text-inverse: #1A1D23;
+  --kb-text-primary: #E0E6F0;
+  --kb-text-secondary: #90A0B8;
+  --kb-text-tertiary: #607088;
+  --kb-text-inverse: #0C1524;
 
-  /* 边框 */
-  --kb-border-default: #2F343D;
-  --kb-border-strong: #3D4350;
+  /* 边框 — 深海微光 */
+  --kb-border-default: #223550;
+  --kb-border-strong: #2E4568;
 
-  /* 阴影 */
+  /* 阴影（深蓝色阴影） */
   --kb-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
   --kb-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.3);
-  --kb-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -4px rgba(0, 0, 0, 0.3);
+  --kb-shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.4);
 
-  --kb-shadow-brand: 0 4px 12px rgba(255, 144, 112, 0.3);
-  --kb-shadow-accent: 0 4px 12px rgba(0, 210, 211, 0.3);
+  --kb-shadow-brand: 0 4px 12px rgba(99, 102, 241, 0.25);
+  --kb-shadow-accent: 0 4px 12px rgba(6, 182, 212, 0.25);
+  --kb-shadow-brand-hover: 0 6px 20px rgba(99, 102, 241, 0.35);
+  --kb-shadow-accent-hover: 0 6px 20px rgba(6, 182, 212, 0.35);
+
+  /* shadcn/ui 深色兼容 */
+  --accent: var(--kb-brand-600);
+  --primary: var(--kb-brand-600);
+  --ring: var(--kb-brand-400);
 }

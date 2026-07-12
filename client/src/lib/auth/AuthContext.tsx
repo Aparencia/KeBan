@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef, type ReactNode } from 'react';
 import type { User, Session, AuthError } from '@supabase/supabase-js';
 import { supabase, isPlaceholder } from './supabaseClient';
+import { useToast } from '@/components/ui';
 
 interface AuthState {
   user: User | null;
@@ -18,6 +19,12 @@ interface AuthContextValue extends AuthState {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+/**
+ * 全局认证上下文，管理用户会话生命周期
+ * - 监听 Supabase auth 状态变化，处理 token 自动刷新
+ * - 刷新失败时派发 `kb:session-expired` 事件，由 useSessionExpiry 引导重登
+ * @ai-context 核心认证状态管理，所有需鉴权的页面均依赖此 Provider
+ */
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>({
     user: null,
@@ -25,6 +32,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loading: true,
     isAuthenticated: false,
   });
+
+  const { toast } = useToast();
+  /** 标记用户主动登出，避免将主动登出误判为 session 过期 */
+  const intentionalSignOutRef = useRef(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -39,10 +50,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'TOKEN_REFRESH_FAILURE') {
-        // Token 刷新失败时，派发自定义事件触发全局提示
+      // Token 刷新成功 —— 仅在之前存在 session 时提示（说明是从即将过期状态恢复）
+      if (event === 'TOKEN_REFRESHED' && session) {
+        toast({ type: 'info', message: '登录已自动刷新', duration: 2000 });
+      }
+
+      // 用户 metadata 更新（如昵称/头像变更），静默同步状态
+      if (event === 'USER_UPDATED' && session) {
+        setState({
+          user: session.user,
+          session,
+          loading: false,
+          isAuthenticated: true,
+        });
+        return;
+      }
+
+      // 非主动登出却丢失 session → token 刷新失败，引导重新登录
+      if (event === 'SIGNED_OUT' && !intentionalSignOutRef.current) {
+        toast({ type: 'warning', message: '登录已过期，请重新登录', duration: 8000 });
         window.dispatchEvent(new CustomEvent('kb:session-expired'));
       }
+
+      // 重置主动登出标记
+      if (event === 'SIGNED_OUT') {
+        intentionalSignOutRef.current = false;
+      }
+
       setState({
         user: session?.user ?? null,
         session,
@@ -52,8 +86,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     return () => subscription.unsubscribe();
+  // toast 实例稳定，无需加入依赖
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /**
+   * 邮箱注册
+   * @param email 用户邮箱
+   * @param password 用户密码
+   * @returns 包含 AuthError 的结果对象
+   */
   const signUp = useCallback(async (email: string, password: string) => {
     if (isPlaceholder) {
       return { error: { message: '云服务尚未配置，请先在 .env 中设置 VITE_SUPABASE_URL 和 VITE_SUPABASE_ANON_KEY' } as AuthError };
@@ -62,6 +104,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error };
   }, []);
 
+  /**
+   * 邮箱登录
+   * @param email 用户邮箱
+   * @param password 用户密码
+   * @returns 包含 AuthError 的结果对象
+   */
   const signIn = useCallback(async (email: string, password: string) => {
     if (isPlaceholder) {
       return { error: { message: '云服务尚未配置，请先在 .env 中设置 VITE_SUPABASE_URL 和 VITE_SUPABASE_ANON_KEY' } as AuthError };
@@ -70,10 +118,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error };
   }, []);
 
+  /**
+   * 主动登出，标记 intentionalSignOut 以避免触发 session-expired 事件
+   */
   const signOut = useCallback(async () => {
+    intentionalSignOutRef.current = true;
     await supabase.auth.signOut();
   }, []);
 
+  /**
+   * 获取当前有效 access_token，供 API 请求鉴权使用
+   * @returns 当前 session 的 access_token，未登录时返回 null
+   */
   const getAccessToken = useCallback(async (): Promise<string | null> => {
     const {
       data: { session },
@@ -88,6 +144,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 }
 
+/**
+ * 获取全局认证上下文的 Hook
+ * @returns AuthContextValue
+ * @throws 在 AuthProvider 外部调用时抛出错误
+ */
 export function useAuth(): AuthContextValue {
   const context = useContext(AuthContext);
   if (!context) {

@@ -1,8 +1,8 @@
-import type { IRepository } from './interfaces';
-import { logOperation } from './operationLog';
-import { generateId } from '../utils/uuid';
-import { offlineQueue } from '../sync/OfflineQueue';
-import { cryptoManager } from '../crypto';
+import type { IRepository } from '@/lib/storage/interfaces';
+import { logOperation } from '@/lib/storage/operationLog';
+import { generateId } from '@/lib/utils/uuid';
+import { offlineQueue } from '@/lib/sync/OfflineQueue';
+import { cryptoManager } from '@/lib/crypto';
 
 /**
  * 带操作日志的统一写操作

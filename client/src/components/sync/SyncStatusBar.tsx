@@ -5,6 +5,8 @@ import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { useSync } from '@/lib/sync/SyncContext';
 import { cn } from '@/lib/utils';
 
+const SYNC_COMPLETE_HIDE_DELAY_MS = 3000;
+
 /**
  * 全局同步/网络状态条
  * 显示离线、弱网、同步中、同步完成等状态
@@ -22,7 +24,7 @@ export default function SyncStatusBar() {
     if (prevSyncingRef.current && !isSyncing) {
       setShowComplete(true);
       if (completeTimerRef.current) clearTimeout(completeTimerRef.current);
-      completeTimerRef.current = setTimeout(() => setShowComplete(false), 3000);
+      completeTimerRef.current = setTimeout(() => setShowComplete(false), SYNC_COMPLETE_HIDE_DELAY_MS);
     }
     prevSyncingRef.current = isSyncing;
     return () => {
