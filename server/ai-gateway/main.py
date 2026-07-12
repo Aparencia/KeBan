@@ -37,6 +37,7 @@ from routers import (
     transcribe_router,
     tag_content_router,
     feynman_question_router,
+    inspiration_router,
 )
 from cache.redis_cache import get_cache
 
@@ -312,6 +313,7 @@ app.include_router(vision_router)
 app.include_router(transcribe_router)
 app.include_router(feynman_question_router)
 app.include_router(tag_content_router)
+app.include_router(inspiration_router)
 
 
 # ============================================================

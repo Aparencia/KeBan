@@ -67,6 +67,7 @@ MODEL_ROUTING: dict[str, tuple[str, str]] = {
     "optimize_card": ("glm", "free"),
     "feynman_question": ("deepseek", "evaluate"),
     "feynman_evaluate": ("deepseek", "evaluate"),
+    "sort_inspiration": ("glm", "free"),
 }
 
 # ============================================================
@@ -122,6 +123,7 @@ PROVIDER_FALLBACK_CHAIN: dict[str, list[str]] = {
     "optimize_card":  ["glm", "qwen", "fallback"],       # GLM（免费）优先，Qwen 备选
     "feynman_question": ["deepseek", "glm", "fallback"], # DeepSeek 为主，GLM 备选
     "feynman_evaluate": ["deepseek", "glm", "fallback"], # DeepSeek 为主，GLM 备选
+    "sort_inspiration": ["glm", "deepseek", "fallback"], # GLM（免费）优先，DeepSeek 备选
 }
 
 
@@ -202,6 +204,7 @@ TIMEOUT_CONFIG: dict[str, int] = {
     "optimize_card": 15,
     "feynman_question": 15,
     "feynman_evaluate": 15,
+    "sort_inspiration": 15,
 }
 
 # ============================================================
@@ -220,6 +223,7 @@ RATE_LIMITS: dict[str, int] = {
     "optimize_card": 15,
     "feynman_question": 15,
     "feynman_evaluate": 15,
+    "sort_inspiration": 20,
 }
 
 # ============================================================

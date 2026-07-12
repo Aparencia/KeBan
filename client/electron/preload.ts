@@ -26,6 +26,12 @@ const ALLOWED_CHANNELS = [
   'update:check',
   'update:download',
   'update:install',
+  'update:set-auto-check',
+  'window:close-action',
+  'window:minimize',
+  'window:maximize',
+  'window:close',
+  'window:isMaximized',
 ] as const;
 
 /** 允许渲染进程监听的事件 channel 白名单（主进程 → 渲染进程推送） */
@@ -35,6 +41,8 @@ const ALLOWED_EVENT_CHANNELS = [
   'audio_capture_do_start',
   'audio_capture_do_stop',
   'update-status',
+  'window:closing',
+  'window:maximized-changed',
 ] as const;
 
 /** 允许渲染进程单向发送的 channel 白名单（渲染进程 → 主进程，fire-and-forget） */
@@ -74,4 +82,26 @@ contextBridge.exposeInMainWorld('electronAPI', {
       console.warn(`[preload] 不允许的发送 channel: ${channel}`);
     }
   },
+  /** 监听主进程发出的窗口关闭事件 */
+  onWindowClosing: (callback: () => void) => {
+    ipcRenderer.on('window:closing', callback);
+    return () => ipcRenderer.removeAllListeners('window:closing');
+  },
+  /** 向主进程发送关闭行为选择 */
+  closeAction: (action: 'quit' | 'minimize' | 'cancel', remember: boolean) => {
+    return ipcRenderer.invoke('window:close-action', action, remember);
+  },
+  // ---- 窗口控制 API ----
+  windowMinimize: () => ipcRenderer.invoke('window:minimize'),
+  windowMaximize: () => ipcRenderer.invoke('window:maximize'),
+  windowClose: () => ipcRenderer.invoke('window:close'),
+  windowIsMaximized: () => ipcRenderer.invoke('window:isMaximized') as Promise<boolean>,
+  onMaximizedChanged: (callback: (isMaximized: boolean) => void) => {
+    const handler = (_event: unknown, isMaximized: boolean) => callback(isMaximized);
+    ipcRenderer.on('window:maximized-changed', handler);
+    return () => ipcRenderer.removeListener('window:maximized-changed', handler);
+  },
+  // ---- 自动更新 API ----
+  /** 设置是否自动检查更新 */
+  setAutoUpdate: (enabled: boolean) => ipcRenderer.invoke('update:set-auto-check', enabled),
 });

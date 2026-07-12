@@ -22,6 +22,8 @@ const InspirationPage = lazy(() => import('@/features/inspiration/pages/Inspirat
 const OnboardingPage = lazy(() => import('@/pages/OnboardingPage'));
 const LoginPage = lazy(() => import('@/pages/LoginPage'));
 const RegisterPage = lazy(() => import('@/pages/RegisterPage'));
+const ResetPasswordPage = lazy(() => import('@/pages/ResetPassword'));
+const VerifyEmailPage = lazy(() => import('@/pages/VerifyEmail'));
 const PrivacyPolicy = lazy(() => import('@/pages/PrivacyPolicy'));
 const TermsOfService = lazy(() => import('@/pages/TermsOfService'));
 
@@ -84,6 +86,14 @@ const routes: RouteObject[] = [
   {
     path: '/terms',
     element: <SuspenseWrapper><TermsOfService /></SuspenseWrapper>,
+  },
+  {
+    path: '/reset-password',
+    element: <SuspenseWrapper><ResetPasswordPage /></SuspenseWrapper>,
+  },
+  {
+    path: '/verify-email',
+    element: <SuspenseWrapper><VerifyEmailPage /></SuspenseWrapper>,
   },
 ];
 

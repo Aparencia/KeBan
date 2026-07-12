@@ -1,6 +1,7 @@
 import type { AIPlugin, SummarizeResult, FlashcardResult, EvaluateResult, DurationResult,
   SummarizeOptions, FlashcardOptions, EvaluateOptions, DurationOptions, DurationHistoryData,
-  OptimizeCardResult, FeynmanQuestionResult, FeynmanAnswerEvalResult } from './types';
+  OptimizeCardResult, FeynmanQuestionResult, FeynmanAnswerEvalResult,
+  TagContentResult, SortResult } from './types';
 import { AIError } from './types';
 import { aiClient } from '../http/apiClient';
 
@@ -255,6 +256,64 @@ export class RemoteAIPlugin implements AIPlugin {
         suggestedFront: result.suggested_front,
         suggestedBack: result.suggested_back,
         improvements: result.improvements,
+        model: result.model,
+        tokensUsed: result.tokens_used,
+        latencyMs: result.latency_ms,
+      };
+    } catch (error: unknown) {
+      throw this.handleError(error);
+    }
+  }
+
+  // ── POST /api/v1/ai/tag-content ──────────────────────────────
+  async tagContent(content: string): Promise<TagContentResult> {
+    this.checkOnline();
+    try {
+      const result = await aiClient.post<{
+        content_nature: string;
+        cognitive_depth: string;
+        subject: string;
+        model: string;
+        tokens_used: number;
+        latency_ms: number;
+      }>(
+        '/api/v1/ai/tag-content',
+        { content },
+      );
+
+      return {
+        contentNature: result.content_nature as TagContentResult['contentNature'],
+        cognitiveDepth: result.cognitive_depth as TagContentResult['cognitiveDepth'],
+        subject: result.subject,
+        model: result.model,
+        tokensUsed: result.tokens_used,
+        latencyMs: result.latency_ms,
+      };
+    } catch (error: unknown) {
+      throw this.handleError(error);
+    }
+  }
+
+  // ── POST /api/v1/ai/sort-inspiration ─────────────────────────
+  async sortInspiration(content: string, existingTags?: Record<string, string>): Promise<SortResult> {
+    this.checkOnline();
+    try {
+      const result = await aiClient.post<{
+        suggestions: Array<{ type: string; reason: string; confidence: number }>;
+        model: string;
+        tokens_used: number;
+        latency_ms: number;
+      }>(
+        '/api/v1/ai/sort-inspiration',
+        { content, existing_tags: existingTags },
+      );
+
+      return {
+        suggestions: result.suggestions.map(s => ({
+          type: s.type as SortResult['suggestions'][0]['type'],
+          reason: s.reason,
+          confidence: s.confidence,
+        })),
         model: result.model,
         tokensUsed: result.tokens_used,
         latencyMs: result.latency_ms,

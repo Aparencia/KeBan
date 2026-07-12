@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, Button } from '@/components/ui';
 import { useToast } from '@/components/ui/Toast';
 import { Shield, Info, RefreshCw, Download, CheckCircle, Loader2, AlertCircle } from 'lucide-react';
@@ -9,15 +9,30 @@ interface UpdateStatus {
   version?: string;
   percent?: number;
   message?: string;
+  releaseNotes?: string | null;
+  retryCount?: number;
+  maxRetries?: number;
 }
+
+/** localStorage key */
+const AUTO_UPDATE_KEY = 'keban-auto-update';
 
 export default function AboutSettings() {
   const { toast } = useToast();
   const [appVersion, setAppVersion] = useState<string>('');
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
   const [isChecking, setIsChecking] = useState(false);
+  const [autoUpdate, setAutoUpdate] = useState<boolean>(
+    () => localStorage.getItem(AUTO_UPDATE_KEY) !== 'false',
+  );
 
   const isElectron = !!window.electronAPI;
+
+  // 启动时通知主进程当前的自动更新设置
+  useEffect(() => {
+    const enabled = localStorage.getItem(AUTO_UPDATE_KEY) !== 'false';
+    window.electronAPI?.setAutoUpdate?.(enabled);
+  }, []);
 
   useEffect(() => {
     if (window.electronAPI) {
@@ -68,6 +83,12 @@ export default function AboutSettings() {
     window.electronAPI?.invoke('update:install');
   };
 
+  const handleAutoUpdateToggle = useCallback((enabled: boolean) => {
+    setAutoUpdate(enabled);
+    localStorage.setItem(AUTO_UPDATE_KEY, String(enabled));
+    window.electronAPI?.setAutoUpdate?.(enabled);
+  }, []);
+
   const displayVersion = appVersion || 'v0.6.0-alpha.1';
 
   /** 渲染更新状态区域 */
@@ -80,7 +101,11 @@ export default function AboutSettings() {
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-2">
             <Loader2 className="w-icon-sm h-icon-sm text-brand-500 animate-spin flex-shrink-0" strokeWidth={1.5} />
-            <span className="text-b2 text-text-secondary">正在下载更新...</span>
+            <span className="text-b2 text-text-secondary">
+              {updateStatus.retryCount
+                ? `下载失败，正在重试 (${updateStatus.retryCount}/${updateStatus.maxRetries})...`
+                : '正在下载更新...'}
+            </span>
           </div>
           <div className="w-full bg-bg-tertiary rounded-kb-full h-2">
             <div
@@ -181,6 +206,42 @@ export default function AboutSettings() {
           'bg-bg-secondary border border-border/40',
         )}>
           {renderUpdateSection()}
+        </div>
+      )}
+
+      {/* 自动更新开关（仅 Electron 环境显示） */}
+      {isElectron && (
+        <div className={cn(
+          'flex items-center justify-between gap-3 p-3 rounded-kb-md',
+          'bg-bg-secondary border border-border/40',
+        )}>
+          <div className="flex-1">
+            <p className="text-b2 text-text-primary">自动检查更新</p>
+            {!autoUpdate && (
+              <p className="text-c1 text-text-tertiary mt-0.5">
+                关闭后将不再自动检测新版本，您仍可手动点击检查更新
+              </p>
+            )}
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={autoUpdate}
+            onClick={() => handleAutoUpdateToggle(!autoUpdate)}
+            className={cn(
+              'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-kb-full transition-colors duration-200 ease-in-out',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2',
+              autoUpdate ? 'bg-brand-500' : 'bg-bg-tertiary',
+            )}
+          >
+            <span
+              className={cn(
+                'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
+                'mt-0.5',
+                autoUpdate ? 'translate-x-5 ml-0.5' : 'translate-x-0.5',
+              )}
+            />
+          </button>
         </div>
       )}
 

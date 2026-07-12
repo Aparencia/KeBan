@@ -1,9 +1,10 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Sparkles, Send, Trash2, ChevronDown, ChevronUp, X, Check } from 'lucide-react';
+import { Sparkles, Send, Trash2, ChevronDown, ChevronUp, X, Check, Wand2, Loader2, ArrowRight } from 'lucide-react';
 import { EmptyState, useToast } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { useInspirationStore, type InspirationItem, type InspirationTags } from '../store/inspirationStore';
-import { useAITagContent } from '@/lib/ai/useAI';
+import { useAITagContent, useAISortInspiration } from '@/lib/ai/useAI';
+import type { SortSuggestion } from '@/lib/ai/types';
 
 // ─────────────────────────────────────────────────────────────
 // Constants
@@ -183,6 +184,97 @@ function TagEditPopover({ item, onClose }: TagEditPopoverProps) {
 }
 
 // ─────────────────────────────────────────────────────────────
+// Sort suggestion type labels & colors
+// ─────────────────────────────────────────────────────────────
+
+const SORT_TYPE_MAP: Record<string, { label: string; color: string; bg: string }> = {
+  feynman:  { label: '费曼讲解', color: 'text-amber-700',   bg: 'bg-amber-50 border-amber-200 dark:bg-amber-900/20 dark:border-amber-700' },
+  flashcard: { label: '闪卡',    color: 'text-cyan-700',    bg: 'bg-cyan-50 border-cyan-200 dark:bg-cyan-900/20 dark:border-cyan-700' },
+  note:     { label: '笔记',     color: 'text-indigo-700',  bg: 'bg-indigo-50 border-indigo-200 dark:bg-indigo-900/20 dark:border-indigo-700' },
+  todo:     { label: '待办',     color: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-200 dark:bg-emerald-900/20 dark:border-emerald-700' },
+};
+
+// ─────────────────────────────────────────────────────────────
+// AI Sort Panel (below card)
+// ─────────────────────────────────────────────────────────────
+
+interface AISortPanelProps {
+  suggestions: SortSuggestion[];
+  item: InspirationItem;
+  onClose: () => void;
+}
+
+function AISortPanel({ suggestions, item, onClose }: AISortPanelProps) {
+  const { toast } = useToast();
+
+  const handleConvert = useCallback((type: string) => {
+    // Simple conversion: copy content to clipboard with context hint
+    const label = SORT_TYPE_MAP[type]?.label ?? type;
+    const text = `[${label}] ${item.content}`;
+    navigator.clipboard.writeText(text).then(() => {
+      toast({ type: 'success', message: `已复制为「${label}」格式到剪贴板` });
+    }).catch(() => {
+      toast({ type: 'error', message: '复制失败' });
+    });
+  }, [item.content, toast]);
+
+  return (
+    <div className={cn(
+      'mt-3 pt-3 border-t border-border/30',
+      'space-y-2',
+    )}>
+      <div className="flex items-center justify-between">
+        <span className="text-c1 font-medium text-text-secondary">AI 归类建议</span>
+        <button
+          onClick={onClose}
+          className="text-text-tertiary hover:text-text-secondary transition-colors"
+        >
+          <X className="w-3.5 h-3.5" />
+        </button>
+      </div>
+      {suggestions.map((s, idx) => {
+        const typeInfo = SORT_TYPE_MAP[s.type] ?? { label: s.type, color: 'text-gray-600', bg: 'bg-gray-50 border-gray-200' };
+        const lowConfidence = s.confidence < 0.5;
+        return (
+          <div
+            key={idx}
+            className={cn(
+              'flex items-center gap-2 p-2 rounded-kb-lg border',
+              'bg-bg-secondary/50',
+              typeInfo.bg,
+            )}
+          >
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className={cn('text-xs font-semibold', typeInfo.color)}>{typeInfo.label}</span>
+                <span className="text-c1 text-text-tertiary">
+                  {Math.round(s.confidence * 100)}%
+                </span>
+                {lowConfidence && (
+                  <span className="text-c1 text-orange-500 font-medium">仅供参考</span>
+                )}
+              </div>
+              <p className="text-c1 text-text-secondary mt-0.5 truncate">{s.reason}</p>
+            </div>
+            <button
+              onClick={() => handleConvert(s.type)}
+              className={cn(
+                'flex items-center gap-1 px-2 py-1 rounded-kb-md text-xs font-medium',
+                'bg-bg-elevated border border-border/50',
+                'text-text-secondary hover:text-brand-600 hover:border-brand-300',
+                'transition-colors whitespace-nowrap',
+              )}
+            >
+              转化 <ArrowRight className="w-3 h-3" />
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
 // Inspiration Card
 // ─────────────────────────────────────────────────────────────
 
@@ -194,6 +286,9 @@ function InspirationCard({ item }: InspirationCardProps) {
   const { deleteItem } = useInspirationStore();
   const [expanded, setExpanded] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [sortOpen, setSortOpen] = useState(false);
+  const [sortSuggestions, setSortSuggestions] = useState<SortSuggestion[]>([]);
+  const { sortInspiration, loading: sortLoading } = useAISortInspiration();
   const { toast } = useToast();
 
   const natureOpt = NATURE_MAP[item.tags.content_nature];
@@ -202,6 +297,26 @@ function InspirationCard({ item }: InspirationCardProps) {
   const handleDelete = () => {
     deleteItem(item.id);
     toast({ type: 'success', message: '已删除' });
+  };
+
+  const handleSort = async () => {
+    if (sortOpen && sortSuggestions.length > 0) {
+      // Toggle panel visibility
+      setSortOpen(false);
+      return;
+    }
+    setSortOpen(true);
+    const existingTags: Record<string, string> = {
+      content_nature: item.tags.content_nature,
+      cognitive_depth: item.tags.cognitive_depth,
+      subject: item.tags.subject,
+    };
+    const result = await sortInspiration(item.content, existingTags);
+    if (result) {
+      setSortSuggestions(result.suggestions);
+    } else {
+      setSortOpen(false);
+    }
   };
 
   return (
@@ -259,20 +374,55 @@ function InspirationCard({ item }: InspirationCardProps) {
         {editOpen && <TagEditPopover item={item} onClose={() => setEditOpen(false)} />}
       </div>
 
-      {/* Footer: time + delete */}
+      {/* Footer: time + AI sort + delete */}
       <div className="flex items-center justify-between mt-3 pt-2 border-t border-border/20">
         <span className="text-c1 text-text-tertiary">{formatTime(item.createdAt)}</span>
-        <button
-          onClick={handleDelete}
-          className={cn(
-            'flex items-center gap-1 px-2 py-0.5 rounded-kb-md text-xs',
-            'text-text-tertiary hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10',
-            'transition-colors',
-          )}
-        >
-          <Trash2 className="w-3 h-3" /> 删除
-        </button>
+        <div className="flex items-center gap-1.5">
+          {/* AI 整理 button */}
+          <button
+            onClick={handleSort}
+            disabled={sortLoading}
+            className={cn(
+              'flex items-center gap-1 px-2 py-0.5 rounded-kb-md text-xs font-medium',
+              'bg-gradient-to-r from-cyan-500 to-purple-500 text-white',
+              'hover:from-cyan-600 hover:to-purple-600',
+              'active:scale-95 transition-all duration-kb-fast',
+              'disabled:opacity-60 disabled:cursor-not-allowed disabled:active:scale-100',
+            )}
+          >
+            {sortLoading ? (
+              <>
+                <Loader2 className="w-3 h-3 animate-spin" />
+                分析中...
+              </>
+            ) : (
+              <>
+                <Wand2 className="w-3 h-3" />
+                AI 整理
+              </>
+            )}
+          </button>
+          <button
+            onClick={handleDelete}
+            className={cn(
+              'flex items-center gap-1 px-2 py-0.5 rounded-kb-md text-xs',
+              'text-text-tertiary hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10',
+              'transition-colors',
+            )}
+          >
+            <Trash2 className="w-3 h-3" /> 删除
+          </button>
+        </div>
       </div>
+
+      {/* AI Sort suggestions panel */}
+      {sortOpen && sortSuggestions.length > 0 && (
+        <AISortPanel
+          suggestions={sortSuggestions}
+          item={item}
+          onClose={() => setSortOpen(false)}
+        />
+      )}
     </div>
   );
 }
@@ -377,23 +527,13 @@ export default function InspirationPage() {
             cognitive_depth: (result.cognitiveDepth as InspirationTags['cognitive_depth']) ?? 'shallow',
             subject: result.subject ?? '通用',
           });
-          // Undo manuallyEdited flag since this was auto-tagging
+          // Clear the manuallyEdited flag for auto-tagged items
           const finalItems = useInspirationStore.getState().items;
           const finalTarget = finalItems.find(i => i.id === addedId);
           if (finalTarget && finalTarget.tagsManuallyEdited) {
-            // Use internal set to clear the flag for auto-tagged items
             useInspirationStore.setState((s) => ({
               items: s.items.map(i => i.id === addedId ? { ...i, tagsManuallyEdited: false } : i),
             }));
-            // Also update localStorage
-            const raw = localStorage.getItem('keban-inspirations');
-            if (raw) {
-              const parsed = JSON.parse(raw);
-              const updated = parsed.map((i: InspirationItem) =>
-                i.id === addedId ? { ...i, tagsManuallyEdited: false } : i
-              );
-              localStorage.setItem('keban-inspirations', JSON.stringify(updated));
-            }
           }
         }
       }

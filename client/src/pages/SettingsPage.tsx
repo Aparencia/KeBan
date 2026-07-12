@@ -1,3 +1,4 @@
+import ProfileSettings from './settings/ProfileSettings';
 import AppearanceSettings from './settings/AppearanceSettings';
 import SoundSettings from './settings/SoundSettings';
 import SyncSettings from './settings/SyncSettings';
@@ -14,6 +15,7 @@ export default function SettingsPage() {
       </div>
 
       <div className="flex-1 px-kb-md pb-kb-lg space-y-kb-md max-w-2xl w-full mx-auto">
+        <ProfileSettings />
         <AppearanceSettings />
         <SoundSettings />
         <SyncSettings />

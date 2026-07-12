@@ -85,15 +85,25 @@ export default function LoginPage() {
             />
 
             {/* Password */}
-            <Input
-              label="密码"
-              type="password"
-              placeholder="输入密码"
-              autoComplete="current-password"
-              prefix={<Lock className="w-icon-sm h-icon-sm" strokeWidth={1.5} />}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
+            <div className="flex flex-col gap-1">
+              <Input
+                label="密码"
+                type="password"
+                placeholder="输入密码"
+                autoComplete="current-password"
+                prefix={<Lock className="w-icon-sm h-icon-sm" strokeWidth={1.5} />}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+              <div className="flex justify-end">
+                <Link
+                  to="/reset-password"
+                  className="text-c1 text-text-tertiary hover:text-brand-600 transition-colors"
+                >
+                  忘记密码？
+                </Link>
+              </div>
+            </div>
 
             {/* Submit */}
             <Button

@@ -18,6 +18,10 @@ import {
   CheckCircle2,
   MessageSquare,
   Eye,
+  HardDrive,
+  Cloud,
+  Shuffle,
+  Shield,
 } from 'lucide-react';
 import { Button } from '@/components/ui';
 import { cn } from '@/lib/utils';
@@ -114,9 +118,170 @@ const featureSteps: OnboardingStep[] = [
   },
 ];
 
-/** Total steps: Welcome(0) + 4 features(1-4) + Ready(5) */
-const TOTAL_STEPS = 2 + featureSteps.length; // 6
-const LAST_INDEX = TOTAL_STEPS - 1; // 5
+/* ================================================================
+ *  Step 1: Mode Selection — 模式介绍
+ * ================================================================ */
+
+type ModeKey = 'local' | 'hybrid' | 'cloud';
+
+interface ModeOption {
+  key: ModeKey;
+  label: string;
+  tag: string;
+  desc: string;
+  icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+  features: string[];
+  accent: string;
+  bg: string;
+  ring: string;
+}
+
+const modeOptions: ModeOption[] = [
+  {
+    key: 'local',
+    label: '本地模式',
+    tag: '隐私优先',
+    desc: '所有数据完全保存在本设备，无需联网，适合隐私敏感或离线场景。',
+    icon: HardDrive,
+    features: ['数据不出设备', '离线完全可用', '单设备使用'],
+    accent: 'text-note',
+    bg: 'bg-note/10',
+    ring: 'ring-note/20',
+  },
+  {
+    key: 'hybrid',
+    label: '混合模式',
+    tag: '推荐',
+    desc: '核心数据保存在本地，可选同步到云端。AI 功能联网可用，兼顾隐私与便利。',
+    icon: Shuffle,
+    features: ['本地存储 + 可选云同步', 'AI 功能可用', '多设备切换'],
+    accent: 'text-brand-600',
+    bg: 'bg-brand-600/10',
+    ring: 'ring-brand-600/20',
+  },
+  {
+    key: 'cloud',
+    label: '云端模式',
+    tag: '全功能',
+    desc: '数据实时同步到云端服务器，支持多设备无缝切换，自动备份。',
+    icon: Cloud,
+    features: ['多设备实时同步', '自动云端备份', '需联网'],
+    accent: 'text-feynman',
+    bg: 'bg-feynman/10',
+    ring: 'ring-feynman/20',
+  },
+];
+
+function StepMode({
+  onNext,
+  onPrev,
+}: {
+  onNext: () => void;
+  onPrev: () => void;
+}) {
+  const [selected, setSelected] = useState<ModeKey>('hybrid');
+
+  return (
+    <div className="flex flex-col items-center gap-kb-lg px-kb-lg w-full max-w-2xl">
+      {/* 标题 */}
+      <div className="flex flex-col gap-kb-xs text-center">
+        <h2 className="text-h1 font-bold text-text-primary">选择数据模式</h2>
+        <p className="text-b1 text-text-secondary">决定你的数据如何存储，可随时在设置中更改</p>
+      </div>
+
+      {/* 三个模式卡片 */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-kb-sm w-full">
+        {modeOptions.map((mode) => {
+          const Icon = mode.icon;
+          const isActive = selected === mode.key;
+          return (
+            <button
+              key={mode.key}
+              onClick={() => setSelected(mode.key)}
+              className={cn(
+                'flex flex-col items-start gap-kb-xs p-kb-md rounded-kb-xl border-2 text-left transition-all duration-kb-fast',
+                isActive
+                  ? cn('border-brand-500', mode.bg)
+                  : 'border-border hover:border-border-strong',
+              )}
+            >
+              {/* 头部 */}
+              <div className="flex items-center justify-between w-full">
+                <div className={cn('p-2 rounded-kb-lg', mode.bg)}>
+                  <Icon className={cn('w-icon-md h-icon-md', mode.accent)} strokeWidth={1.5} />
+                </div>
+                <span
+                  className={cn(
+                    'text-c2 px-2 py-0.5 rounded-kb-full',
+                    mode.key === 'hybrid'
+                      ? 'bg-brand-600 text-white'
+                      : 'bg-bg-tertiary text-text-tertiary',
+                  )}
+                >
+                  {mode.tag}
+                </span>
+              </div>
+
+              {/* 名称 */}
+              <h3 className={cn('text-b1 font-bold', isActive ? mode.accent : 'text-text-primary')}>
+                {mode.label}
+              </h3>
+
+              {/* 描述 */}
+              <p className="text-c1 text-text-secondary leading-relaxed">{mode.desc}</p>
+
+              {/* 特性列表 */}
+              <ul className="flex flex-col gap-1 mt-kb-xs">
+                {mode.features.map((f) => (
+                  <li key={f} className="flex items-center gap-1 text-c2 text-text-secondary">
+                    <CheckCircle2 className={cn('w-3 h-3 shrink-0', mode.accent)} strokeWidth={2} />
+                    {f}
+                  </li>
+                ))}
+              </ul>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* 混合模式详细说明 */}
+      {selected === 'hybrid' && (
+        <div className="flex items-start gap-kb-sm p-kb-md rounded-kb-xl bg-brand-600/5 border border-brand-600/20 w-full text-left">
+          <Shield className="w-icon-sm h-icon-sm text-brand-600 shrink-0 mt-0.5" strokeWidth={1.5} />
+          <div className="flex flex-col gap-1">
+            <span className="text-c1 font-medium text-brand-600">混合模式说明</span>
+            <p className="text-c2 text-text-secondary leading-relaxed">
+              默认以本地存储为主，学习数据（笔记、闪卡、进度等）全部保存在你的设备上。当你登录账户后，可选择将数据同步到云端，实现多设备访问和自动备份。AI 功能（如 AI 摘要、AI 闪卡生成）需要联网使用，但核心学习功能离线即可运行。
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* 导航按钮 */}
+      <div className="flex items-center gap-kb-sm w-full max-w-xs mt-kb-sm">
+        <Button size="lg" variant="secondary" className="flex-1" onClick={onPrev}>
+          <span className="flex items-center gap-1">
+            <ArrowLeft className="w-icon-sm h-icon-sm" />
+            上一步
+          </span>
+        </Button>
+        <Button
+          size="lg"
+          variant="primary"
+          className="flex-1"
+          iconRight={<ArrowRight className="w-icon-sm h-icon-sm" />}
+          onClick={onNext}
+        >
+          下一步
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/** Total steps: Welcome(0) + Mode(1) + 4 features(2-5) + Ready(6) */
+const TOTAL_STEPS = 3 + featureSteps.length; // 7
+const LAST_INDEX = TOTAL_STEPS - 1; // 6
 
 /* ================================================================
  *  Step Dots — 进度指示器
@@ -196,7 +361,7 @@ function StepWelcome({
 }
 
 /* ================================================================
- *  Step 1-4: Feature Demo
+ *  Step 2-5: Feature Demo
  * ================================================================ */
 
 function StepFeature({
@@ -292,7 +457,7 @@ function StepFeature({
 }
 
 /* ================================================================
- *  Step 5: Ready
+ *  Step 6: Ready
  * ================================================================ */
 
 function StepReady({ onStart, onPrev }: { onStart: () => void; onPrev: () => void }) {
@@ -305,7 +470,7 @@ function StepReady({ onStart, onPrev }: { onStart: () => void; onPrev: () => voi
 
       <div className="flex flex-col gap-kb-xs max-w-sm">
         <h2 className="text-d2 font-bold text-text-primary">准备就绪！</h2>
-        <p className="text-b1 text-text-secondary">所有数据保存在本地，随时可用</p>
+        <p className="text-b1 text-text-secondary">默认混合模式，数据本地保存，可随时开启云同步</p>
       </div>
 
       <div className="flex items-center gap-kb-sm w-full max-w-xs">
@@ -350,8 +515,12 @@ export default function OnboardingPage() {
       return <StepWelcome onNext={next} onSkip={finish} />;
     }
 
-    if (step >= 1 && step <= featureSteps.length) {
-      const featureIndex = step - 1;
+    if (step === 1) {
+      return <StepMode onNext={next} onPrev={prev} />;
+    }
+
+    if (step >= 2 && step <= featureSteps.length + 1) {
+      const featureIndex = step - 2;
       return (
         <StepFeature
           step={featureSteps[featureIndex]}

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
 import type { User, Session, AuthError } from '@supabase/supabase-js';
-import { supabase } from './supabaseClient';
+import { supabase, isPlaceholder } from './supabaseClient';
 
 interface AuthState {
   user: User | null;
@@ -38,7 +38,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'TOKEN_REFRESH_FAILURE') {
+        // Token 刷新失败时，派发自定义事件触发全局提示
+        window.dispatchEvent(new CustomEvent('kb:session-expired'));
+      }
       setState({
         user: session?.user ?? null,
         session,
@@ -51,11 +55,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signUp = useCallback(async (email: string, password: string) => {
+    if (isPlaceholder) {
+      return { error: { message: '云服务尚未配置，请先在 .env 中设置 VITE_SUPABASE_URL 和 VITE_SUPABASE_ANON_KEY' } as AuthError };
+    }
     const { error } = await supabase.auth.signUp({ email, password });
     return { error };
   }, []);
 
   const signIn = useCallback(async (email: string, password: string) => {
+    if (isPlaceholder) {
+      return { error: { message: '云服务尚未配置，请先在 .env 中设置 VITE_SUPABASE_URL 和 VITE_SUPABASE_ANON_KEY' } as AuthError };
+    }
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     return { error };
   }, []);

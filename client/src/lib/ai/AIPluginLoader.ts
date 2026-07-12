@@ -7,7 +7,7 @@ import type { AIPlugin, DurationHistoryData, DurationOptions, DurationResult,
   SummarizeResult, FlashcardResult, EvaluateResult,
   SummarizeOptions, FlashcardOptions, EvaluateOptions,
   VisionExtractResult, TagContentResult, OptimizeCardResult,
-  FeynmanQuestionResult, FeynmanAnswerEvalResult } from './types';
+  FeynmanQuestionResult, FeynmanAnswerEvalResult, SortResult } from './types';
 
 /**
  * AI 插件加载器（单例）
@@ -204,6 +204,22 @@ class AIPluginLoader {
         throw new AIError('当前 AI 插件不支持闪卡优化', 'service_unavailable', false);
       })(),
       { contentCheck: front + back, feature: 'optimize_card' }
+    );
+  }
+
+  /**
+   * 灵感分拣 — AI 分析内容并推荐归类目标
+   */
+  async sortInspiration(content: string, existingTags?: Record<string, string>): Promise<SortResult> {
+    return this.withGuard(
+      () => (async () => {
+        const plugin = await this.getAIPlugin();
+        if (plugin.sortInspiration) {
+          return plugin.sortInspiration(content, existingTags);
+        }
+        throw new AIError('当前 AI 插件不支持灵感分拣', 'service_unavailable', false);
+      })(),
+      { contentCheck: content, feature: 'sort_inspiration' }
     );
   }
 }

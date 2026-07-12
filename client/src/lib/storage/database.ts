@@ -5,7 +5,7 @@ import type {
   FeynmanNote, FeynmanSummary, FeynmanWeakPoint,
   OperationLog, AppSettings, SyncConflict, OfflineQueueItem,
   StudyCheckIn, Achievement, PomodoroGoal, WindowCapture,
-  Consent
+  Consent, UserProfile, Inspiration
 } from '@/types/models';
 
 export class KeBanDatabase extends Dexie {
@@ -28,6 +28,8 @@ export class KeBanDatabase extends Dexie {
   pomodoroGoals!: Table<PomodoroGoal, string>;
   windowCaptures!: Table<WindowCapture, string>;
   consent!: Table<Consent, string>;
+  userProfile!: Table<UserProfile, string>;
+  inspirations!: Table<Inspiration, string>;
 
   constructor() {
     super('keban');
@@ -163,6 +165,26 @@ export class KeBanDatabase extends Dexie {
     // v0.6.0: 新增隐私合规 consent 表
     this.version(7).stores({
       consent: 'id, &type, version, acceptedAt',
+    });
+
+    // v0.7.0: 新增 userProfile 和 inspirations 表
+    this.version(8).stores({
+      userProfile: 'id, userId, email, updatedAt',
+      inspirations: 'id, createdAt, updatedAt, [tags.content_nature+tags.cognitive_depth+tags.subject]',
+    }).upgrade(async (tx) => {
+      // 从 localStorage 迁移灵感数据至 IndexedDB
+      try {
+        const raw = localStorage.getItem('keban-inspirations');
+        if (raw) {
+          const items = JSON.parse(raw);
+          if (Array.isArray(items) && items.length > 0) {
+            await tx.table('inspirations').bulkPut(items);
+            localStorage.removeItem('keban-inspirations');
+          }
+        }
+      } catch {
+        // 迁移失败不阻塞，保留 localStorage
+      }
     });
   }
 }

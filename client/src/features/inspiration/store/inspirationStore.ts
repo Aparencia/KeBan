@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
+import { db } from '@/lib/storage/database';
 
 export interface InspirationTags {
   content_nature: 'concept' | 'question' | 'inspiration' | 'todo';
@@ -19,21 +20,26 @@ export interface InspirationItem {
 interface InspirationState {
   items: InspirationItem[];
   loading: boolean;
-  loadAll: () => void;
+  loadAll: () => Promise<void>;
   addItem: (content: string, tags: InspirationTags) => void;
   updateTags: (id: string, tags: Partial<InspirationTags>) => void;
   deleteItem: (id: string) => void;
 }
 
-const STORAGE_KEY = 'keban-inspirations';
-
-export const useInspirationStore = create<InspirationState>((set) => ({
+export const useInspirationStore = create<InspirationState>((set, get) => ({
   items: [],
   loading: false,
-  loadAll: () => {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) set({ items: JSON.parse(raw) });
+
+  loadAll: async () => {
+    set({ loading: true });
+    try {
+      const all = await db.inspirations.orderBy('createdAt').reverse().toArray();
+      set({ items: all as InspirationItem[], loading: false });
+    } catch {
+      set({ loading: false });
+    }
   },
+
   addItem: (content, tags) => {
     const item: InspirationItem = {
       id: uuidv4(),
@@ -43,28 +49,41 @@ export const useInspirationStore = create<InspirationState>((set) => ({
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    set((s) => {
-      const items = [item, ...s.items];
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-      return { items };
+    // Optimistic update: add to state immediately
+    set((s) => ({ items: [item, ...s.items] }));
+    // Persist to Dexie async
+    db.inspirations.add(item).catch(() => {
+      // Rollback on failure
+      set((s) => ({ items: s.items.filter(i => i.id !== item.id) }));
     });
   },
+
   updateTags: (id, tags) => {
-    set((s) => {
-      const items = s.items.map((i) =>
+    const now = new Date().toISOString();
+    // Optimistic update
+    set((s) => ({
+      items: s.items.map((i) =>
         i.id === id
-          ? { ...i, tags: { ...i.tags, ...tags }, tagsManuallyEdited: true, updatedAt: new Date().toISOString() }
+          ? { ...i, tags: { ...i.tags, ...tags }, tagsManuallyEdited: true, updatedAt: now }
           : i
-      );
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-      return { items };
+      ),
+    }));
+    // Persist to Dexie async
+    db.inspirations.update(id, {
+      tags: { ...get().items.find(i => i.id === id)!.tags, ...tags },
+      tagsManuallyEdited: true,
+      updatedAt: now,
+    }).catch(() => {
+      // Silent failure — UI state still consistent until next reload
     });
   },
+
   deleteItem: (id) => {
-    set((s) => {
-      const items = s.items.filter((i) => i.id !== id);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-      return { items };
+    // Optimistic update
+    set((s) => ({ items: s.items.filter((i) => i.id !== id) }));
+    // Persist to Dexie async
+    db.inspirations.delete(id).catch(() => {
+      // Silent failure
     });
   },
 }));

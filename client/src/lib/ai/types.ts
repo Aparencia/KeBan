@@ -9,6 +9,7 @@ export interface AIPlugin {
   extractScreenContent?(imageBase64: string, language?: string): Promise<VisionExtractResult>;
   tagContent?(content: string): Promise<TagContentResult>;
   optimizeCard?(front: string, back: string): Promise<OptimizeCardResult>;
+  sortInspiration?(content: string, existingTags?: Record<string, string>): Promise<SortResult>;
 }
 
 // === Summarize ===
@@ -141,6 +142,22 @@ export interface TagContentResult {
   contentNature: 'concept' | 'question' | 'inspiration' | 'todo';
   cognitiveDepth: 'shallow' | 'understanding' | 'application';
   subject: string;
+  model?: string;
+  tokensUsed?: number;
+  latencyMs?: number;
+}
+
+// === Sort Inspiration ===
+export type SortTargetType = 'feynman' | 'flashcard' | 'note' | 'todo';
+
+export interface SortSuggestion {
+  type: SortTargetType;
+  reason: string;
+  confidence: number;
+}
+
+export interface SortResult {
+  suggestions: SortSuggestion[];
   model?: string;
   tokensUsed?: number;
   latencyMs?: number;

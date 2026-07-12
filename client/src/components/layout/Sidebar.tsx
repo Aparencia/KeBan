@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import appIcon from '../../../app-icon.png';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { Home, Timer, FileText, Layers, Lightbulb, Settings, ChevronLeft, ChevronRight, MessageSquare, Clapperboard, BarChart3, Sparkles } from 'lucide-react';
+import { Home, Timer, FileText, Layers, Lightbulb, Settings, ChevronLeft, ChevronRight, MessageSquare, Clapperboard, BarChart3, Sparkles, LogIn, User as UserIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSidebarStore } from '@/stores/useSidebarStore';
 import { useCaptureStore } from '@/stores/useCaptureStore';
+import { useAuth } from '@/lib/auth/AuthContext';
 
 import FeedbackPanel from './FeedbackPanel';
 
@@ -25,6 +25,7 @@ export default function Sidebar() {
   const location = useLocation();
   const captureOpen = useCaptureStore((s) => s.open);
   const setCaptureOpen = useCaptureStore((s) => s.setOpen);
+  const { user, isAuthenticated } = useAuth();
 
   const isOnNotes = location.pathname.startsWith('/notes');
 
@@ -35,6 +36,13 @@ export default function Sidebar() {
     setCaptureOpen(true);
   };
 
+  // 用户显示名：优先 display_name（ProfileSettings 保存的 key），其次 full_name（Supabase 默认），最后 email 前缀
+  const meta = user?.user_metadata as Record<string, unknown> | undefined;
+  const displayName = (meta?.['display_name'] as string) || (meta?.['full_name'] as string) || user?.email?.split('@')[0] || '未登录';
+  // 用户头像：优先 avatar_url，否则用首字母
+  const avatarUrl = meta?.['avatar_url'] as string | undefined;
+  const avatarLetter = displayName.charAt(0).toUpperCase();
+
   return (
     <>
     <aside
@@ -43,22 +51,44 @@ export default function Sidebar() {
         'flex-shrink-0',
         'bg-bg-elevated border-r border-border/50',
         'h-screen sticky top-0',
-        'transition-all duration-200',
+        'transition-[width] duration-200',
         collapsed ? 'w-16' : 'w-60',
       )}
     >
-      {/* Logo + Name */}
+      {/* User Avatar + Name */}
       <div className={cn(
         'flex items-center gap-kb-sm px-kb-lg h-14 flex-shrink-0',
         collapsed && 'justify-center px-0',
       )}>
-        <img src={appIcon} alt="课伴" className="w-7 h-7 rounded-lg flex-shrink-0" />
-        <span className={cn(
-          'text-b1 font-semibold text-text-primary',
-          collapsed && 'hidden',
-        )}>
-          课伴
-        </span>
+        {isAuthenticated && user ? (
+          <>
+            {avatarUrl ? (
+              <img src={avatarUrl} alt={displayName} className="w-7 h-7 rounded-full flex-shrink-0 object-cover" />
+            ) : (
+              <div className="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center bg-brand-600 text-white text-c2 font-medium">
+                {avatarLetter}
+              </div>
+            )}
+            <span className={cn(
+              'text-b1 font-semibold text-text-primary truncate',
+              collapsed && 'hidden',
+            )}>
+              {displayName}
+            </span>
+          </>
+        ) : (
+          <>
+            <div className="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center bg-bg-secondary text-text-tertiary">
+              <UserIcon className="w-4 h-4" strokeWidth={1.5} />
+            </div>
+            <span className={cn(
+              'text-b1 font-semibold text-text-tertiary',
+              collapsed && 'hidden',
+            )}>
+              未登录
+            </span>
+          </>
+        )}
       </div>
 
       {/* Home — standalone, slightly larger */}

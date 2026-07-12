@@ -320,3 +320,30 @@ export interface Consent {
   version: string;
   acceptedAt: Date;
 }
+
+// ========== v0.7.0 账户体系完善新增类型 ==========
+
+// 用户资料（本地缓存，与 Supabase user metadata 同步）
+export interface UserProfile {
+  id: string;
+  userId: string;         // Supabase user.id
+  email: string;
+  displayName: string;
+  bio: string;
+  avatarUrl: string;      // Supabase Storage 头像 URL
+  updatedAt: string;      // ISO 8601
+}
+
+// 灵感（从 localStorage 迁移至 IndexedDB）
+export interface Inspiration {
+  id: string;
+  content: string;
+  tags: {
+    content_nature: 'concept' | 'question' | 'inspiration' | 'todo';
+    cognitive_depth: 'shallow' | 'understanding' | 'application';
+    subject: string;
+  };
+  tagsManuallyEdited: boolean;
+  createdAt: string;
+  updatedAt: string;
+}

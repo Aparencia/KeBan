@@ -13,14 +13,13 @@ import type { ScreenCaptureOptions, ScreenshotFrameData } from './screenCapture.
 import { AudioCapture, listAudioSources } from './audioCapture.js';
 import type { AudioCaptureOptions, AudioChunk } from './audioCapture.js';
 import * as path from 'path';
-import { fileURLToPath } from 'url';
+import * as fs from 'fs';
 import { safeHandle } from './ipcUtils.js';
 import { logger } from './logger.js';
 import { registerAIHandlers } from './aiHandlers.js';
-import { initAutoUpdater, checkForUpdate, downloadUpdate, installUpdate, destroyAutoUpdater } from './updater.js';
+import { initAutoUpdater, checkForUpdate, downloadUpdate, installUpdate, destroyAutoUpdater, setAutoCheckEnabled } from './updater.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// CommonJS 模式下 __filename 和 __dirname 全局可用，无需额外声明
 
 // ================================================================
 // 常量与辅助函数
@@ -34,6 +33,30 @@ let tray: Tray | null = null;
 
 /** 主窗口引用 */
 let mainWindow: BrowserWindow | null = null;
+
+// ================================================================
+// 关闭偏好持久化
+// ================================================================
+
+/** 读取保存的关闭选择 */
+function getCloseChoice(): string | null {
+  try {
+    const configPath = path.join(app.getPath('userData'), 'close-preference.json');
+    if (fs.existsSync(configPath)) {
+      const data = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      return data.choice || null;
+    }
+  } catch { /* ignore */ }
+  return null;
+}
+
+/** 保存关闭选择到配置文件 */
+function saveCloseChoice(choice: string): void {
+  try {
+    const configPath = path.join(app.getPath('userData'), 'close-preference.json');
+    fs.writeFileSync(configPath, JSON.stringify({ choice }), 'utf-8');
+  } catch { /* ignore */ }
+}
 
 // ================================================================
 // 系统托盘
@@ -76,7 +99,8 @@ function createTray(win: BrowserWindow): void {
 
   // 双击托盘图标恢复窗口
   tray.on('double-click', () => {
-    win.show();
+    if (win.isMinimized()) win.restore();
+    if (!win.isVisible()) win.show();
     win.focus();
   });
 }
@@ -92,6 +116,7 @@ function createWindow(): void {
     minWidth: 800,
     minHeight: 600,
     title: '课伴',
+    frame: false,
     icon: path.join(__dirname, '..', 'app-icon.png'),
     webPreferences: {
       contextIsolation: true,
@@ -101,6 +126,14 @@ function createWindow(): void {
   });
 
   mainWindow = win;
+
+  // 窗口最大化状态变化时通知前端
+  win.on('maximize', () => {
+    win.webContents.send('window:maximized-changed', true);
+  });
+  win.on('unmaximize', () => {
+    win.webContents.send('window:maximized-changed', false);
+  });
 
   // 判断开发/生产模式
   const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
@@ -114,11 +147,20 @@ function createWindow(): void {
     win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
   }
 
-  // 关闭窗口时最小化到托盘而非退出
+  // 关闭窗口时根据用户偏好决定行为
   win.on('close', (event) => {
     if (!isQuitting) {
       event.preventDefault();
-      win.hide();
+      const savedChoice = getCloseChoice();
+      if (savedChoice === 'quit') {
+        isQuitting = true;
+        app.quit();
+      } else if (savedChoice === 'minimize') {
+        win.hide();
+      } else {
+        // 无记忆选择，通知前端弹出确认对话框
+        win.webContents.send('window:closing');
+      }
     }
   });
 
@@ -301,6 +343,7 @@ if (!gotTheLock) {
     const win = BrowserWindow.getAllWindows()[0];
     if (win) {
       if (win.isMinimized()) win.restore();
+      if (!win.isVisible()) win.show();
       win.focus();
     }
   });
@@ -348,6 +391,57 @@ if (!gotTheLock) {
     createWindow();
     initAutoUpdater(mainWindow);
 
+    // ---- 窗口控制 IPC handlers ----
+    safeHandle('window:minimize', async () => {
+      const win = mainWindow;
+      if (win) win.minimize();
+      return { success: true };
+    });
+
+    safeHandle('window:maximize', async () => {
+      const win = mainWindow;
+      if (win) {
+        if (win.isMaximized()) {
+          win.unmaximize();
+        } else {
+          win.maximize();
+        }
+      }
+      return { success: true };
+    });
+
+    safeHandle('window:close', async () => {
+      const win = mainWindow;
+      if (win) {
+        // 触发 close 事件，走 FEAT-028 的确认流程
+        win.close();
+      }
+      return { success: true };
+    });
+
+    safeHandle('window:isMaximized', async () => {
+      const win = mainWindow;
+      return win ? win.isMaximized() : false;
+    });
+
+    // 关闭窗口行为选择回调
+    safeHandle('window:close-action', async (_event, action: 'quit' | 'minimize' | 'cancel', remember: boolean) => {
+      const win = mainWindow;
+      if (!win) return;
+
+      if (remember) {
+        saveCloseChoice(action);
+      }
+
+      if (action === 'quit') {
+        isQuitting = true;
+        app.quit();
+      } else if (action === 'minimize') {
+        win.hide();
+      }
+      // cancel: 什么都不做
+    });
+
     // 更新相关 IPC handler
     safeHandle('update:check', async () => {
       checkForUpdate();
@@ -361,6 +455,11 @@ if (!gotTheLock) {
 
     safeHandle('update:install', async () => {
       installUpdate();
+      return { success: true };
+    });
+
+    safeHandle('update:set-auto-check', async (_event, enabled: boolean) => {
+      setAutoCheckEnabled(enabled);
       return { success: true };
     });
 

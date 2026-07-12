@@ -4,6 +4,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { useBreadcrumb } from '@/hooks/usePageTitle';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { useSync } from '@/lib/sync/SyncContext';
+import { useAuth } from '@/lib/auth/AuthContext';
 import ModeIndicator from '@/components/ui/ModeIndicator';
 import { cn } from '@/lib/utils';
 
@@ -30,6 +31,7 @@ export default function Navbar() {
   const { crumbs } = useBreadcrumb();
   const { status: netStatus } = useNetworkStatus();
   const { isSyncing, lastSyncAt, pendingCount } = useSync();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const { pathname } = useLocation();
 
@@ -147,6 +149,20 @@ export default function Navbar() {
             <Sun className="w-icon-md h-icon-md" />
           )}
         </button>
+
+        {/* 未登录时显示登录按钮 */}
+        {!user && (
+          <Link
+            to="/login"
+            className={cn(
+              'px-3 py-1.5 rounded-kb-md text-b2 font-medium',
+              'bg-brand-500 text-white hover:bg-brand-600',
+              'transition-colors duration-kb-fast',
+            )}
+          >
+            登录
+          </Link>
+        )}
       </div>
     </header>
   );

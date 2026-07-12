@@ -9,6 +9,7 @@ import type {
   SummarizeOptions, FlashcardOptions, EvaluateOptions, DurationHistoryData, DurationOptions,
   VisionExtractResult, OptimizeCardResult,
   FeynmanQuestionResult, FeynmanAnswerEvalResult,
+  SortResult,
 } from './types';
 
 interface AIState<T> {
@@ -364,4 +365,41 @@ export function useAIFeynmanEvaluateAnswers() {
   }, []);
 
   return { ...state, evaluateAnswers };
+}
+
+/**
+ * AI 灵感分拣 hook — 分析内容并推荐归类目标
+ */
+export function useAISortInspiration() {
+  const [state, setState] = useState<AIState<SortResult>>({
+    ...INITIAL_STATE,
+  });
+
+  const sortInspiration = useCallback(async (content: string, existingTags?: Record<string, string>) => {
+    setState(prev => ({ ...prev, loading: true, error: null, needsConfig: false }));
+    try {
+      const result = await aiPluginLoader.sortInspiration(content, existingTags);
+      soundPlayer.play('ai_analysis_done');
+      setState({ data: result, loading: false, error: null, isFallback: false, needsConfig: false });
+      return result;
+    } catch (error: unknown) {
+      const aiError = error instanceof AIError ? error : null;
+      if (aiError?.code === 'offline') {
+        setState({ data: null, loading: false, error: aiError.message, isFallback: false, needsConfig: false });
+      } else if (aiError?.code === 'content_too_short') {
+        setState({ data: null, loading: false, error: aiError.message, isFallback: false, needsConfig: false });
+      } else if (aiError?.code === 'timeout') {
+        setState({ data: null, loading: false, error: 'AI 服务响应超时，请稍后重试', isFallback: false, needsConfig: false });
+      } else if (aiError?.code === 'service_unavailable') {
+        const svc = handleServiceUnavailable();
+        setState({ data: null, loading: false, error: svc.error, isFallback: false, needsConfig: svc.needsConfig });
+      } else {
+        const msg = error instanceof Error ? error.message : 'AI 分拣失败';
+        setState({ data: null, loading: false, error: msg, isFallback: true, needsConfig: false });
+      }
+      return null;
+    }
+  }, []);
+
+  return { ...state, sortInspiration };
 }

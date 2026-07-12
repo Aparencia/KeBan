@@ -237,6 +237,16 @@ body {
   }
 }
 
+/* 窗口拖拽区域 */
+.window-drag-region {
+  -webkit-app-region: drag;
+}
+
+.window-drag-region a,
+.window-drag-region button {
+  -webkit-app-region: no-drag;
+}
+
 /* 页面切换动画 */
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(4px); }

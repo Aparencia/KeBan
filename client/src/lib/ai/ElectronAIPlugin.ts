@@ -12,6 +12,8 @@ import type {
   OptimizeCardResult,
   FeynmanQuestionResult,
   FeynmanAnswerEvalResult,
+  TagContentResult,
+  SortResult,
 } from './types';
 import { AIError } from './types';
 
@@ -301,6 +303,69 @@ export class ElectronAIPlugin implements AIPlugin {
         feedback: result.feedback,
         strongPoints: result.strongPoints,
         weakPoints: result.weakPoints,
+        model: result.model,
+        tokensUsed: result.tokensUsed,
+        latencyMs: result.latencyMs,
+      };
+    } catch (error: unknown) {
+      throw this.handleError(error);
+    }
+  }
+
+  // ── invoke('ai_tag_content') ─────────────────────────────────
+  async tagContent(content: string): Promise<TagContentResult> {
+    this.checkOnline();
+    try {
+      const ipcStart = performance.now();
+      const result = await window.electronAPI!.invoke('ai_tag_content', {
+        content,
+        authToken: this.authToken,
+      }) as {
+        contentNature: string;
+        cognitiveDepth: string;
+        subject: string;
+        model: string;
+        tokensUsed: number;
+        latencyMs: number;
+        requestId?: string;
+      };
+
+      return {
+        contentNature: result.contentNature as TagContentResult['contentNature'],
+        cognitiveDepth: result.cognitiveDepth as TagContentResult['cognitiveDepth'],
+        subject: result.subject,
+        model: result.model,
+        tokensUsed: result.tokensUsed,
+        latencyMs: result.latencyMs,
+      };
+    } catch (error: unknown) {
+      throw this.handleError(error);
+    }
+  }
+
+  // ── invoke('ai_sort_inspiration') ─────────────────────────────
+  async sortInspiration(content: string, existingTags?: Record<string, string>): Promise<SortResult> {
+    this.checkOnline();
+    try {
+      const ipcStart = performance.now();
+      const result = await window.electronAPI!.invoke('ai_sort_inspiration', {
+        content,
+        existingTags,
+        authToken: this.authToken,
+      }) as {
+        suggestions: Array<{ type: string; reason: string; confidence: number }>;
+        model: string;
+        tokensUsed: number;
+        latencyMs: number;
+        requestId?: string;
+      };
+
+      return {
+        suggestions: result.suggestions.map(s => ({
+          type: s.type as SortResult['suggestions'][0]['type'],
+          reason: s.reason,
+          confidence: s.confidence,
+        })),
         model: result.model,
         tokensUsed: result.tokensUsed,
         latencyMs: result.latencyMs,
