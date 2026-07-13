@@ -38,6 +38,8 @@ from routers import (
     tag_content_router,
     feynman_question_router,
     inspiration_router,
+    learning_router,
+    inspiration_draft_router,
 )
 from cache.redis_cache import get_cache
 
@@ -314,6 +316,8 @@ app.include_router(transcribe_router)
 app.include_router(feynman_question_router)
 app.include_router(tag_content_router)
 app.include_router(inspiration_router)
+app.include_router(learning_router)         # v1.0.0: 记忆锚点/苏格拉底/预测/救援
+app.include_router(inspiration_draft_router) # v1.1.0: AI 草稿生成
 
 
 # ============================================================

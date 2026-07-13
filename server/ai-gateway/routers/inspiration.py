@@ -33,17 +33,19 @@ class SortInspirationRequest(BaseModel):
 
 class SortSuggestionItem(BaseModel):
     """单条分拣建议"""
-    type: str = Field(..., description="归类目标: feynman|flashcard|note|todo")
-    reason: str = Field(..., description="推荐理由")
+    category: str = Field(..., description="归类目标: feynman|flashcard|note|todo|action_item")
     confidence: float = Field(..., description="置信度 0.0-1.0")
+    reason: str = Field(..., description="推荐理由")
+    suggestedAction: str = Field(default="", description="推荐的后续操作")
 
 
 class SortInspirationResult(BaseModel):
     """灵感分拣结果"""
-    suggestions: list[SortSuggestionItem] = Field(..., description="归类建议列表（1-4 个）")
+    suggestions: list[SortSuggestionItem] = Field(..., description="归类建议列表（1-5 个）")
     model: str = Field(..., description="使用的模型名称")
     tokens_used: int = Field(..., description="消耗的 token 数")
     latency_ms: int = Field(..., description="请求耗时（毫秒）")
+    status: str = Field(default="success", description="状态")
 
 
 # ============================================================
@@ -87,9 +89,10 @@ async def sort_inspiration(
 
         suggestions = [
             SortSuggestionItem(
-                type=s.get("type", "note"),
-                reason=s.get("reason", ""),
+                category=s.get("category", "note"),
                 confidence=s.get("confidence", 0.5),
+                reason=s.get("reason", ""),
+                suggestedAction=s.get("suggestedAction", ""),
             )
             for s in result.get("suggestions", [])
         ]
@@ -99,6 +102,7 @@ async def sort_inspiration(
             model=result.get("model", "unknown"),
             tokens_used=result.get("tokens_used", 0),
             latency_ms=result.get("latency_ms", 0),
+            status=result.get("status", "success"),
         )
 
         logger.info(
@@ -112,14 +116,16 @@ async def sort_inspiration(
         sort_result = SortInspirationResult(
             suggestions=[
                 SortSuggestionItem(
-                    type="note",
-                    reason="服务暂时不可用，建议先整理为笔记",
+                    category="note",
                     confidence=0.5,
+                    reason="服务暂时不可用，建议先整理为笔记",
+                    suggestedAction="整理为笔记",
                 )
             ],
             model="fallback",
             tokens_used=0,
             latency_ms=0,
+            status="error",
         )
 
     return sort_result

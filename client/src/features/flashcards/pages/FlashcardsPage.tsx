@@ -5,6 +5,7 @@ import { ContextMenu, type ContextMenuGroup } from '@/components/ui/ContextMenu'
 import { Plus, Layers, Clock, Trash2, Layers3, Upload, BookOpen, Pencil, Share2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useFlashcardStore } from '../store/useFlashcardStore';
+import { useShallow } from 'zustand/react/shallow';
 import { flashcardStore } from '@/lib/storage';
 import { importDeck, importDeckNew, importDeckOverwrite, importDeckSkip, importDeckMerge, exportDeck, downloadDeckFile } from '@/lib/storage/exportImport';
 import ImportPreviewModal from '../components/ImportPreviewModal';
@@ -49,7 +50,7 @@ const emptyVariants = {
 
 export default function FlashcardsPage() {
   const navigate = useNavigate();
-  const { decks, isLoading, loadDecks, createDeck, deleteDeck } = useFlashcardStore();
+  const { decks, isLoading, loadDecks, createDeck, deleteDeck } = useFlashcardStore(useShallow(s => s));
 
   const [allCards, setAllCards] = useState<Flashcard[]>([]);
   const [modalOpen, setModalOpen] = useState(false);

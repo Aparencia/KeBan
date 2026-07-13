@@ -9,6 +9,8 @@ from routers.transcribe import router as transcribe_router
 from routers.tag_content import router as tag_content_router
 from routers.feynman_question import router as feynman_question_router
 from routers.inspiration import router as inspiration_router
+from routers.learning import router as learning_router
+from routers.inspiration_draft import router as inspiration_draft_router
 
 __all__ = [
     "summarize_router",
@@ -20,4 +22,6 @@ __all__ = [
     "tag_content_router",
     "feynman_question_router",
     "inspiration_router",
+    "learning_router",
+    "inspiration_draft_router",
 ]

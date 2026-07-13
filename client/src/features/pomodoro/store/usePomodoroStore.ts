@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { useShallow } from 'zustand/react/shallow';
 import { loadSettings, saveSettings, recordSession, playCompletionSound, sendNotification } from './usePomodoroPersistence';
 import { soundPlayer } from '@/lib/audio/SoundPlayer';
 
@@ -318,3 +319,52 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
     },
   };
 });
+
+// ---------------------------------------------------------------------------
+// 选择器 Hooks — 避免整 store 订阅导致不必要的重渲染
+// ---------------------------------------------------------------------------
+
+/** 仅订阅设置对象（低频变更） */
+export const usePomodoroSettings = () =>
+  usePomodoroStore(s => s.settings);
+
+/** 仅订阅运行状态 */
+export const usePomodoroRunning = () =>
+  usePomodoroStore(s => s.isRunning);
+
+/** 仅订阅剩余秒数（高频 tick） */
+export const usePomodoroRemaining = () =>
+  usePomodoroStore(s => s.remainingSeconds);
+
+/** 仅订阅当前阶段 */
+export const usePomodoroPhase = () =>
+  usePomodoroStore(s => s.phase);
+
+/** 仅订阅暂停状态 */
+export const usePomodoroPaused = () =>
+  usePomodoroStore(s => s.isPaused);
+
+/** 仅订阅完成计数 */
+export const usePomodoroCompletedCount = () =>
+  usePomodoroStore(s => s.completedCount);
+
+/** 仅订阅模式 */
+export const usePomodoroMode = () =>
+  usePomodoroStore(s => s.mode);
+
+/** 订阅沉浸式状态（复合值，使用 useShallow） */
+export const usePomodoroImmersive = () =>
+  usePomodoroStore(useShallow(s => ({
+    isImmersive: s.isImmersive,
+    wasImmersive: s.wasImmersive,
+  })));
+
+/** 计时器显示所需的最小订阅集（复合，useShallow 防引用不等） */
+export const usePomodoroTimerDisplay = () =>
+  usePomodoroStore(useShallow(s => ({
+    remainingSeconds: s.remainingSeconds,
+    totalSeconds: s.totalSeconds,
+    isRunning: s.isRunning,
+    isPaused: s.isPaused,
+    phase: s.phase,
+  })));

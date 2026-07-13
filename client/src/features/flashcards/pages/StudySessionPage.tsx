@@ -4,13 +4,16 @@ import { motion, useMotionValue, useTransform, type PanInfo } from 'framer-motio
 import { Button, EmptyState, useToast } from '@/components/ui';
 import { ContextMenu, type ContextMenuGroup } from '@/components/ui/ContextMenu';
 import { FlipCard, type FlipCardGlow } from '../components/FlipCard';
+import { ConfidenceSelector } from '../components/ConfidenceSelector';
+import { GoldenErrorPanel } from '../components/GoldenErrorPanel';
 import { X, RotateCcw, BookOpen, PauseCircle, AlertTriangle, Sparkles, ExternalLink, Loader2, Check, XIcon, Star } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useStudySessionStore } from '../store/useStudySessionStore';
 import { useFlashcardStore } from '../store/useFlashcardStore';
+import { useShallow } from 'zustand/react/shallow';
 import { useContextMenu } from '@/lib/contextMenu/useContextMenu';
 import { Rating, calculateIntervals } from '@/lib/sm2';
-import type { Flashcard } from '@/types/models';
+import type { Flashcard, Confidence } from '@/types/models';
 import { useAIFlashcards, useAIOptimizeCard } from '@/lib/ai/useAI';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 
@@ -42,14 +45,15 @@ export default function StudySessionPage() {
     completedCount,
     correctCount,
     isActive,
+    goldenErrors,
     startSession,
     rateCard,
     flipCard,
     endSession,
     relearn,
-  } = useStudySessionStore();
+  } = useStudySessionStore(useShallow(s => s));
 
-  const { selectDeck, loadCards, updateCard } = useFlashcardStore();
+  const { selectDeck, loadCards, updateCard } = useFlashcardStore(useShallow(s => s));
   const { toast } = useToast();
   const { generate: aiGenerate } = useAIFlashcards();
   const {
@@ -59,54 +63,40 @@ export default function StudySessionPage() {
     error: optimizeError,
   } = useAIOptimizeCard();
 
-  // Flip-completion gate: 翻转动画结束后才显示评分按钮（stagger 入场）
+  // Flip-completion gate
   const [flipDone, setFlipDone] = useState(false);
-  // Card exit animation flag
   const [exiting, setExiting] = useState(false);
-  // Fly-out direction for button-based rating
   const [exitDir, setExitDir] = useState<'left' | 'right' | null>(null);
-  // Rating glow for FlipCard
   const [cardGlow, setCardGlow] = useState<FlipCardGlow>(null);
-  // Hovered rating for interval preview
   const [hoveredRating, setHoveredRating] = useState<number | null>(null);
-  // New card entrance animation
   const [entering, setEntering] = useState(true);
-  // Track previous index for entrance animation
   const prevIndexRef = useRef(currentIndex);
-  // Ref to current button DOM nodes for bounce class
   const btnRefs = useRef<(HTMLButtonElement | null)[]>([]);
-  // AI optimize suggestion modal visibility
   const [showOptimizeModal, setShowOptimizeModal] = useState(false);
-  // Mastered counter: cards going from repetitions=0 to >=1 in this session
   const [sessionMastered, setSessionMastered] = useState(0);
-  // +1 floating animation trigger
   const [showPlusOne, setShowPlusOne] = useState(false);
-  // Session summary modal visibility
   const [showSummary, setShowSummary] = useState(false);
+  // v0.9.0: Confidence selector state
+  const [confidence, setConfidence] = useState<Confidence | null>(null);
 
   // Drag gesture state
   const prefersReduced = useReducedMotion();
   const dragX = useMotionValue(0);
   const [dragActive, setDragActive] = useState(false);
-  // Exiting ref for reliable double-rate guard (state may be stale in closures)
   const exitingRef = useRef(false);
-  // Drag overlay opacity derived from dragX
   const dragOverlayRed = useTransform(dragX, [-200, -50, 0], [0.55, 0, 0]);
   const dragOverlayGreen = useTransform(dragX, [0, 50, 200], [0, 0, 0.55]);
-  // Drag label visibility
   const [dragLabel, setDragLabel] = useState<'forgot' | 'remembered' | null>(null);
 
-  // 当 isFlipped 变为 false 时重置 flipDone
   useEffect(() => {
     if (!isFlipped) setFlipDone(false);
   }, [isFlipped]);
 
-  // 新卡片入场动画：currentIndex 变化时触发，并重置所有残留状态
   useEffect(() => {
     if (prevIndexRef.current !== currentIndex) {
       setEntering(true);
-      setFlipDone(false);   // Bug 5a: 确保新卡片不显示上一张的评分按钮
-      setExiting(false);    // Bug 5a: 确保退出状态被重置
+      setFlipDone(false);
+      setExiting(false);
       setExitDir(null);
       setCardGlow(null);
       exitingRef.current = false;
@@ -144,7 +134,6 @@ export default function StudySessionPage() {
   const handleSessionSelect = useCallback(async (itemKey: string, card: Flashcard) => {
     switch (itemKey) {
       case 'suspend': {
-        // 搁置：将到期日设为 1 年后
         const farFuture = new Date();
         farFuture.setFullYear(farFuture.getFullYear() + 1);
         updateCard(card.id, { dueDate: farFuture });
@@ -152,7 +141,6 @@ export default function StudySessionPage() {
         break;
       }
       case 'mark-hard': {
-        // 标记困难：增加失误次数，降低难度因子
         const newEaseFactor = Math.max(1.3, card.easeFactor - 0.2);
         updateCard(card.id, { lapses: card.lapses + 1, easeFactor: newEaseFactor });
         toast({ type: 'success', message: '已标记为困难卡片，后续会更频繁复习' });
@@ -166,7 +154,6 @@ export default function StudySessionPage() {
     }
   }, [updateCard, toast, aiOptimize]);
 
-  // Initialize session on mount
   useEffect(() => {
     if (deckId) {
       selectDeck(deckId);
@@ -174,24 +161,19 @@ export default function StudySessionPage() {
         startSession(deckId);
       });
     }
-    return () => {
-      // Cleanup: end session on unmount
-    };
+    return () => {};
   }, [deckId, selectDeck, loadCards, startSession]);
 
   const total = sessionCards.length;
   const current = sessionCards[currentIndex];
   const isComplete = !isActive && completedCount > 0;
 
-  // Auto-show summary modal when session completes
   useEffect(() => {
     if (isComplete) setShowSummary(true);
   }, [isComplete]);
 
-  // Derived stats for summary modal
   const correctRate = completedCount > 0 ? Math.round((correctCount / completedCount) * 100) : 0;
 
-  // Calculate dynamic intervals for current card
   const intervals = current
     ? calculateIntervals({
         easeFactor: current.easeFactor,
@@ -206,7 +188,6 @@ export default function StudySessionPage() {
 
   const progress = total > 0 ? Math.round((completedCount / total) * 100) : 0;
 
-  // Keep exitingRef in sync with exiting state
   useEffect(() => {
     exitingRef.current = exiting;
   }, [exiting]);
@@ -214,38 +195,35 @@ export default function StudySessionPage() {
   const handleRelearn = () => {
     if (exitingRef.current || !current) return;
     relearn();
-    // 重置翻面状态，让新入场的卡片从正面开始
     setFlipDone(false);
     setExiting(false);
     exitingRef.current = false;
   };
 
   const handleRate = (rating: Rating) => {
-    // Guard: prevent double-rating during exit animation
     if (exitingRef.current) return;
-    // Track newly mastered: card going from repetitions=0 to >=1 (non-Again rating)
+    // v0.9.0: default to 'medium' if no confidence selected
+    const effectiveConfidence = confidence ?? 'medium';
     if (current && current.repetitions === 0 && rating !== Rating.Again) {
       setSessionMastered((n) => n + 1);
       setShowPlusOne(true);
       setTimeout(() => setShowPlusOne(false), PLUS_ONE_ANIMATION_DURATION_MS);
     }
-    // Set glow and fly direction
     setCardGlow(rating === Rating.Again ? 'wrong' : 'correct');
     setExitDir(rating === Rating.Again ? 'left' : 'right');
     setExiting(true);
     exitingRef.current = true;
-    // 等待卡片飞出动画完成后再执行评分（400ms）
     setTimeout(() => {
       setExiting(false);
       exitingRef.current = false;
       setFlipDone(false);
       setExitDir(null);
       setCardGlow(null);
-      rateCard(rating);
+      rateCard(rating, effectiveConfidence);
+      setConfidence(null);
     }, 400);
   };
 
-  // Drag gesture handlers (only when card is flipped and reduced-motion is off)
   const handleDragStart = useCallback(() => {
     if (isFlipped && !prefersReduced && !exitingRef.current) setDragActive(true);
   }, [isFlipped, prefersReduced]);
@@ -263,16 +241,13 @@ export default function StudySessionPage() {
     if (!isFlipped || prefersReduced || exitingRef.current) return;
     const threshold = 100;
     if (info.offset.x < -threshold) {
-      // 左滑 = 忘记
       handleRate(Rating.Again);
     } else if (info.offset.x > threshold) {
-      // 右滑 = 记得（默认 Good）
       handleRate(Rating.Good);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isFlipped, prefersReduced, current]);
 
-  /** 按钮点击回弹 + 涟漪效果 */
   const handleBtnClick = (index: number, e?: React.MouseEvent<HTMLButtonElement>) => {
     const el = btnRefs.current[index];
     if (el) {
@@ -280,8 +255,6 @@ export default function StudySessionPage() {
       el.addEventListener('animationend', () => {
         el.classList.remove('animate-scale-bounce');
       }, { once: true });
-
-      // 涟漪效果：仅“良好”和“简单”按钮（index 2 & 3）
       if ((index === 2 || index === 3) && e) {
         const rect = el.getBoundingClientRect();
         const ripple = document.createElement('span');
@@ -372,7 +345,6 @@ export default function StudySessionPage() {
             <span className="text-b3 font-medium text-text-secondary">
               {completedCount}/{total} 已学习
             </span>
-            {/* 已掌握计数器 */}
             {sessionMastered > 0 && (
               <span className="inline-flex items-center gap-1 text-c1 font-medium text-brand-600">
                 <Star className="w-3 h-3 fill-brand-400 text-brand-400" strokeWidth={1.5} />
@@ -433,17 +405,14 @@ export default function StudySessionPage() {
             onDragEnd={handleDragEnd}
             whileDrag={{ cursor: 'grabbing' }}
           >
-            {/* 拖拽方向提示 overlay */}
             {dragActive && (
               <>
-                {/* 左滑红色 overlay (Forgot) */}
                 <motion.div
                   className="absolute inset-0 rounded-kb-xl bg-rose-500 z-10 pointer-events-none flex items-center justify-center"
                   style={{ opacity: dragOverlayRed }}
                 >
                   <span className="text-white font-bold text-h1 select-none">✗ 忘记</span>
                 </motion.div>
-                {/* 右滑绿色 overlay (Remembered) */}
                 <motion.div
                   className="absolute inset-0 rounded-kb-xl bg-emerald-500 z-10 pointer-events-none flex items-center justify-center"
                   style={{ opacity: dragOverlayGreen }}
@@ -493,7 +462,6 @@ export default function StudySessionPage() {
                 </button>
               </div>
             )}
-            {/* 拖拽提示文字（仅在翻转后且非减弱动效模式显示） */}
             {isFlipped && !prefersReduced && !dragActive && (
               <p className="text-c1 text-text-tertiary text-center mt-1.5 select-none">
                 左右滑动卡片可快速评分
@@ -525,6 +493,17 @@ export default function StudySessionPage() {
                 返回牌组
               </Button>
             </div>
+            {/* v0.9.0: Golden Error panel after session complete */}
+            {goldenErrors.length > 0 && (
+              <div className="mt-4 w-full max-w-xl mx-auto">
+                <GoldenErrorPanel
+                  errors={goldenErrors}
+                  onRelearn={(flashcardId) => {
+                    relearn();
+                  }}
+                />
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -548,7 +527,11 @@ export default function StudySessionPage() {
         )}>
           {flipDone && isFlipped ? (
             <div className="flex flex-col gap-2">
-              {/* 间隔预览 tooltip */}
+              {/* v0.9.0: Confidence selector before rating */}
+              <ConfidenceSelector
+                value={confidence}
+                onChange={setConfidence}
+              />
               {hoveredRating !== null && (
                 <div className="flex justify-center animate-fade-in-up">
                   <span className="text-c2 text-text-secondary px-2 py-0.5 rounded-kb-sm bg-bg-tertiary">
@@ -586,7 +569,6 @@ export default function StudySessionPage() {
                   </motion.button>
                 ))}
               </div>
-              {/* 重学按钮 */}
               <div className="flex justify-center">
                 <button
                   onClick={handleRelearn}
@@ -651,21 +633,18 @@ export default function StudySessionPage() {
 
             {optimizeData && !optimizeLoading && (
               <div className="flex flex-col gap-kb-md kb-ai-result-enter">
-                {/* 建议正面 */}
                 <div>
                   <p className="text-c1 font-medium text-text-tertiary mb-1">建议正面</p>
                   <p className="text-b2 text-text-primary bg-bg-tertiary rounded-kb-md px-3 py-2">
                     {optimizeData.suggestedFront}
                   </p>
                 </div>
-                {/* 建议背面 */}
                 <div>
                   <p className="text-c1 font-medium text-text-tertiary mb-1">建议背面</p>
                   <p className="text-b2 text-text-primary bg-bg-tertiary rounded-kb-md px-3 py-2">
                     {optimizeData.suggestedBack}
                   </p>
                 </div>
-                {/* 改进说明 */}
                 {optimizeData.improvements.length > 0 && (
                   <div>
                     <p className="text-c1 font-medium text-text-tertiary mb-1">改进说明</p>
@@ -676,7 +655,6 @@ export default function StudySessionPage() {
                     </ul>
                   </div>
                 )}
-                {/* 操作按钮 */}
                 <div className="flex gap-3 mt-kb-sm">
                   <Button
                     variant="secondary"
@@ -704,7 +682,6 @@ export default function StudySessionPage() {
       {showSummary && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-kb-md">
           <div className="w-full max-w-sm bg-bg-elevated rounded-kb-xl shadow-kb-lg p-kb-lg animate-fade-in-up">
-            {/* 头部图标 */}
             <div className="flex justify-center mb-kb-md">
               <div className={cn(
                 'w-14 h-14 rounded-kb-xl flex items-center justify-center',
@@ -718,19 +695,15 @@ export default function StudySessionPage() {
               </div>
             </div>
 
-            {/* 标题 */}
             <h3 className="text-h2 font-semibold text-text-primary text-center mb-kb-md">
               本轮学习完成
             </h3>
 
-            {/* 统计数据 */}
             <div className="grid grid-cols-2 gap-3 mb-kb-lg">
-              {/* 完成数量 */}
               <div className="bg-bg-secondary rounded-kb-lg p-3 text-center">
                 <p className="text-h1 font-bold text-text-primary">{completedCount}/{total}</p>
                 <p className="text-c1 text-text-tertiary mt-0.5">完成卡片</p>
               </div>
-              {/* 正确率 */}
               <div className="bg-bg-secondary rounded-kb-lg p-3 text-center">
                 <p className={cn(
                   'text-h1 font-bold',
@@ -746,7 +719,6 @@ export default function StudySessionPage() {
               </div>
             </div>
 
-            {/* 新掌握提示 */}
             {sessionMastered > 0 && (
               <div className="flex items-center justify-center gap-1.5 mb-kb-md">
                 <Star className="w-4 h-4 fill-brand-400 text-brand-400" strokeWidth={1.5} />
@@ -756,7 +728,6 @@ export default function StudySessionPage() {
               </div>
             )}
 
-            {/* 操作按钮 */}
             <div className="flex gap-3">
               <Button
                 variant="secondary"

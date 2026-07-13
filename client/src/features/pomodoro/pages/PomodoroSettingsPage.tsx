@@ -4,6 +4,7 @@ import { Timer, Zap, Bell, Save, RotateCcw, GraduationCap, Sparkles, Loader2, Ch
 import { Button, Card, Input, useToast } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { usePomodoroStore } from '../store/usePomodoroStore';
+import { useShallow } from 'zustand/react/shallow';
 import { useAIDuration } from '@/lib/ai/useAI';
 import { pomodoroSessionStore } from '@/lib/storage';
 import type { PomodoroSession } from '@/types/models';
@@ -82,7 +83,7 @@ function SettingRow({
 }
 
 export default function PomodoroSettingsPage() {
-  const { settings, updateSettings, initialize, mode: _mode } = usePomodoroStore();
+  const { settings, updateSettings, initialize, mode: _mode } = usePomodoroStore(useShallow(s => s));
 
   // Local form state (mirrors store settings)
   const [localSettings, setLocalSettings] = useState({ ...settings });

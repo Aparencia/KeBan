@@ -4,15 +4,19 @@ import { Button, Card, Input, Tag, EmptyState, Modal } from '@/components/ui';
 import { useToast } from '@/components/ui';
 import { ContextMenu } from '@/components/ui/ContextMenu';
 import type { ContextMenuGroup } from '@/components/ui/ContextMenu';
+import { VirtualList } from '@/components/ui/VirtualList';
 import {
   Search, Plus, FolderPlus, ChevronRight, FileText, PanelLeftClose, PanelLeft, Pin,
   MoreVertical, Trash2, Copy, Download, BookOpen, Sparkles,
 } from 'lucide-react';
 import { TemplateSelector } from '../components/TemplateSelector';
 import type { NoteTemplate } from '../components/TemplateSelector';
+import { NoteSearchBar } from '../components/NoteSearchBar';
+import { NoteTagFilter } from '../components/NoteTagFilter';
 import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
 import { useNoteStore } from '../store/useNoteStore';
+import { useShallow } from 'zustand/react/shallow';
 import { useContextMenu } from '@/lib/contextMenu';
 import type { Note } from '@/types/models';
 import { useAISummarize, useAIFlashcards } from '@/lib/ai/useAI';
@@ -81,7 +85,7 @@ export default function NotesPage() {
     loadNotes, loadFolders, createNote, createFolder, selectNote, selectFolder,
     setSearchQuery, getFilteredNotes, createFromTemplate, toggleTag, getAllTags,
     deleteNote, togglePin,
-  } = useNoteStore();
+  } = useNoteStore(useShallow(s => s));
 
   const { toast } = useToast();
   const { summarize } = useAISummarize();
@@ -93,7 +97,8 @@ export default function NotesPage() {
   } = useContextMenu<Note>();
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
 
-  useEffect(() => { loadNotes(); loadFolders(); }, [loadNotes, loadFolders]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { loadNotes(); loadFolders(); }, []);
 
   const filteredNotes = getFilteredNotes();
   const allTags = getAllTags();
@@ -288,49 +293,23 @@ export default function NotesPage() {
       {/* ── 中栏：笔记列表 ── */}
       <main className="relative z-10 flex-1 flex flex-col overflow-hidden">
         {/* 工具栏 */}
-        <div className="sticky top-0 z-20 flex items-center gap-2 px-4 py-3 border-b border-border/30 flex-shrink-0 backdrop-blur-md bg-bg-primary/80">
-          <motion.button
-            whileTap={{ scale: 0.9 }}
-            onClick={() => setSidebarOpen((v) => !v)}
-            className="hidden md:flex p-1.5 rounded-full text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary/40 transition-all duration-200"
-          >
-            {sidebarOpen ? <PanelLeftClose className="w-5 h-5" strokeWidth={1.5} /> : <PanelLeft className="w-5 h-5" strokeWidth={1.5} />}
-          </motion.button>
-          <Input
-            placeholder="搜索笔记..."
-            prefix={<Search className="w-4 h-4" strokeWidth={1.5} />}
-            size="sm"
-            className="flex-1 min-w-0"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-          {allTags.length > 0 && (
-            <div className="flex items-center gap-1.5 flex-wrap">
-              {allTags.map((tag) => {
-                const isActive = selectedTags.includes(tag);
-                return (
-                  <motion.button
-                    key={tag}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => toggleTag(tag)}
-                    className={cn(
-                      'px-2 py-0.5 text-[11px] rounded-full border transition-all duration-200 whitespace-nowrap',
-                      isActive
-                        ? 'bg-brand-500/10 text-brand-600 border-brand-300/50 font-medium'
-                        : 'bg-bg-tertiary/30 text-text-secondary border-border/30 hover:bg-bg-tertiary/60',
-                    )}
-                  >
-                    {tag}
-                  </motion.button>
-                );
-              })}
-            </div>
-          )}
-          <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}>
-            <Button size="sm" icon={<Plus className="w-4 h-4" strokeWidth={2} />} onClick={() => setTemplateOpen(true)}>
-              新建笔记
-            </Button>
-          </motion.div>
+        <div className="sticky top-0 z-20 flex flex-col gap-2 px-4 py-3 border-b border-border/30 flex-shrink-0 backdrop-blur-md bg-bg-primary/80">
+          <div className="flex items-center gap-2">
+            <motion.button
+              whileTap={{ scale: 0.9 }}
+              onClick={() => setSidebarOpen((v) => !v)}
+              className="hidden md:flex p-1.5 rounded-full text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary/40 transition-all duration-200"
+            >
+              {sidebarOpen ? <PanelLeftClose className="w-5 h-5" strokeWidth={1.5} /> : <PanelLeft className="w-5 h-5" strokeWidth={1.5} />}
+            </motion.button>
+            <NoteSearchBar />
+            <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}>
+              <Button size="sm" icon={<Plus className="w-4 h-4" strokeWidth={2} />} onClick={() => setTemplateOpen(true)}>
+                新建笔记
+              </Button>
+            </motion.div>
+          </div>
+          <NoteTagFilter />
         </div>
 
         {/* 列表 */}
@@ -343,6 +322,50 @@ export default function NotesPage() {
                 description="点击「新建笔记」开始记录你的第一篇笔记"
               />
             </div>
+          ) : filteredNotes.length > 50 ? (
+            <VirtualList
+              items={filteredNotes}
+              estimateSize={110}
+              overscan={6}
+              className="overflow-y-auto"
+              height="100%"
+              getKey={(note) => note.id!}
+              renderItem={(note) => (
+                <Card
+                  hoverable
+                  padding="md"
+                  onClick={() => handleSelectNote(note.id!)}
+                  onContextMenu={(e) => handleNoteContextMenu(e, note)}
+                  className={cn(
+                    'group relative transition-all duration-300 mb-2',
+                    'hover:-translate-y-[2px] hover:shadow-[0_4px_16px_-4px_rgba(0,0,0,0.08)]',
+                    selectedNoteId === note.id && 'border-brand-400/60 bg-brand-50/20 shadow-[inset_0_0_0_1px_rgba(91,138,114,0.08)]',
+                  )}
+                >
+                  <div
+                    className="absolute left-0 top-2 bottom-2 w-[3px] rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                    style={{
+                      background: colorForType(note.template),
+                      boxShadow: `0 0 8px ${colorForType(note.template)}40`,
+                    }}
+                  />
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        {note.pinned && <Pin className="w-3.5 h-3.5 text-accent-400 flex-shrink-0" strokeWidth={1.5} />}
+                        <h3 className="text-[14px] font-medium text-text-primary truncate">{note.title}</h3>
+                      </div>
+                      <p className="text-[13px] text-text-secondary mt-1 line-clamp-2 leading-relaxed">{stripHtml(note.content)}</p>
+                      <div className="flex items-center gap-2 mt-2 flex-wrap">
+                        <Tag color="note">{templateLabels[note.template as NoteTemplate]}</Tag>
+                        {note.tags.map((tag) => (<Tag key={tag} color="default">{tag}</Tag>))}
+                        <span className="text-[11px] text-text-tertiary ml-auto font-mono tabular-nums">{formatDate(note.updatedAt)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+              )}
+            />
           ) : (
             <motion.div variants={listVariants} initial="hidden" animate="visible" className="space-y-2">
               {filteredNotes.map((note) => (

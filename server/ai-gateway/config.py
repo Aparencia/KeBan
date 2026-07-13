@@ -31,6 +31,11 @@ AI_PROVIDERS: dict = {
             "flashcard": "qwen-plus",        # 闪卡生成（JSON Mode 稳定）
             "vision": "qwen-vl-plus",        # 多模态视觉提取
             "asr": "paraformer-v2",          # 语音转文字（Paraformer）
+            "anchor": "qwen-plus",           # 记忆锚点生成
+            "socratic": "qwen-plus",         # 苏格拉底追问
+            "predict": "qwen-plus",          # 预测驱动学习
+            "rescue": "qwen-plus",           # 卡壳三级救援
+            "inspiration_draft": "qwen-plus",# AI 草稿生成（v1.1.0）
         },
     },
     "deepseek": {
@@ -68,6 +73,12 @@ MODEL_ROUTING: dict[str, tuple[str, str]] = {
     "feynman_question": ("deepseek", "evaluate"),
     "feynman_evaluate": ("deepseek", "evaluate"),
     "sort_inspiration": ("glm", "free"),
+    # v1.0.0/v1.1.0 新增 Chain
+    "anchor_point": ("qwen", "anchor"),
+    "socratic": ("qwen", "socratic"),
+    "predict": ("qwen", "predict"),
+    "rescue": ("qwen", "rescue"),
+    "inspiration_draft": ("qwen", "inspiration_draft"),
 }
 
 # ============================================================
@@ -124,6 +135,12 @@ PROVIDER_FALLBACK_CHAIN: dict[str, list[str]] = {
     "feynman_question": ["deepseek", "glm", "fallback"], # DeepSeek 为主，GLM 备选
     "feynman_evaluate": ["deepseek", "glm", "fallback"], # DeepSeek 为主，GLM 备选
     "sort_inspiration": ["glm", "deepseek", "fallback"], # GLM（免费）优先，DeepSeek 备选
+    # v1.0.0/v1.1.0 新增 Chain
+    "anchor_point":       ["qwen", "glm", "fallback"],   # Qwen 为主，GLM 备选
+    "socratic":           ["qwen", "deepseek", "fallback"], # Qwen 为主，DeepSeek 备选
+    "predict":            ["qwen", "glm", "fallback"],   # Qwen 为主，GLM 备选
+    "rescue":             ["qwen", "deepseek", "fallback"], # Qwen 为主，DeepSeek 备选
+    "inspiration_draft":  ["qwen", "glm", "fallback"],   # Qwen 为主，GLM 备选
 }
 
 
@@ -205,6 +222,12 @@ TIMEOUT_CONFIG: dict[str, int] = {
     "feynman_question": 15,
     "feynman_evaluate": 15,
     "sort_inspiration": 15,
+    # v1.0.0/v1.1.0 新增 Chain
+    "anchor_point": 15,
+    "socratic": 30,           # 多轮对话，需要更长时间
+    "predict": 15,
+    "rescue": 30,             # 三级救援内容较多
+    "inspiration_draft": 15,
 }
 
 # ============================================================
@@ -224,6 +247,12 @@ RATE_LIMITS: dict[str, int] = {
     "feynman_question": 15,
     "feynman_evaluate": 15,
     "sort_inspiration": 20,
+    # v1.0.0/v1.1.0 新增 Chain
+    "anchor_point": 15,
+    "socratic": 20,           # 多轮对话，频率稍高
+    "predict": 15,
+    "rescue": 10,             # 救援场景，适度限制
+    "inspiration_draft": 15,
 }
 
 # ============================================================

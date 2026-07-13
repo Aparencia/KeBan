@@ -5,6 +5,7 @@ import { Eye, EyeOff, Cpu, Key, Shield, ChevronDown, Loader2, CheckCircle, XCirc
 import { cn } from '@/lib/utils';
 import type { AIConfig } from '@/lib/ai/config';
 import { useSettingsStore } from '@/stores/useSettingsStore';
+import { useShallow } from 'zustand/react/shallow';
 
 /** 模式预设方案 */
 const modeOptions = [
@@ -48,7 +49,7 @@ export default function AIProviderSettings() {
     saveAIConfigAction,
     saveUserKeysAction,
     clearUserKeysAction,
-  } = useSettingsStore();
+  } = useSettingsStore(useShallow(s => s));
 
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [testStatus, setTestStatus] = useState<TestStatus>('idle');

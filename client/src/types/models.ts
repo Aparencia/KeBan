@@ -1,3 +1,48 @@
+// ========== v0.9.0 核心类型扩展 ==========
+
+/** 三档自信度 */
+export type Confidence = 'low' | 'medium' | 'high';
+
+/** 高自信错误标记（confidence=high 但答错 → goldenError） */
+export interface GoldenError {
+  flashcardId: string;
+  timestamp: number;
+  confidence: 'high';
+  correctAnswer: string;
+  userAnswer: string;
+}
+
+/** 笔记全文搜索索引条目 */
+export interface SearchIndexEntry {
+  id?: number;
+  noteId: string;
+  tokens: string[];
+  title: string;
+  content: string;
+  updatedAt: number;
+}
+
+/** 学习预测记录 */
+export interface Prediction {
+  id?: number;
+  noteId: string;
+  question: string;
+  userAnswer?: string;
+  aiAnswer: string;
+  confidence: Confidence;
+  createdAt: number;
+  verifiedAt?: number;
+  isCorrect?: boolean;
+}
+
+/** 灵感分类建议（v0.9.0 AI 整理功能） */
+export interface SortSuggestion {
+  category: string;
+  confidence: number;
+  reason: string;
+  suggestedAction: 'tag' | 'move' | 'transform' | 'archive';
+}
+
 // 番茄钟会话记录
 export interface PomodoroSession {
   id: string;
@@ -93,6 +138,10 @@ export interface FlashcardReview {
   intervalAfter: number;
   reviewedAt: Date;
   timeSpent: number;             // 本次复习耗时（秒）
+  /** v0.9.0: 本次复习自信度 */
+  confidence?: Confidence;
+  /** v0.9.0: 是否为黄金错误（高自信答错） */
+  goldenError?: boolean;
 }
 
 // 费曼学习笔记
@@ -346,4 +395,8 @@ export interface Inspiration {
   tagsManuallyEdited: boolean;
   createdAt: string;
   updatedAt: string;
+  /** v0.9.0: AI 整理状态 */
+  sortStatus?: 'pending' | 'sorting' | 'sorted' | 'confirmed' | 'transformed';
+  /** v0.9.0: AI 分类建议列表 */
+  sortResult?: SortSuggestion[];
 }

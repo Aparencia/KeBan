@@ -5,7 +5,7 @@ import type {
   FeynmanNote, FeynmanSummary, FeynmanWeakPoint,
   OperationLog, AppSettings, SyncConflict, OfflineQueueItem,
   StudyCheckIn, Achievement, PomodoroGoal, WindowCapture,
-  Consent, UserProfile, Inspiration
+  Consent, UserProfile, Inspiration, SearchIndexEntry
 } from '@/types/models';
 
 export class KeBanDatabase extends Dexie {
@@ -30,6 +30,7 @@ export class KeBanDatabase extends Dexie {
   consent!: Table<Consent, string>;
   userProfile!: Table<UserProfile, string>;
   inspirations!: Table<Inspiration, string>;
+  searchIndex!: Table<SearchIndexEntry, number>;
 
   constructor() {
     super('keban');
@@ -74,11 +75,8 @@ export class KeBanDatabase extends Dexie {
     }).upgrade(async (tx) => {
       // Schema v2 -> v3 迁移：自增 number ID -> UUID string
 
-      // 由于 Dexie upgrade 函数中无法 import uuid，
-      // 我们使用 crypto.randomUUID() 作为 UUID 生成器（浏览器原生支持）
       const genId = () => crypto.randomUUID();
 
-      // 持久化迁移记录到 appSettings，便于后续排障审计
       await tx.table('appSettings').put({
         id: genId(),
         key: 'migration_v3_log',
@@ -86,13 +84,11 @@ export class KeBanDatabase extends Dexie {
         updatedAt: new Date(),
       });
 
-      // 迁移单张表：将 number ID 转为 string UUID
       const migrateTable = async (tableName: string) => {
         const table = tx.table(tableName);
         const allItems = await table.toArray();
         if (allItems.length === 0) return;
 
-        // 建立 oldId -> newId 映射
         const idMap = new Map<number, string>();
         allItems.forEach((item: Record<string, unknown>) => {
           if (typeof item.id === 'number') {
@@ -102,7 +98,6 @@ export class KeBanDatabase extends Dexie {
 
         if (idMap.size === 0) return;
 
-        // 清空表并用新 ID 重新插入
         await table.clear();
         for (const item of allItems) {
           const newItem = { ...item };
@@ -113,7 +108,6 @@ export class KeBanDatabase extends Dexie {
         }
       };
 
-      // 按表迁移（Alpha 阶段用户基本没有旧数据，主要确保结构正确）
       const tables = [
         'pomodoroSessions', 'pomodoroSettings', 'notes', 'noteFolders',
         'flashcardDecks', 'flashcards', 'flashcardReviews',
@@ -129,7 +123,6 @@ export class KeBanDatabase extends Dexie {
         }
       }
 
-      // 为 OperationLog 新增字段设置默认值
       try {
         const opLogs = await tx.table('operationLog').toArray();
         if (opLogs.length > 0) {
@@ -148,35 +141,29 @@ export class KeBanDatabase extends Dexie {
       }
     });
 
-    // alpha.2: 新增打卡、成就、番茄目标表
     this.version(4).stores({
       studyCheckIns: 'id, &date, checkInTime, streakDays',
       achievements: 'id, &key, unlockedAt',
       pomodoroGoals: 'id, text, useCount, lastUsedAt',
     });
 
-    // v0.4.0-alpha.1: 混合方案 — 新增窗口捕获表
     this.version(5).stores({
       windowCaptures: 'id, noteId, status, startedAt',
     });
 
-    // v0.5.0-alpha.2: 双向关联 — flashcards 新增 sourceNoteId 索引，notes 新增 videoNoteType 索引
     this.version(6).stores({
       flashcards: 'id, deckId, front, back, createdAt, dueDate, interval, easeFactor, repetitions, lapses, sourceNoteId',
       notes: 'id, title, folderId, createdAt, updatedAt, *tags, pinned, videoNoteType',
     });
 
-    // v0.6.0: 新增隐私合规 consent 表
     this.version(7).stores({
       consent: 'id, &type, version, acceptedAt',
     });
 
-    // v0.7.0: 新增 userProfile 和 inspirations 表
     this.version(8).stores({
       userProfile: 'id, userId, email, updatedAt',
       inspirations: 'id, createdAt, updatedAt, [tags.content_nature+tags.cognitive_depth+tags.subject]',
     }).upgrade(async (tx) => {
-      // 从 localStorage 迁移灵感数据至 IndexedDB
       try {
         const raw = localStorage.getItem('keban-inspirations');
         if (raw) {
@@ -188,6 +175,18 @@ export class KeBanDatabase extends Dexie {
         }
       } catch {
         // 迁移失败不阻塞，保留 localStorage
+      }
+    });
+
+    // v0.9.0: 新增全文搜索索引表
+    this.version(9).stores({
+      searchIndex: '++id, noteId, *tokens, title, content, updatedAt',
+    }).upgrade(async (tx) => {
+      // v8 -> v9 迁移：确保搜索索引表干净可用
+      try {
+        await tx.table('searchIndex').clear();
+      } catch {
+        // 搜索索引表不存在时忽略
       }
     });
   }

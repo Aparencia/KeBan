@@ -8,6 +8,7 @@ import { useRef, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { Pause, Play } from 'lucide-react';
 import { usePomodoroStore } from '../store/usePomodoroStore';
+import { useShallow } from 'zustand/react/shallow';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 
 const SIZE = 240;
@@ -38,7 +39,7 @@ export default function ImmersiveTimer() {
     settings,
     pause,
     resume,
-  } = usePomodoroStore();
+  } = usePomodoroStore(useShallow(s => s));
 
   const progress = totalSeconds > 0 ? remainingSeconds / totalSeconds : 0;
   const minutes = Math.floor(remainingSeconds / 60);

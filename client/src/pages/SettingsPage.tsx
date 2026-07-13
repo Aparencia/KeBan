@@ -5,6 +5,8 @@ import SoundSettings from './settings/SoundSettings';
 import SyncSettings from './settings/SyncSettings';
 import AIProviderSettings from './settings/AIProviderSettings';
 import DataSettings from './settings/DataSettings';
+import ModeSettings from './settings/ModeSettings';
+import StoragePathSettings from './settings/StoragePathSettings';
 import AboutSettings from './settings/AboutSettings';
 
 export default function SettingsPage() {
@@ -27,11 +29,14 @@ export default function SettingsPage() {
         <ProfileSettings />
         <AppearanceSettings />
         <SoundSettings />
+        <ModeSettings />
         <SyncSettings />
         <AIProviderSettings />
         <DataSettings />
+        <StoragePathSettings />
         <AboutSettings />
       </div>
     </motion.div>
   );
 }
+

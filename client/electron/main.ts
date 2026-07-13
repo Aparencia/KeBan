@@ -9,6 +9,7 @@
  */
 
 import { app, BrowserWindow, Menu, dialog, session } from 'electron';
+import { writeFile, readFile } from 'fs/promises';
 import { safeHandle, setMainWindowId } from './ipcUtils.js';
 import { logger } from './logger.js';
 import { registerAIHandlers } from './ai/index.js';
@@ -194,6 +195,64 @@ if (!gotTheLock) {
     safeHandle('update:set-auto-check', async (_event, enabled: boolean) => {
       setAutoCheckEnabled(enabled);
       return { success: true };
+    });
+
+    // ================================================================
+    // v0.9.0: 备份相关 IPC handlers
+    // ================================================================
+
+    /**
+     * 显示保存对话框并将备份数据写入文件
+     */
+    safeHandle('backup:save', async (_event, data: string, defaultName?: string) => {
+      const filename = defaultName || `keban-backup-${new Date().toISOString().slice(0, 10)}.json`;
+
+      const result = await dialog.showSaveDialog({
+        title: '保存备份文件',
+        defaultPath: filename,
+        filters: [
+          { name: 'KeBan 备份文件', extensions: ['json'] },
+          { name: '所有文件', extensions: ['*'] },
+        ],
+      });
+
+      if (result.canceled || !result.filePath) {
+        return { success: false, canceled: true, path: null };
+      }
+
+      try {
+        await writeFile(result.filePath, data, 'utf-8');
+        return { success: true, canceled: false, path: result.filePath };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : '写入失败';
+        return { success: false, canceled: false, path: null, error: msg };
+      }
+    });
+
+    /**
+     * 显示打开对话框，选择备份文件并读取内容
+     */
+    safeHandle('backup:open', async () => {
+      const result = await dialog.showOpenDialog({
+        title: '选择备份文件',
+        filters: [
+          { name: 'KeBan 备份文件', extensions: ['json'] },
+          { name: '所有文件', extensions: ['*'] },
+        ],
+        properties: ['openFile'],
+      });
+
+      if (result.canceled || result.filePaths.length === 0) {
+        return { success: false, canceled: true, content: null };
+      }
+
+      try {
+        const content = await readFile(result.filePaths[0], 'utf-8');
+        return { success: true, canceled: false, content, path: result.filePaths[0] };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : '读取失败';
+        return { success: false, canceled: false, content: null, error: msg };
+      }
     });
 
     app.on('activate', () => {

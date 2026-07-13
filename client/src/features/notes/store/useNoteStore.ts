@@ -1,6 +1,9 @@
 import { create } from 'zustand';
+import { useShallow } from 'zustand/react/shallow';
 import { noteStore, noteFolderStore } from '@/lib/storage';
 import { createWithLog, updateWithLog, deleteWithLog } from '@/lib/storage/writeWithLog';
+import { dexieSearchIndexer } from '@/lib/search/dexieSearchIndexer';
+import type { SearchResultItem } from '@/lib/search/types';
 import type { Note, NoteFolder } from '@/types/models';
 
 interface NoteState {
@@ -12,6 +15,8 @@ interface NoteState {
   selectedFolderId: string | null;
   searchQuery: string;
   selectedTags: string[];
+  /** v0.9.0: 全文搜索结果 */
+  searchResults: SearchResultItem[];
 
   // 笔记操作
   loadNotes: () => Promise<void>;
@@ -36,11 +41,19 @@ interface NoteState {
 
   // 搜索
   setSearchQuery: (query: string) => void;
+  /** v0.9.0: 全文搜索（基于 Dexie 索引 + BM25 评分） */
+  searchNotes: (query: string, options?: { limit?: number; fuzzy?: boolean }) => Promise<void>;
 
   // 标签筛选
   toggleTag: (tag: string) => void;
   clearTagFilter: () => void;
   getAllTags: () => string[];
+
+  // 标签管理（单篇笔记级别）
+  /** v0.9.0: 为指定笔记添加标签 */
+  addTag: (noteId: string, tag: string) => Promise<void>;
+  /** v0.9.0: 从指定笔记移除标签 */
+  removeTag: (noteId: string, tag: string) => Promise<void>;
 
   // 模板
   createFromTemplate: (template: Note['template'], folderId?: string) => Promise<string>;
@@ -129,6 +142,7 @@ export const useNoteStore = create<NoteState>((set, get) => {
     selectedFolderId: null,
     searchQuery: '',
     selectedTags: [],
+    searchResults: [],
 
     loadNotes: async () => {
       set({ isLoading: true });
@@ -155,6 +169,12 @@ export const useNoteStore = create<NoteState>((set, get) => {
         pinned: false,
       };
       const id = await createWithLog(noteStore, 'notes', noteData);
+      // v0.9.0: 自动更新搜索索引
+      try {
+        await dexieSearchIndexer.upsert(id, data.title, content, now.getTime());
+      } catch {
+        // 索引更新失败不阻塞笔记创建
+      }
       await get().loadNotes();
       return id;
     },
@@ -165,11 +185,25 @@ export const useNoteStore = create<NoteState>((set, get) => {
         updateData.wordCount = changes.content.length;
       }
       await updateWithLog(noteStore, 'notes', id, updateData);
+      // v0.9.0: 自动更新搜索索引
+      try {
+        const note = await noteStore.getById(id);
+        if (note) {
+          const ts = updateData.updatedAt instanceof Date
+            ? updateData.updatedAt.getTime()
+            : new Date(updateData.updatedAt as unknown as string).getTime();
+          await dexieSearchIndexer.upsert(id, note.title, note.content, ts);
+        }
+      } catch {
+        // 索引更新失败不阻塞笔记更新
+      }
       await get().loadNotes();
     },
 
     deleteNote: async (id) => {
       await deleteWithLog(noteStore, 'notes', id);
+      // v0.9.0: 删除搜索索引
+      try { await dexieSearchIndexer.remove(id); } catch { /* 忽略 */ }
       const { selectedNoteId } = get();
       if (selectedNoteId === id) {
         set({ selectedNoteId: null });
@@ -237,6 +271,24 @@ export const useNoteStore = create<NoteState>((set, get) => {
       set({ searchQuery: query });
     },
 
+    searchNotes: async (query, options) => {
+      if (!query.trim()) {
+        set({ searchResults: [], searchQuery: '' });
+        return;
+      }
+      set({ searchQuery: query });
+      try {
+        const result = await dexieSearchIndexer.search({
+          query,
+          limit: options?.limit ?? 20,
+          fuzzy: options?.fuzzy ?? false,
+        });
+        set({ searchResults: result.items });
+      } catch {
+        set({ searchResults: [] });
+      }
+    },
+
     toggleTag: (tag) => {
       const { selectedTags } = get();
       if (selectedTags.includes(tag)) {
@@ -248,6 +300,22 @@ export const useNoteStore = create<NoteState>((set, get) => {
 
     clearTagFilter: () => {
       set({ selectedTags: [] });
+    },
+
+    addTag: async (noteId, tag) => {
+      const note = await noteStore.getById(noteId);
+      if (!note || note.tags.includes(tag)) return;
+      const updatedTags = [...note.tags, tag];
+      await updateWithLog(noteStore, 'notes', noteId, { tags: updatedTags, updatedAt: new Date() });
+      await get().loadNotes();
+    },
+
+    removeTag: async (noteId, tag) => {
+      const note = await noteStore.getById(noteId);
+      if (!note) return;
+      const updatedTags = note.tags.filter((t) => t !== tag);
+      await updateWithLog(noteStore, 'notes', noteId, { tags: updatedTags, updatedAt: new Date() });
+      await get().loadNotes();
     },
 
     getAllTags: () => {
@@ -294,3 +362,43 @@ export const useNoteStore = create<NoteState>((set, get) => {
     },
   };
 });
+
+// ---------------------------------------------------------------------------
+// 选择器 Hooks
+// ---------------------------------------------------------------------------
+
+/** 仅订阅笔记列表 */
+export const useNotes = () =>
+  useNoteStore(s => s.notes);
+
+/** 仅订阅文件夹列表 */
+export const useNoteFolders = () =>
+  useNoteStore(s => s.folders);
+
+/** 仅订阅加载状态 */
+export const useNoteLoading = () =>
+  useNoteStore(s => s.isLoading);
+
+/** 仅订阅选中笔记 ID */
+export const useNoteSelectedId = () =>
+  useNoteStore(s => s.selectedNoteId);
+
+/** 仅订阅搜索关键词 */
+export const useNoteSearchQuery = () =>
+  useNoteStore(s => s.searchQuery);
+
+/** 笔记筛选状态（复合，useShallow） */
+export const useNoteFilterState = () =>
+  useNoteStore(useShallow(s => ({
+    selectedFolderId: s.selectedFolderId,
+    searchQuery: s.searchQuery,
+    selectedTags: s.selectedTags,
+  })));
+
+/** 笔记上下文（列表+选中+加载，复合） */
+export const useNoteContext = () =>
+  useNoteStore(useShallow(s => ({
+    notes: s.notes,
+    selectedNoteId: s.selectedNoteId,
+    isLoading: s.isLoading,
+  })));

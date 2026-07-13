@@ -6,6 +6,7 @@ import { Plus, BookOpen, AlertTriangle, Trash2, CheckCircle, ArrowRight, Message
 import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
 import { useFeynmanStore } from '../store/useFeynmanStore';
+import { useShallow } from 'zustand/react/shallow';
 import { useContextMenu } from '@/lib/contextMenu';
 import { useToast } from '@/components/ui';
 import type { FeynmanNote } from '@/types/models';
@@ -60,7 +61,7 @@ const weakBarVariants = {
 
 export default function FeynmanPage() {
   const navigate = useNavigate();
-  const { notes, weakPoints, isLoading, loadNotes, loadWeakPointsForNotes, createNote, deleteNote, getStats, toggleWeakPointMastered } = useFeynmanStore();
+  const { notes, weakPoints, isLoading, loadNotes, loadWeakPointsForNotes, createNote, deleteNote, getStats, toggleWeakPointMastered } = useFeynmanStore(useShallow(s => s));
   const { toast } = useToast();
 
   const {

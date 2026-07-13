@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { modeManager, type AppMode, type ModeConfig } from '../lib/mode/ModeManager';
 import { useAuth } from '../lib/auth/AuthContext';
 import { useToast } from '../components/ui/Toast';
@@ -25,14 +25,48 @@ export function useModeState() {
 }
 
 /**
- * 完整版：包含模式切换逻辑（含过渡保护）
+ * 完整版：包含模式切换逻辑（含过渡保护）+ 自动降级
  * 必须在 AuthProvider + ToastProvider 内使用
  */
 export function useMode() {
   const { mode, config } = useModeState();
   const { isAuthenticated } = useAuth();
   const { toast } = useToast();
-  const { isOnline } = useNetworkStatus();
+  const { isOnline, isWeak } = useNetworkStatus();
+
+  // 记录上次网络状态，避免重复触发降级
+  const prevOnlineRef = useRef(isOnline);
+  const prevWeakRef = useRef(isWeak);
+
+  // v0.9.0: 网络状态变化时自动降级
+  useEffect(() => {
+    const wasOnline = prevOnlineRef.current;
+    const wasWeak = prevWeakRef.current;
+    prevOnlineRef.current = isOnline;
+    prevWeakRef.current = isWeak;
+
+    // 只在状态实际发生变化时触发降级检查
+    const networkChanged = (wasOnline !== isOnline) || (wasWeak !== isWeak);
+    if (!networkChanged) return;
+
+    const currentMode = modeManager.getMode();
+
+    // 只在 hybrid/full 模式下才需要降级
+    if (currentMode === 'local') return;
+
+    const degraded = modeManager.autoDegrade(isOnline, isWeak);
+    if (degraded) {
+      // Toast 提示由 onDegrade 监听器处理（下方），此处无需重复
+    }
+  }, [isOnline, isWeak]);
+
+  // v0.9.0: 订阅降级事件，显示 Toast 提示
+  useEffect(() => {
+    const unsubscribe = modeManager.onDegrade((_fromMode, _toMode, reason) => {
+      toast({ type: 'warning', message: reason, duration: 5000 });
+    });
+    return unsubscribe;
+  }, [toast]);
 
   const changeMode = useCallback(async (newMode: AppMode): Promise<boolean> => {
     const currentMode = modeManager.getMode();
@@ -62,7 +96,7 @@ export function useMode() {
     }
 
     modeManager.setMode(newMode);
-    const labels: Record<AppMode, string> = { local: '本地模式', hybrid: '混合模式', full: '云端模式' };
+    const labels: Record<AppMode, string> = { local: '本地模式', hybrid: '联网模式', full: '云端模式' };
     toast({ type: 'success', message: `已切换到${labels[newMode]}` });
     return true;
   }, [isAuthenticated, toast]);

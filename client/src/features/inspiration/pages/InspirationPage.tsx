@@ -4,6 +4,7 @@ import { Sparkles, Send, Trash2, ChevronDown, ChevronUp, X, Check, Wand2, Loader
 import { EmptyState, useToast } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { useInspirationStore, type InspirationItem, type InspirationTags } from '../store/inspirationStore';
+import { useShallow } from 'zustand/react/shallow';
 import { useAITagContent, useAISortInspiration } from '@/lib/ai/useAI';
 import type { SortSuggestion } from '@/lib/ai/types';
 
@@ -101,7 +102,7 @@ function TagChip({ label, color, bg, onClick }: TagChipProps) {
 interface TagEditPopoverProps { item: InspirationItem; onClose: () => void; }
 
 function TagEditPopover({ item, onClose }: TagEditPopoverProps) {
-  const { updateTags } = useInspirationStore();
+  const { updateTags } = useInspirationStore(useShallow(s => s));
   const [nature, setNature] = useState(item.tags.content_nature);
   const [depth, setDepth] = useState(item.tags.cognitive_depth);
   const [subject, setSubject] = useState(item.tags.subject);
@@ -253,7 +254,7 @@ function AISortPanel({ suggestions, item, onClose }: AISortPanelProps) {
 interface InspirationCardProps { item: InspirationItem; }
 
 function InspirationCard({ item }: InspirationCardProps) {
-  const { deleteItem } = useInspirationStore();
+  const { deleteItem } = useInspirationStore(useShallow(s => s));
   const [expanded, setExpanded] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
@@ -408,7 +409,7 @@ function FilterBar({ filters, onChange }: { filters: FilterState; onChange: (f: 
 // ─────────────────────────────────────────────────────────────
 
 export default function InspirationPage() {
-  const { items, loadAll, addItem } = useInspirationStore();
+  const { items, loadAll, addItem } = useInspirationStore(useShallow(s => s));
   const { tagContent, loading: aiLoading } = useAITagContent();
   const { toast } = useToast();
   const [input, setInput] = useState('');
@@ -416,7 +417,7 @@ export default function InspirationPage() {
   const [filters, setFilters] = useState<FilterState>({ content_nature: null, cognitive_depth: null, subject: null });
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  useEffect(() => { loadAll(); }, [loadAll]);
+  useEffect(() => { loadAll(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSubmit = useCallback(async () => {
     const content = input.trim();

@@ -23,6 +23,7 @@ import { cn } from '@/lib/utils';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { exportDeck, downloadDeckFile } from '@/lib/storage/exportImport';
 import { useFlashcardStore } from '../store/useFlashcardStore';
+import { useShallow } from 'zustand/react/shallow';
 import { useAIFlashcards } from '@/lib/ai/useAI';
 import { useContextMenu } from '@/lib/contextMenu/useContextMenu';
 import type { Flashcard } from '@/types/models';
@@ -78,7 +79,7 @@ export default function DeckDetailPage() {
     updateCard,
     deleteCard,
     getDeckStats,
-  } = useFlashcardStore();
+  } = useFlashcardStore(useShallow(s => s));
 
   const deck = decks.find((d) => d.id === deckId);
 

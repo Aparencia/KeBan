@@ -62,14 +62,25 @@ function toQuality(rating: Rating): number {
 // 核心算法
 // ---------------------------------------------------------------------------
 
+/** SM-2 算法可选参数 */
+export interface SM2Options {
+  /**
+   * Golden error 间隔系数
+   * 当用户高自信答错时，将计算出的间隔乘以该系数（缩短复习间隔）
+   * 默认 1.0（不调整），建议值 0.3-0.7
+   */
+  goldenErrorMultiplier?: number;
+}
+
 /**
  * SM-2 核心计算函数
  *
- * @param card  当前卡片的 SM-2 状态字段
+ * @param card   当前卡片的 SM-2 状态字段
  * @param rating 用户评分（Rating 枚举，0-3）
+ * @param options 可选参数（如 goldenErrorMultiplier）
  * @returns 更新后的 SM-2 状态
  */
-export function sm2(card: SM2CardInput, rating: Rating): SM2Result {
+export function sm2(card: SM2CardInput, rating: Rating, options?: SM2Options): SM2Result {
   const q = toQuality(rating);
   const lapses = card.lapses ?? 0;
 
@@ -114,6 +125,12 @@ export function sm2(card: SM2CardInput, rating: Rating): SM2Result {
   // 上限 5 年（1825 天）
   newInterval = Math.min(newInterval, 1825);
 
+  // Golden error：高自信答错时缩短间隔
+  const multiplier = options?.goldenErrorMultiplier;
+  if (multiplier !== undefined && multiplier >= 0 && multiplier < 1) {
+    newInterval = Math.max(1, Math.round(newInterval * multiplier));
+  }
+
   return {
     easeFactor: newEF,
     interval: newInterval,
@@ -156,9 +173,9 @@ export interface IntervalPreview {
  * @param card 当前卡片的 SM-2 状态字段
  * @returns 四个评分对应的间隔天数
  */
-export function calculateIntervals(card: SM2CardInput): IntervalPreview {
+export function calculateIntervals(card: SM2CardInput, options?: SM2Options): IntervalPreview {
   const ratings = [Rating.Again, Rating.Hard, Rating.Good, Rating.Easy] as const;
-  const results = ratings.map((r) => sm2(card, r));
+  const results = ratings.map((r) => sm2(card, r, options));
 
   return {
     again: results[0].interval,

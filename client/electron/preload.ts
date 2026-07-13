@@ -32,6 +32,9 @@ const ALLOWED_CHANNELS = [
   'window:maximize',
   'window:close',
   'window:isMaximized',
+  // v0.9.0: 备份相关 IPC channel
+  'backup:save',
+  'backup:open',
 ] as const;
 
 /** 允许渲染进程监听的事件 channel 白名单（主进程 → 渲染进程推送） */
@@ -104,4 +107,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // ---- 自动更新 API ----
   /** 设置是否自动检查更新 */
   setAutoUpdate: (enabled: boolean) => ipcRenderer.invoke('update:set-auto-check', enabled),
+  // ---- v0.9.0: 备份 API ----
+  /** 保存备份文件（显示系统保存对话框） */
+  backupSave: (data: string, defaultName?: string) => ipcRenderer.invoke('backup:save', data, defaultName),
+  /** 打开备份文件（显示系统打开对话框，返回文件内容） */
+  backupOpen: () => ipcRenderer.invoke('backup:open'),
 });

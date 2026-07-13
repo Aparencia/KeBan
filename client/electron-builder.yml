@@ -1,6 +1,6 @@
 # Electron Builder 打包配置 - 课伴桌面端
 appId: com.keban.app
-productName: "课伴"
+productName: "KeBan"
 # publish 配置用于自动更新发布，待部署更新服务器后启用
 # publish:
 #   provider: generic

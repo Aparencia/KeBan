@@ -12,6 +12,7 @@ import type { ContextMenuGroup } from '@/components/ui';
 import { useContextMenu } from '@/lib/contextMenu';
 import { StepIndicator } from '../components/StepIndicator';
 import { useFeynmanStore } from '../store/useFeynmanStore';
+import { useShallow } from 'zustand/react/shallow';
 import type { FeynmanWeakPoint } from '@/types/models';
 import { cn } from '@/lib/utils';
 import { useAIEvaluate, useAIFeynmanQuestion, useAIFeynmanEvaluateAnswers } from '@/lib/ai/useAI';
@@ -33,7 +34,7 @@ export default function FeynmanSessionPage() {
     setSelfRating,
     completeNote,
     getCurrentView,
-  } = useFeynmanStore();
+  } = useFeynmanStore(useShallow(s => s));
 
   // Local state
   const [localExplanation, setLocalExplanation] = useState('');

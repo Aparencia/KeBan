@@ -18,7 +18,7 @@ interface CustomTitlebarProps {
  * - 拖拽区域必须使用 CSS 类 `.drag-region`（禁止内联 style）
  * - 交互元素必须使用 CSS 类 `.no-drag`（禁止内联 style）
  * - 双击拖拽区域触发最大化/还原
- * - 深海静谧主题：深色背景 + 微妙边框 + 品牌渐变 Logo
+ * - 自适应主题：跟随深浅模式变化
  *
  * @param props - 组件属性
  * @returns 自定义标题栏 JSX 元素
@@ -53,7 +53,7 @@ export function CustomTitlebar({ className }: CustomTitlebarProps) {
     <div
       className={cn(
         'drag-region flex items-center h-9 select-none',
-        'bg-[#0f1f3a] border-b border-[#1e3456]',
+        'bg-bg-secondary border-b border-border-default',
         className,
       )}
     >
@@ -61,9 +61,9 @@ export function CustomTitlebar({ className }: CustomTitlebarProps) {
       <div className="flex items-center gap-2 pl-3 h-full" onDoubleClick={handleMaximize}>
         {/* 品牌 Logo — 深海青渐变圆角方块 + 内圈弧线 */}
         <div className="w-4 h-4 rounded-[4px] bg-gradient-to-br from-brand-400 to-brand-600 relative flex-shrink-0 shadow-[0_0_8px_rgba(91,138,114,0.3)]">
-          <div className="absolute top-[3px] left-[3px] w-2.5 h-2.5 border border-white/50 rounded-full" />
+          <div className="absolute top-[3px] left-[3px] w-2.5 h-2.5 border border-white/30 dark:border-white/50 rounded-full" />
         </div>
-        <span className="text-xs font-medium text-[#e8edf5] tracking-wide">
+        <span className="text-xs font-medium text-text-primary tracking-wide">
           课伴
         </span>
       </div>
@@ -75,14 +75,14 @@ export function CustomTitlebar({ className }: CustomTitlebarProps) {
       <div className="no-drag flex h-full">
         <button
           onClick={handleMinimize}
-          className="w-11 h-9 flex items-center justify-center text-[#e8edf5]/60 hover:text-[#818cf8] hover:bg-white/5 transition-all duration-200 active:scale-90"
+          className="w-11 h-9 flex items-center justify-center text-text-tertiary hover:text-brand-500 hover:bg-black/5 dark:hover:bg-white/5 transition-all duration-200 active:scale-90"
           aria-label="最小化"
         >
           <Minus className="w-3.5 h-3.5" />
         </button>
         <button
           onClick={handleMaximize}
-          className="w-11 h-9 flex items-center justify-center text-[#e8edf5]/60 hover:text-[#818cf8] hover:bg-white/5 transition-all duration-200 active:scale-90"
+          className="w-11 h-9 flex items-center justify-center text-text-tertiary hover:text-brand-500 hover:bg-black/5 dark:hover:bg-white/5 transition-all duration-200 active:scale-90"
           aria-label={isMaximized ? '还原' : '最大化'}
         >
           {isMaximized ? (
@@ -93,7 +93,7 @@ export function CustomTitlebar({ className }: CustomTitlebarProps) {
         </button>
         <button
           onClick={handleClose}
-          className="w-11 h-9 flex items-center justify-center text-[#e8edf5]/60 hover:text-[#ef4444] hover:bg-[#ef4444]/10 transition-all duration-200 active:scale-90"
+          className="w-11 h-9 flex items-center justify-center text-text-tertiary hover:text-error hover:bg-error/10 transition-all duration-200 active:scale-90"
           aria-label="关闭"
         >
           <X className="w-3.5 h-3.5" />

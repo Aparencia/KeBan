@@ -1,9 +1,9 @@
 /**
  * 应用运行模式管理器
  *
- * local:  纯本地模式（无网络、无账户）
- * hybrid: 本地优先 + 可选同步（已登录、有网络）
- * full:   完全云端模式（实时同步）
+ * local:  纯本地模式（无网络、无账户）— 所有数据仅存本地，不依赖任何网络服务
+ * hybrid: 联网模式（本地优先 + 可选同步）— 已登录且有网络时可同步，离线时降级为本地
+ * full:   云端模式（完全云端，实时同步）— 依赖网络，所有操作实时同步至云端
  */
 
 export type AppMode = 'local' | 'hybrid' | 'full';
@@ -20,9 +20,17 @@ const VALID_MODES: ReadonlySet<AppMode> = new Set(['local', 'hybrid', 'full']);
 
 type ModeListener = (mode: AppMode, config: ModeConfig) => void;
 
+/**
+ * 模式变化回调，用于降级通知
+ * 参数：fromMode（降级前模式）, toMode（降级后模式）, reason（原因）
+ */
+type DegradeListener = (fromMode: AppMode, toMode: AppMode, reason: string) => void;
+
 class ModeManager {
   private currentMode: AppMode = 'local';
   private listeners: Set<ModeListener> = new Set();
+  /** v0.9.0: 降级事件监听器 */
+  private degradeListeners: Set<DegradeListener> = new Set();
 
   constructor() {
     // 从 localStorage 恢复上次的模式
@@ -117,6 +125,55 @@ class ModeManager {
     if (!isAuthenticated) return 'local';
     if (!isOnline) return 'hybrid';
     return 'full';
+  }
+
+  // ---------------------------------------------------------------------------
+  // v0.9.0: 自动降级机制
+  // ---------------------------------------------------------------------------
+
+  /**
+   * 网络断开时自动降级
+   *
+   * - hybrid/full → local：网络完全断开时降级到纯本地模式
+   * - full → hybrid：网络弱化时从云端模式降级到联网模式
+   *
+   * @param isOnline 当前网络是否在线
+   * @param isWeak 当前网络是否弱化（可选）
+   * @returns 是否发生了降级（true=发生了降级切换）
+   */
+  autoDegrade(isOnline: boolean, isWeak?: boolean): boolean {
+    const prevMode = this.currentMode;
+
+    if (!isOnline && (prevMode === 'hybrid' || prevMode === 'full')) {
+      // 网络完全断开 → 降级到 local
+      this.setMode('local');
+      this.notifyDegrade(prevMode, 'local', '网络断开，已自动切换到本地模式');
+      return true;
+    }
+
+    if (isWeak && prevMode === 'full') {
+      // 网络弱化 → 从 full 降级到 hybrid
+      this.setMode('hybrid');
+      this.notifyDegrade(prevMode, 'hybrid', '网络不稳定，已自动切换到联网模式');
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * 订阅降级事件
+   * 返回取消订阅函数
+   */
+  onDegrade(listener: DegradeListener): () => void {
+    this.degradeListeners.add(listener);
+    return () => {
+      this.degradeListeners.delete(listener);
+    };
+  }
+
+  private notifyDegrade(fromMode: AppMode, toMode: AppMode, reason: string): void {
+    this.degradeListeners.forEach((listener) => listener(fromMode, toMode, reason));
   }
 }
 

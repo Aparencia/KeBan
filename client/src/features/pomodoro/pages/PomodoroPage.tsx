@@ -10,6 +10,7 @@ import GoalInput from '../components/GoalInput';
 import ImmersiveTimer from '../components/ImmersiveTimer';
 import SlideToExit from '../components/SlideToExit';
 import { usePomodoroStore } from '../store/usePomodoroStore';
+import { useShallow } from 'zustand/react/shallow';
 import { useAudioPlayer } from '@/lib/audio/useAudioPlayer';
 import { audioTracks, loadAudioPreferences, saveAudioPreferences } from '@/lib/audio/audioConfig';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
@@ -25,7 +26,7 @@ export default function PomodoroPage() {
     completedCount, mode, settings, currentGoal, isImmersive,
     start, pause, resume, reset, skip, setMode, setCurrentGoal,
     enterImmersive, exitImmersive, tick,
-  } = usePomodoroStore();
+  } = usePomodoroStore(useShallow(s => s));
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [goalModalOpen, setGoalModalOpen] = useState(false);

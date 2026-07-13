@@ -451,6 +451,42 @@ body {
   pointer-events: none;
 }
 
+/* ── 问候区氛围光晕（呼吸） ── */
+@keyframes kb-glow-breathe {
+  0%, 100% { opacity: 0.6; transform: scale(1); }
+  50%      { opacity: 1; transform: scale(1.05); }
+}
+.kb-greeting-glow {
+  background: radial-gradient(ellipse at 30% 50%, rgba(251,146,60,0.08) 0%, transparent 70%);
+  animation: kb-glow-breathe 4s ease-in-out infinite;
+  pointer-events: none;
+}
+[data-theme="dark"] .kb-greeting-glow {
+  background: radial-gradient(ellipse at 30% 50%, rgba(99,102,241,0.1) 0%, transparent 70%);
+}
+
+/* ── 问候区品牌色流光 ── */
+.kb-greeting-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+.kb-greeting-shimmer::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0;
+  width: 40%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(59,130,246,0.06), transparent);
+  animation: kb-shimmer-flow 4s ease-in-out infinite;
+  pointer-events: none;
+}
+[data-theme="dark"] .kb-greeting-shimmer::after {
+  background: linear-gradient(90deg, transparent, rgba(129,140,248,0.08), transparent);
+}
+@keyframes kb-shimmer-flow {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(350%); }
+}
+
 /* ── 柔和弹跳（按钮/卡片按压） ── */
 @keyframes kb-soft-bounce {
   0%   { transform: scale(1); }
@@ -500,4 +536,13 @@ body {
   width: 30%; height: 100%;
   background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
   animation: kb-progress-shine 2s ease-in-out infinite;
+}
+
+/* ── 弹性翻页容器隐藏滚动条 ── */
+[data-elastic-container] {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+[data-elastic-container]::-webkit-scrollbar {
+  display: none;
 }

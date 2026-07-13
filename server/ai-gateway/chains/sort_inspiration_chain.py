@@ -6,6 +6,7 @@
 - flashcard: 适合制作闪卡的知识点
 - note: 适合整理为正式笔记
 - todo: 包含行动计划或待办事项
+- action_item: 需要立即执行的行动项（v1.0.0 新增）
 """
 
 import json
@@ -19,25 +20,28 @@ logger = logging.getLogger(__name__)
 SYSTEM_PROMPT = (
     "你是一位智能学习助手，擅长分析学习内容并推荐最佳整理方式。\n"
     "请分析给定的灵感/笔记内容，判断它最适合被归类到以下哪些目标中，"
-    "并按置信度从高到低排列，输出 1-4 个建议。\n\n"
+    "并按置信度从高到低排列，输出 1-5 个建议。\n\n"
     "归类目标：\n"
     "1. feynman — 适合做费曼讲解练习的概念或知识点（有明确的理论或概念可以解释）\n"
     "2. flashcard — 适合制作闪卡进行记忆复习的内容（有明确的前后对应关系，如定义、公式、问答）\n"
     "3. note — 适合整理为结构化笔记的内容（有较完整的知识体系或详细描述）\n"
-    "4. todo — 包含行动计划、待办事项或需要后续执行的任务\n\n"
-    "输出格式（严格 JSON）：\n"
-    '{"suggestions": [{"type": "...", "reason": "...", "confidence": 0.0}]}\n\n'
+    "4. todo — 包含行动计划、待办事项或需要后续执行的任务\n"
+    "5. action_item — 需要立即执行的具体行动（有明确的步骤、截止日期或紧迫性）\n\n"
+    "输出格式（严格 JSON Schema）：\n"
+    '{"suggestions": [{"category": "...", "confidence": 0.0, "reason": "...", "suggestedAction": "..."}]}\n\n'
     "其中：\n"
-    "- type: 归类目标，取值 feynman/flashcard/note/todo\n"
-    "- reason: 简短说明推荐理由（中文，20字以内）\n"
+    "- category: 归类目标，取值 feynman/flashcard/note/todo/action_item\n"
     "- confidence: 置信度 0.0-1.0，表示该归类的适合程度\n"
+    "- reason: 简短说明推荐理由（中文，20字以内）\n"
+    "- suggestedAction: 推荐的后续操作（中文，如：'生成闪卡'、'创建费曼讲解'、'添加到待办'）\n"
 )
 
 
 class SortInspirationChain:
     """灵感分拣链"""
 
-    VALID_TYPES = {"feynman", "flashcard", "note", "todo"}
+    # v1.0.0: 新增 action_item 类型，向后兼容旧 type 字段
+    VALID_TYPES = {"feynman", "flashcard", "note", "todo", "action_item"}
 
     def __init__(self, provider: AIProvider, model: str = "deepseek-chat"):
         self.provider = provider
@@ -47,8 +51,9 @@ class SortInspirationChain:
         """
         解析模型输出为结构化建议列表
 
-        期望格式：
-        { "suggestions": [{ "type": "...", "reason": "...", "confidence": 0.0 }] }
+        兼容两种格式：
+        - v1.0.0: {"suggestions": [{"category": "...", "confidence": 0.0, "reason": "...", "suggestedAction": "..."}]}
+        - 旧格式: {"suggestions": [{"type": "...", "reason": "...", "confidence": 0.0}]}
         """
         data = None
 
@@ -79,32 +84,44 @@ class SortInspirationChain:
             logger.warning("无法解析分拣 JSON，返回默认建议")
             return [
                 {
-                    "type": "note",
-                    "reason": "内容暂无法明确归类，建议整理为笔记",
+                    "category": "note",
                     "confidence": 0.5,
+                    "reason": "内容暂无法明确归类，建议整理为笔记",
+                    "suggestedAction": "整理为笔记",
                 }
             ]
 
         return self._validate_suggestions(data)
 
     def _validate_suggestions(self, data: dict[str, Any]) -> list[dict[str, Any]]:
-        """验证并规范化建议字段"""
+        """验证并规范化建议字段（支持 category 和旧版 type 字段）"""
         raw_suggestions = data.get("suggestions", [])
         if not isinstance(raw_suggestions, list) or len(raw_suggestions) == 0:
             return [
                 {
-                    "type": "note",
-                    "reason": "内容暂无法明确归类，建议整理为笔记",
+                    "category": "note",
                     "confidence": 0.5,
+                    "reason": "内容暂无法明确归类，建议整理为笔记",
+                    "suggestedAction": "整理为笔记",
                 }
             ]
+
+        # suggestedAction 映射表
+        ACTION_MAP = {
+            "feynman": "创建费曼讲解",
+            "flashcard": "生成闪卡",
+            "note": "整理为笔记",
+            "todo": "添加到待办",
+            "action_item": "立即执行",
+        }
 
         validated: list[dict[str, Any]] = []
         for item in raw_suggestions:
             if not isinstance(item, dict):
                 continue
 
-            stype = str(item.get("type", "note")).lower().strip()
+            # 向后兼容：优先使用 category，回退到 type
+            stype = str(item.get("category", item.get("type", "note"))).lower().strip()
             if stype not in self.VALID_TYPES:
                 stype = "note"
 
@@ -118,21 +135,27 @@ class SortInspirationChain:
             except (TypeError, ValueError):
                 confidence = 0.5
 
+            suggested_action = str(item.get("suggestedAction", "")).strip()
+            if not suggested_action:
+                suggested_action = ACTION_MAP.get(stype, "整理为笔记")
+
             validated.append({
-                "type": stype,
-                "reason": reason,
+                "category": stype,
                 "confidence": round(confidence, 2),
+                "reason": reason,
+                "suggestedAction": suggested_action,
             })
 
         # 按 confidence 降序排列
         validated.sort(key=lambda x: x["confidence"], reverse=True)
 
-        # 最多返回 4 个建议
-        return validated[:4] if validated else [
+        # 最多返回 5 个建议
+        return validated[:5] if validated else [
             {
-                "type": "note",
-                "reason": "内容暂无法明确归类，建议整理为笔记",
+                "category": "note",
                 "confidence": 0.5,
+                "reason": "内容暂无法明确归类，建议整理为笔记",
+                "suggestedAction": "整理为笔记",
             }
         ]
 
@@ -176,4 +199,5 @@ class SortInspirationChain:
             "model": result["model"],
             "tokens_used": result["tokens_used"],
             "latency_ms": result["latency_ms"],
+            "status": "success",
         }

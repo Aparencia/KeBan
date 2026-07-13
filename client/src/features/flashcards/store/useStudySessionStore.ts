@@ -4,7 +4,7 @@ import {
   flashcardReviewStore,
 } from '@/lib/storage';
 import { sm2, Rating } from '@/lib/sm2';
-import type { Flashcard, FlashcardReview } from '@/types/models';
+import type { Flashcard, FlashcardReview, Confidence, GoldenError } from '@/types/models';
 import { useFlashcardStore } from './useFlashcardStore';
 import { generateId } from '@/lib/utils/uuid';
 import { soundPlayer } from '@/lib/audio/SoundPlayer';
@@ -34,16 +34,20 @@ interface StudySessionState {
   isActive: boolean;
   /** 当前卡片开始展示的时间戳（用于计算 timeSpent） */
   cardStartTime: Date | null;
+  /** v0.9.0: 本次会话中收集的 goldenErrors */
+  goldenErrors: GoldenError[];
 
   // 会话操作
   startSession: (deckId: string) => Promise<void>;
-  rateCard: (rating: Rating) => Promise<void>;
+  rateCard: (rating: Rating, confidence?: Confidence) => Promise<void>;
   flipCard: () => void;
   endSession: () => void;
   /** 将当前卡片重新加入学习队列（不计入 completedCount） */
   relearn: () => void;
   /** 清理指定牌组的会话数据（牌组删除时调用） */
   clearDeckSession: (deckId: string) => void;
+  /** v0.9.0: 获取当前会话及历史 goldenErrors */
+  getGoldenErrors: () => GoldenError[];
 }
 
 // ---------------------------------------------------------------------------
@@ -74,6 +78,7 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
     sessionStartTime: null,
     isActive: false,
     cardStartTime: null,
+    goldenErrors: [],
 
     // -----------------------------------------------------------------------
     // startSession：加载到期卡片 + 补充新卡
@@ -138,6 +143,7 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
         isFlipped: false,
         completedCount: 0,
         correctCount: 0,
+        goldenErrors: [],
         sessionStartTime: new Date(),
         isActive: true,
         cardStartTime: new Date(),
@@ -147,8 +153,8 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
     // -----------------------------------------------------------------------
     // rateCard：评分并推进到下一张
     // -----------------------------------------------------------------------
-    rateCard: async (rating) => {
-      const { sessionCards, currentIndex, cardStartTime, isFlipped } = get();
+    rateCard: async (rating, confidence) => {
+      const { sessionCards, currentIndex, cardStartTime, isFlipped, goldenErrors } = get();
 
       // 必须已翻面才能评分
       if (!isFlipped) return;
@@ -156,7 +162,11 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
       const card = sessionCards[currentIndex];
       if (!card || card.id === undefined) return;
 
-      // 调用 SM-2 算法
+      // v0.9.0: goldenError 判定 — 高自信答错（Again）
+      const isWrong = rating === Rating.Again;
+      const isGoldenError = confidence === 'high' && isWrong;
+
+      // 调用 SM-2 算法（goldenError 时缩短复习间隔）
       const result = sm2(
         {
           easeFactor: card.easeFactor,
@@ -165,7 +175,19 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
           lapses: card.lapses,
         },
         rating,
+        isGoldenError ? { goldenErrorMultiplier: 0.7 } : undefined,
       );
+
+      // v0.9.0: 记录 goldenError
+      const newGoldenErrors = isGoldenError
+        ? [...goldenErrors, {
+            flashcardId: card.id,
+            timestamp: Date.now(),
+            confidence: 'high' as const,
+            correctAnswer: card.back,
+            userAnswer: '', // 翻转卡片模式下无用户输入，留空
+          }]
+        : goldenErrors;
 
       // 更新卡片持久化存储
       const updatedAt = new Date();
@@ -242,6 +264,7 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
           currentIndex: nextIndex,
           completedCount: get().completedCount + 1,
           correctCount: get().correctCount + (isCorrect ? 1 : 0),
+          goldenErrors: newGoldenErrors,
           isActive: false,
           isFlipped: false,
           cardStartTime: null,
@@ -253,6 +276,7 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
           currentIndex: nextIndex,
           completedCount: get().completedCount + 1,
           correctCount: get().correctCount + (isCorrect ? 1 : 0),
+          goldenErrors: newGoldenErrors,
           isFlipped: false,
           cardStartTime: new Date(),
         });
@@ -290,6 +314,7 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
         isFlipped: false,
         completedCount: 0,
         correctCount: 0,
+        goldenErrors: [],
         sessionStartTime: null,
         isActive: false,
         cardStartTime: null,
@@ -306,6 +331,13 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
       if (sessionCards.some((c) => c.deckId === deckId)) {
         get().endSession();
       }
+    },
+
+    // -----------------------------------------------------------------------
+    // getGoldenErrors：返回当前会话中收集的 goldenErrors
+    // -----------------------------------------------------------------------
+    getGoldenErrors: () => {
+      return get().goldenErrors;
     },
   };
 });

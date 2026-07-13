@@ -24,6 +24,7 @@ import {
 import { cn } from '@/lib/utils';
 import { AIButton } from '@/components/ui/AIButton';
 import { useNoteStore } from '../store/useNoteStore';
+import { useShallow } from 'zustand/react/shallow';
 import { CornellLayout } from '../components/CornellLayout';
 import FreeCanvas from '../components/FreeCanvas';
 import type { FreeCanvasData } from '@/types/models';
@@ -79,14 +80,14 @@ export default function NoteEditPage() {
   const noteId = id ?? null;
   const captureOpen = useCaptureStore((s) => s.open);
 
-  const { notes, updateNote, selectNote, loadNotes } = useNoteStore();
+  const { notes, updateNote, selectNote, loadNotes } = useNoteStore(useShallow(s => s));
   const note = notes.find((n) => n.id === noteId) || null;
 
   const titleRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // AI 闪卡持久化
-  const { loadDecks, createDeck, createCard } = useFlashcardStore();
+  const { loadDecks, createDeck, createCard } = useFlashcardStore(useShallow(s => s));
 
   // 获取目标牌组：优先使用已有牌组，否则自动创建默认牌组
   const ensureDefaultDeck = useCallback(async (): Promise<string> => {

@@ -12,6 +12,7 @@ import {
   type CategorySoundSettings,
 } from '@/lib/audio/audioConfig';
 import { useSettingsStore } from '@/stores/useSettingsStore';
+import { useShallow } from 'zustand/react/shallow';
 
 const CATEGORIES: SoundCategory[] = ['operation', 'achievement', 'ai', 'pomodoro'];
 
@@ -187,7 +188,7 @@ function CategorySection({ category, settings, onUpdate }: {
  * @ai-context 提供 4 类音效独立开关 + 独立音量滑块 + 全局静音 + 预览播放
  */
 export default function SoundSettings() {
-  const { soundSettings, updateSoundSettings } = useSettingsStore();
+  const { soundSettings, updateSoundSettings } = useSettingsStore(useShallow(s => s));
 
   /**
    * 更新单个类别的设置

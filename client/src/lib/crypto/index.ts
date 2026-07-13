@@ -4,3 +4,4 @@
 
 export { deriveKey, encrypt, decrypt, generateSalt } from './encryption';
 export { CryptoManager, cryptoManager } from './CryptoManager';
+export { encryptBackup, decryptBackup, type EncryptedBackup } from './backupCrypto';

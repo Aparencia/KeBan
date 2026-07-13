@@ -1,7 +1,7 @@
 {
   "name": "client",
   "private": true,
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "课伴 - 跨端学习平台",
   "author": "KeBan Team",
   "main": "dist-electron/main.js",
@@ -22,6 +22,7 @@
     "@radix-ui/react-toast": "^1.2.19",
     "@supabase/supabase-js": "^2.110.1",
     "@tanstack/react-query": "^5.101.2",
+    "@tanstack/react-virtual": "^3.14.5",
     "@tiptap/extension-color": "^3.27.3",
     "@tiptap/extension-highlight": "^3.27.3",
     "@tiptap/extension-image": "^3.27.3",

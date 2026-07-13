@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { useShallow } from 'zustand/react/shallow';
 import {
   flashcardDeckStore,
   flashcardStore,
@@ -199,3 +200,31 @@ export const useFlashcardStore = create<FlashcardState>((set, get) => {
     },
   };
 });
+
+// ---------------------------------------------------------------------------
+// 选择器 Hooks
+// ---------------------------------------------------------------------------
+
+/** 仅订阅牌组列表 */
+export const useFlashcardDecks = () =>
+  useFlashcardStore(s => s.decks);
+
+/** 仅订阅当前牌组的卡片 */
+export const useFlashcardCards = () =>
+  useFlashcardStore(s => s.cards);
+
+/** 仅订阅加载状态 */
+export const useFlashcardLoading = () =>
+  useFlashcardStore(s => s.isLoading);
+
+/** 仅订阅选中牌组 ID */
+export const useFlashcardSelectedDeckId = () =>
+  useFlashcardStore(s => s.selectedDeckId);
+
+/** 牌组概览（复合，useShallow） */
+export const useFlashcardDeckOverview = () =>
+  useFlashcardStore(useShallow(s => ({
+    decks: s.decks,
+    selectedDeckId: s.selectedDeckId,
+    isLoading: s.isLoading,
+  })));
