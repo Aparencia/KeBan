@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Timer, Zap, Bell, Save, RotateCcw, GraduationCap, Sparkles, CheckCircle2, Music, Volume2, Brain } from 'lucide-react';
 import { AIThinkingIndicator } from '@/components/ui/AIThinkingIndicator';
@@ -7,6 +8,7 @@ import { cn } from '@/lib/utils';
 import { usePomodoroStore } from '../store/usePomodoroStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useAIDuration } from '@/lib/ai/useAI';
+import { useAIErrorHandler } from '@/lib/ai/hooks/useAIErrorHandler';
 import { pomodoroSessionStore } from '@/lib/storage';
 import type { PomodoroSession } from '@/types/models';
 import {
@@ -101,11 +103,14 @@ export default function PomodoroSettingsPage() {
     data: aiRecData,
     error: aiRecError,
     isFallback: aiRecFallback,
+    needsConfig: aiRecNeedsConfig,
     recommend: aiRecommend,
   } = useAIDuration();
   const [aiRecApplied, setAIRecApplied] = useState(false);
   const [fineTuneValue, setFineTuneValue] = useState<number | null>(null);
   const { toast } = useToast();
+  const handleRecommendError = useAIErrorHandler('获取推荐失败');
+  const navigate = useNavigate();
 
   // Load persisted settings on mount
   useEffect(() => {
@@ -337,8 +342,8 @@ export default function PomodoroSettingsPage() {
                 preferredDuration: localSettings.workDuration,
               });
               setAIRecApplied(false);
-            } catch {
-              toast({ type: 'error', message: '获取推荐失败，请稍后重试' });
+            } catch (error) {
+              handleRecommendError(error);
             }
           }}
           className="w-full"
@@ -349,6 +354,14 @@ export default function PomodoroSettingsPage() {
         {aiRecError && (
           <div className="mt-kb-sm p-3 rounded-kb-md bg-semantic-error/10 border border-semantic-error/20 text-b2 text-semantic-error">
             {aiRecError}
+            {aiRecNeedsConfig && (
+              <button
+                onClick={() => navigate('/settings')}
+                className="mt-2 block text-b3 underline hover:no-underline"
+              >
+                前往设置页配置 API Key
+              </button>
+            )}
           </div>
         )}
 

@@ -324,7 +324,9 @@ export type AIErrorCode =
   | 'invalid_response'
   | 'content_too_short'
   | 'no_api_key'
-  | 'offline';
+  | 'offline'
+  | 'auth_error'
+  | 'cors_error';
 
 export class AIError extends Error {
   constructor(

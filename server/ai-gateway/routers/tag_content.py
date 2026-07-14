@@ -9,7 +9,7 @@ import logging
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, Request
 
-from config import call_with_fallback
+from config import call_with_fallback_for_request
 from chains.tag_content_chain import TagContentChain
 
 logger = logging.getLogger(__name__)
@@ -67,8 +67,8 @@ async def tag_content(
         return await chain.run(content=body.content)
 
     try:
-        result, used_provider = await call_with_fallback(
-            request.app, "tag_content", _run_chain
+        result, used_provider, is_user_key = await call_with_fallback_for_request(
+            request.app, "tag_content", request, _run_chain
         )
 
         tag_result = TagContentResult(

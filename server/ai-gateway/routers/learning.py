@@ -13,7 +13,7 @@ from typing import Optional
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, Request
 
-from config import call_with_fallback
+from config import call_with_fallback_for_request
 from chains.anchor_point_chain import AnchorPointChain
 from chains.socratic_chain import SocraticChain
 from chains.predict_chain import PredictChain
@@ -161,8 +161,8 @@ async def anchor_point(
         return await chain.run(content=body.content, title=body.title or "")
 
     try:
-        result, used_provider = await call_with_fallback(
-            request.app, "anchor_point", _run_chain
+        result, used_provider, is_user_key = await call_with_fallback_for_request(
+            request.app, "anchor_point", request, _run_chain
         )
         anchor_points = [
             AnchorPointItem(
@@ -217,8 +217,8 @@ async def socratic(
         return await chain.run(topic=body.topic, history=body.history)
 
     try:
-        result, used_provider = await call_with_fallback(
-            request.app, "socratic", _run_chain
+        result, used_provider, is_user_key = await call_with_fallback_for_request(
+            request.app, "socratic", request, _run_chain
         )
         response = SocraticResult(
             question=result.get("question", ""),
@@ -267,8 +267,8 @@ async def predict(
         return await chain.run(content=body.content)
 
     try:
-        result, used_provider = await call_with_fallback(
-            request.app, "predict", _run_chain
+        result, used_provider, is_user_key = await call_with_fallback_for_request(
+            request.app, "predict", request, _run_chain
         )
         predictions = [
             PredictItem(
@@ -327,8 +327,8 @@ async def rescue(
         )
 
     try:
-        result, used_provider = await call_with_fallback(
-            request.app, "rescue", _run_chain
+        result, used_provider, is_user_key = await call_with_fallback_for_request(
+            request.app, "rescue", request, _run_chain
         )
         rescue_levels = [
             RescueLevelItem(

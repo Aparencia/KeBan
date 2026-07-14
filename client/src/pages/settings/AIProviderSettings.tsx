@@ -84,7 +84,7 @@ export default function AIProviderSettings() {
     saveAIConfigAction,
   } = useSettingsStore(useShallow(s => s));
 
-  const { status: healthStatus, latency, recheck } = useAIGatewayHealth();
+  const { status: healthStatus, latency, errorType, providers, healthyCount, totalCount, recheck } = useAIGatewayHealth();
 
   const [capabilitiesOpen, setCapabilitiesOpen] = useState(false);
   const [showApiModal, setShowApiModal] = useState(false);
@@ -98,19 +98,24 @@ export default function AIProviderSettings() {
   const handleModeChange = (modeKey: string) => {
     const mode = modeOptions.find((m) => m.key === modeKey);
     if (!mode) return;
-    setAIConfig({ ...aiConfig, provider: mode.provider });
-    // 选择高级模式时弹出 API Key 配置窗口
-    if (modeKey === 'advanced') {
+    const nextConfig = { ...aiConfig, provider: mode.provider };
+    setAIConfig(nextConfig);
+    // 标准模式：立即持久化；高级模式：等模态框保存时再持久化
+    if (modeKey === 'standard') {
+      saveAIConfigAction();
+    } else {
       setTestStatus('idle');
       setTestMessage('');
       setShowApiModal(true);
     }
   };
 
-  /** 模态窗口取消：回退到标准模式 */
+  /** 模态窗口取消：回退到标准模式并持久化 */
   const handleModalCancel = () => {
     setShowApiModal(false);
-    setAIConfig({ ...aiConfig, provider: 'glm' });
+    const fallbackConfig = { ...aiConfig, provider: 'glm' };
+    setAIConfig(fallbackConfig);
+    saveAIConfigAction();
   };
 
   /** 模态窗口保存：保存 + 自动测试连接 */
@@ -129,31 +134,43 @@ export default function AIProviderSettings() {
         toast({ type: 'error', message: '请先配置 AI 网关地址' });
         return;
       }
-      const response = await fetch(`${gatewayUrl}/docs`, {
+      const response = await fetch(`${gatewayUrl}/health/quick`, {
         method: 'GET',
         signal: AbortSignal.timeout(8000),
       });
 
-      if (response.ok) {
-        setTestStatus('success');
-        setTestMessage('连接成功，AI 服务可用');
-      } else {
-        setTestStatus('idle');
-        setTestMessage('');
-        toast({ type: 'error', message: `服务返回异常状态码：${response.status}` });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
       }
+
+      const data = await response.json();
+      if (data.status !== 'ok' && data.status !== 'healthy') {
+        throw new Error(`服务状态异常: ${data.status}`);
+      }
+
+      setTestStatus('success');
+      setTestMessage('连接成功，AI 服务可用');
     } catch (err) {
       setTestStatus('idle');
       setTestMessage('');
-      let msg = '连接失败，请检查网络或网关地址';
-      if (err instanceof Error) {
-        if (err.name === 'AbortError' || err.message.includes('aborted')) {
-          msg = '连接超时，请检查网关地址是否正确';
-        } else if (err.message.includes('Failed to fetch')) {
-          msg = '无法连接到网关，请检查网络或网关地址';
-        }
+      let message: string;
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        message = '连接超时，请检查网关地址是否正确';
+      } else if (err instanceof TypeError && err.message.includes('Failed to fetch')) {
+        // Failed to fetch 在浏览器中可能是 CORS、connection refused 或 DNS 错误
+        message = navigator.onLine
+          ? '无法连接到网关，请检查网关地址是否正确，或确认网关服务是否已启动'
+          : '网络连接已断开，请检查网络后重试';
+      } else if (err instanceof TypeError && (err.message.includes('CORS') || err.message.includes('cross-origin'))) {
+        message = '跨域请求被拒绝，请检查网关 CORS 配置是否允许当前来源访问';
+      } else if (err instanceof Error && err.message.startsWith('HTTP ')) {
+        message = `网关返回错误（${err.message}），请稍后重试`;
+      } else if (err instanceof Error && err.message.startsWith('服务状态异常')) {
+        message = err.message;
+      } else {
+        message = '连接失败，请检查网络或网关地址';
       }
-      toast({ type: 'error', message: msg });
+      toast({ type: 'error', message });
     }
   };
 
@@ -172,6 +189,7 @@ export default function AIProviderSettings() {
                 className={cn(
                   'w-2 h-2 rounded-full flex-shrink-0',
                   healthStatus === 'online' && 'bg-semantic-success',
+                  healthStatus === 'degraded' && 'bg-semantic-warning',
                   healthStatus === 'offline' && 'bg-semantic-error',
                   healthStatus === 'checking' && 'bg-text-quaternary animate-pulse',
                 )}
@@ -181,16 +199,30 @@ export default function AIProviderSettings() {
                 className={cn(
                   'text-c1',
                   healthStatus === 'online' && 'text-semantic-success',
+                  healthStatus === 'degraded' && 'text-semantic-warning',
                   healthStatus === 'offline' && 'text-semantic-error',
                   healthStatus === 'checking' && 'text-text-quaternary',
                 )}
               >
                 {healthStatus === 'online' && '已连接'}
-                {healthStatus === 'offline' && '未连接'}
+                {healthStatus === 'degraded' && (
+                  healthyCount !== undefined && totalCount !== undefined
+                    ? `部分可用（${healthyCount}/${totalCount} 服务在线）`
+                    : '部分可用'
+                )}
+                {healthStatus === 'offline' && (
+                  errorType === 'network_disconnected' ? '网络已断开' :
+                  errorType === 'connection_refused' ? 'AI 网关服务未启动' :
+                  errorType === 'timeout'            ? '连接超时' :
+                  errorType === 'cors_error'         ? 'CORS 配置错误' :
+                  errorType === 'server_error'       ? '服务端错误' :
+                  errorType === 'dns_error'          ? 'DNS 解析错误' :
+                  '未连接'
+                )}
                 {healthStatus === 'checking' && '检测中...'}
               </span>
               {/* 延迟显示 */}
-              {healthStatus === 'online' && latency !== undefined && (
+              {(healthStatus === 'online' || healthStatus === 'degraded') && latency !== undefined && (
                 <span className="text-c1 text-text-quaternary">{latency}ms</span>
               )}
             </div>
@@ -211,6 +243,34 @@ export default function AIProviderSettings() {
             </button>
           </div>
         </div>
+
+        {/* degraded 状态 Provider 详情 */}
+        {healthStatus === 'degraded' && providers && (
+          <div className="flex flex-col gap-1.5 p-3 rounded-kb-md bg-semantic-warning/5 border border-semantic-warning/20">
+            <p className="text-c1 font-medium text-semantic-warning mb-0.5">服务可用性详情</p>
+            {Object.entries(providers).map(([name, info]) => (
+              <div key={name} className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className={cn(
+                      'w-1.5 h-1.5 rounded-full flex-shrink-0',
+                      info.status === 'healthy' ? 'bg-semantic-success' : 'bg-semantic-error',
+                    )}
+                  />
+                  <span className="text-c1 text-text-secondary">{name}</span>
+                </div>
+                <span className={cn(
+                  'text-c2',
+                  info.status === 'healthy' ? 'text-text-tertiary' : 'text-semantic-error',
+                )}>
+                  {info.status === 'healthy'
+                    ? `${info.latency_ms}ms`
+                    : info.error ?? '不可用'}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* 模式选择 */}
         <div className="flex flex-col gap-kb-sm">

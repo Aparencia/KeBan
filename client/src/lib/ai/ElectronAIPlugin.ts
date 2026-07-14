@@ -24,6 +24,7 @@ import type {
   ResourceLink,
 } from './types';
 import { AIError } from './types';
+import { classifyRawError } from './errorClassifier';
 
 /**
  * Electron AI 插件 — 通过 Electron IPC 通道调用 ai-gateway
@@ -511,7 +512,7 @@ export class ElectronAIPlugin implements AIPlugin {
         latencyMs: result.latencyMs,
       };
     } catch (error) {
-      throw this.handleError(error, 'socraticEvaluate');
+      throw this.handleError(error);
     }
   }
 
@@ -549,7 +550,7 @@ export class ElectronAIPlugin implements AIPlugin {
         latencyMs: result.latencyMs,
       };
     } catch (error) {
-      throw this.handleError(error, 'socraticDeepening');
+      throw this.handleError(error);
     }
   }
 
@@ -606,34 +607,7 @@ export class ElectronAIPlugin implements AIPlugin {
     }
   }
 
-  private handleError(error: unknown, _ctx?: string): AIError {
-    if (error instanceof AIError) return error;
-
-    const msg = error instanceof Error ? error.message : String(error);
-
-    // 离线检查（IPC 调用时网络断开）
-    if (typeof navigator !== 'undefined' && !navigator.onLine) {
-      return new AIError('当前处于离线状态', 'offline', false);
-    }
-    if (msg.includes('Connection refused') || msg.includes('connection refused')
-        || msg.includes('os error 10061') || msg.includes('os error 111')) {
-      return new AIError(
-        'AI 服务未启动，请确保 ai-gateway 正在运行',
-        'service_unavailable', true
-      );
-    }
-    if (msg.includes('timeout') || msg.includes('Timeout') || msg.includes('ETIMEDOUT')) {
-      return new AIError('AI 服务响应超时，请稍后重试', 'timeout', true);
-    }
-    if (msg.includes('429')) {
-      return new AIError('AI 调用次数已达上限，请稍后重试', 'rate_limit', true);
-    }
-    if (msg.includes('503')) {
-      return new AIError('AI 服务暂时不可用', 'service_unavailable', true);
-    }
-    if (msg.includes('fetch') || msg.includes('network') || msg.includes('ECONNREFUSED')) {
-      return new AIError('AI 服务不可用，请检查网络连接', 'service_unavailable', true);
-    }
-    return new AIError(msg || 'AI 功能暂不可用', 'service_unavailable', false);
+  private handleError(error: unknown): never {
+    throw classifyRawError(error, 'ipc');
   }
 }

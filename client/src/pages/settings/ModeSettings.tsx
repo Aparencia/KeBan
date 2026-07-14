@@ -55,7 +55,7 @@ const modeCards: ModeCardData[] = [
     features: [
       { label: '离线使用', enabled: true },
       { label: 'AI 功能', enabled: true },
-      { label: '云端同步', enabled: true },
+      { label: '云端同步', enabled: false },
       { label: '自动备份', enabled: false },
     ],
   },

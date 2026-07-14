@@ -10,7 +10,7 @@ import logging
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, Request
 
-from config import call_with_fallback
+from config import call_with_fallback_for_request
 from chains.summarize_chain import SummarizeChain
 
 from fastapi import HTTPException
@@ -72,8 +72,8 @@ async def summarize(request: Request, body: SummarizeRequest) -> SummarizeRespon
         )
 
     try:
-        result, used_provider = await call_with_fallback(
-            request.app, "summarize", _run_chain
+        result, used_provider, is_user_key = await call_with_fallback_for_request(
+            request.app, "summarize", request, _run_chain
         )
     except RuntimeError as e:
         logger.error("摘要服务全部不可用: %s", str(e))

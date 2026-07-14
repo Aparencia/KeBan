@@ -124,6 +124,100 @@ def get_provider_for_feature(app, feature: str):
 
 
 # ============================================================
+# Provider 类映射（用于用户 Key 动态实例化）
+# ============================================================
+
+# 延迟导入 Provider 类，避免循环引用
+_PROVIDER_CLASSES: dict | None = None
+
+
+def _get_provider_classes() -> dict:
+    """延迟加载 Provider 类映射"""
+    global _PROVIDER_CLASSES
+    if _PROVIDER_CLASSES is None:
+        from providers.qwen_provider import QwenProvider
+        from providers.deepseek_provider import DeepSeekProvider
+        from providers.glm_provider import GLMProvider
+        _PROVIDER_CLASSES = {
+            "qwen": QwenProvider,
+            "deepseek": DeepSeekProvider,
+            "glm": GLMProvider,
+        }
+    return _PROVIDER_CLASSES
+
+
+def get_provider_for_request(app, feature: str, request) -> tuple:
+    """
+    根据请求中的用户 API Key 动态选择 Provider。
+
+    - 有用户 Key → 根据 MODEL_ROUTING 找到对应 provider_key，临时创建 Provider 实例
+    - 无用户 Key → 走现有 get_provider_for_feature 返回服务端默认 Provider
+
+    **不缓存用户 Key 创建的临时 Provider**，每次请求新建。
+
+    Args:
+        app: FastAPI 应用实例
+        feature: 功能标识，对应 MODEL_ROUTING 的 key
+        request: FastAPI Request 对象（通过 request.state.user_api_key 获取用户 Key）
+
+    Returns:
+        tuple: (provider, model_name, is_user_key)
+            - provider: Provider 实例
+            - model_name: 模型名称
+            - is_user_key: 是否使用了用户自带 Key
+    """
+    user_api_key = getattr(request.state, "user_api_key", None)
+
+    if not user_api_key:
+        # 无用户 Key，走服务端默认 Provider
+        provider, model_name = get_provider_for_feature(app, feature)
+        return provider, model_name, False
+
+    # 有用户 Key，根据 MODEL_ROUTING 找到对应 provider_key
+    provider_key, model_slot = MODEL_ROUTING.get(feature, ("fallback", "free"))
+
+    # 查找 Provider 配置（base_url）
+    provider_cfg = AI_PROVIDERS.get(provider_key, {})
+    base_url = provider_cfg.get("base_url", "")
+
+    if not base_url:
+        logger.warning(
+            "用户 Key 路由失败: feature=%s, provider_key=%s 无 base_url 配置，回退服务端默认",
+            feature, provider_key,
+        )
+        provider, model_name = get_provider_for_feature(app, feature)
+        return provider, model_name, False
+
+    # 动态实例化 Provider（使用用户 Key）
+    provider_classes = _get_provider_classes()
+    provider_cls = provider_classes.get(provider_key)
+    if not provider_cls:
+        logger.warning(
+            "用户 Key 路由失败: feature=%s, provider_key=%s 无对应 Provider 类，回退服务端默认",
+            feature, provider_key,
+        )
+        provider, model_name = get_provider_for_feature(app, feature)
+        return provider, model_name, False
+
+    try:
+        user_provider = provider_cls(base_url=base_url, api_key=user_api_key)
+    except Exception as e:
+        logger.warning(
+            "用户 Key 实例化 Provider 失败: feature=%s, provider_key=%s, error=%s，回退服务端默认",
+            feature, provider_key, str(e),
+        )
+        provider, model_name = get_provider_for_feature(app, feature)
+        return provider, model_name, False
+
+    model_name = provider_cfg.get("models", {}).get(model_slot, "fallback")
+    logger.info(
+        "用户 Key 路由: feature=%s, provider_key=%s, model=%s（使用用户自带 Key）",
+        feature, provider_key, model_name,
+    )
+    return user_provider, model_name, True
+
+
+# ============================================================
 # Provider Fallback 链：主 Provider 失败时依次尝试的备选
 # ============================================================
 
@@ -214,6 +308,62 @@ async def call_with_fallback(
     raise RuntimeError("所有 AI 服务暂时不可用")
 
 
+async def call_with_fallback_for_request(
+    app,
+    feature: str,
+    request,
+    fn: Callable[..., Awaitable[dict[str, Any]]],
+) -> tuple[dict[str, Any], str, bool]:
+    """
+    支持用户 Key 的 fallback 链执行。
+
+    如果请求中携带用户 API Key，优先使用用户 Key 创建的 Provider 执行。
+    用户 Key 失败时降级到服务端 fallback 链（GLM → fallback）。
+    无用户 Key 时直接走 call_with_fallback。
+
+    Args:
+        app:     FastAPI 应用实例
+        feature: 功能标识
+        request: FastAPI Request 对象
+        fn:      异步可调用对象，签名为 async fn(provider, model_name) -> dict
+
+    Returns:
+        tuple: (result_dict, provider_key, is_user_key)
+
+    Raises:
+        RuntimeError: 所有 Provider 均不可用
+    """
+    user_api_key = getattr(request.state, "user_api_key", None)
+
+    if not user_api_key:
+        # 无用户 Key，直接走服务端 fallback 链
+        result, provider_key = await call_with_fallback(app, feature, fn)
+        return result, provider_key, False
+
+    # 有用户 Key，先尝试用用户 Key 的 Provider
+    provider, model_name, is_user_key = get_provider_for_request(app, feature, request)
+
+    if is_user_key:
+        try:
+            result = await fn(provider, model_name)
+            # 从 MODEL_ROUTING 获取 provider_key 用于日志
+            provider_key = MODEL_ROUTING.get(feature, ("unknown", ""))[0]
+            logger.info(
+                "用户 Key 调用成功: feature=%s, provider=%s",
+                feature, provider_key,
+            )
+            return result, provider_key, True
+        except Exception as e:
+            logger.warning(
+                "用户 Key 调用失败，降级到服务端 fallback: feature=%s, error=%s",
+                feature, str(e),
+            )
+
+    # 用户 Key 失败，降级到服务端 fallback 链
+    result, provider_key = await call_with_fallback(app, feature, fn)
+    return result, provider_key, False
+
+
 # ============================================================
 # 超时配置（单位：秒）
 # ============================================================
@@ -292,7 +442,7 @@ APP_CONFIG = {
         origin.strip()
         for origin in os.getenv(
             "CORS_ORIGINS",
-            "http://localhost:5173,http://localhost:1420,tauri://localhost,http://tauri.localhost",
+            "http://localhost:5173,http://127.0.0.1:5173",
         ).split(",")
         if origin.strip()
     ],

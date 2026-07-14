@@ -5,6 +5,9 @@
  * POST 请求辅助函数、网关地址管理和功能注册表接口定义。
  */
 
+import { app } from 'electron';
+import * as path from 'path';
+import { readFile, writeFile } from 'fs/promises';
 import { logger } from '../logger.js';
 
 // ================================================================
@@ -12,10 +15,52 @@ import { logger } from '../logger.js';
 // ================================================================
 
 const DEFAULT_GATEWAY_URL = '';
+const GATEWAY_CONFIG_FILE = 'ai-gateway-config.json';
 
-/** 获取 AI 网关地址，优先读取环境变量 VITE_AI_GATEWAY_URL */
+// ── 运行时网关地址（渲染进程通过 IPC 同步） ──
+let _runtimeGatewayUrl: string | null = null;
+
+/**
+ * 获取 AI 网关地址
+ * 优先级：运行时设置 > 持久化文件 > 环境变量 > 默认空值
+ */
 export function gatewayUrl(): string {
+  if (_runtimeGatewayUrl) return _runtimeGatewayUrl;
   return process.env.VITE_AI_GATEWAY_URL || DEFAULT_GATEWAY_URL;
+}
+
+/**
+ * 设置运行时网关地址（由渲染进程通过 IPC 调用）
+ * 同时持久化到 userData 目录，确保主进程重启后仍可用
+ */
+export async function setRuntimeGatewayUrl(url: string): Promise<void> {
+  _runtimeGatewayUrl = url;
+  logger.info(`[AI-Gateway] Runtime gateway URL set: ${url}`);
+  // 持久化到文件
+  try {
+    const configPath = path.join(app.getPath('userData'), GATEWAY_CONFIG_FILE);
+    await writeFile(configPath, JSON.stringify({ gatewayUrl: url }), 'utf-8');
+  } catch (err) {
+    logger.error('[AI-Gateway] Failed to persist gateway URL', err);
+  }
+}
+
+/**
+ * 应用启动时从持久化文件加载网关地址
+ * 在 registerAIHandlers 之前调用
+ */
+export async function loadPersistedGatewayUrl(): Promise<void> {
+  try {
+    const configPath = path.join(app.getPath('userData'), GATEWAY_CONFIG_FILE);
+    const raw = await readFile(configPath, 'utf-8');
+    const config = JSON.parse(raw);
+    if (config.gatewayUrl) {
+      _runtimeGatewayUrl = config.gatewayUrl;
+      logger.info(`[AI-Gateway] Loaded persisted gateway URL: ${config.gatewayUrl}`);
+    }
+  } catch {
+    // 文件不存在或解析失败，静默忽略
+  }
 }
 
 // ================================================================

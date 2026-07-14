@@ -105,7 +105,7 @@ export function createMainWindow(
   if (isDev) {
     // 开发模式：连接 Vite 开发服务器
     win.loadURL('http://localhost:5173');
-    win.webContents.openDevTools();
+    win.webContents.openDevTools({ mode: 'detach' });
   } else {
     // 生产模式：加载打包后的 index.html
     win.loadFile(path.join(app.getAppPath(), 'dist', 'index.html'));

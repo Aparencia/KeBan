@@ -17,6 +17,7 @@ import { useShallow } from 'zustand/react/shallow';
 import type { FeynmanWeakPoint } from '@/types/models';
 import { cn } from '@/lib/utils';
 import { useAIEvaluate, useAIFeynmanQuestion, useAIFeynmanEvaluateAnswers } from '@/lib/ai/useAI';
+import { useAIErrorHandler } from '@/lib/ai/hooks/useAIErrorHandler';
 import { RescuePanel } from '@/components/RescuePanel';
 import { useStuckTimer } from '@/hooks/useStuckTimer';
 
@@ -63,6 +64,7 @@ export default function FeynmanSessionPage() {
     loading: aiEvalLoading,
     data: aiEvalData,
     error: aiEvalError,
+    needsConfig: aiEvalNeedsConfig,
     evaluate: aiEvaluate,
   } = useAIEvaluate();
 
@@ -71,6 +73,7 @@ export default function FeynmanSessionPage() {
     loading: aiQuestionLoading,
     data: aiQuestionData,
     error: aiQuestionError,
+    needsConfig: aiQuestionNeedsConfig,
     generateQuestions,
   } = useAIFeynmanQuestion();
 
@@ -79,12 +82,15 @@ export default function FeynmanSessionPage() {
     loading: aiAnswerEvalLoading,
     data: aiAnswerEvalData,
     error: aiAnswerEvalError,
+    needsConfig: aiAnswerEvalNeedsConfig,
     evaluateAnswers: aiEvaluateAnswers,
   } = useAIFeynmanEvaluateAnswers();
 
   const prefersReduced = useReducedMotion();
 
   const { toast } = useToast();
+  const handleQuestionError = useAIErrorHandler('AI 追问生成失败');
+  const handleEvalError = useAIErrorHandler('AI 评估失败');
 
   const explanationRef = useRef<HTMLDivElement>(null);
   const noteId = sessionId && sessionId !== 'new' ? sessionId : null;
@@ -214,11 +220,11 @@ export default function FeynmanSessionPage() {
       }
       setShowQuestionPanel(true);
       generateQuestions(note.concept, note.explanation)
-        .catch(() => toast({ type: 'error', message: 'AI 追问生成失败，请稍后重试' }));
+        .catch(handleQuestionError);
     } else {
       // 其他 AI 操作待后续实现
     }
-  }, [note, generateQuestions, toast]);
+  }, [note, generateQuestions, toast, handleQuestionError]);
 
   /**
    * 从 textarea 或 window selection 中提取选中文本，若无选中则回退到整体内容。
@@ -447,7 +453,7 @@ export default function FeynmanSessionPage() {
               }
               setShowAIEval(true);
               aiEvaluate(note.concept, note.explanation)
-                .catch(() => toast({ type: 'error', message: 'AI 评估失败，请稍后重试' }));
+                .catch(handleEvalError);
             }}
             title={aiEvalLoading ? 'AI 评估中…' : 'AI 评估讲解质量'}
           >
@@ -756,6 +762,14 @@ export default function FeynmanSessionPage() {
                     {aiEvalError && !aiEvalLoading && (
                       <div className="p-3 rounded-kb-md bg-semantic-error/10 border border-semantic-error/20 text-b2 text-semantic-error">
                         {aiEvalError}
+                        {aiEvalNeedsConfig && (
+                          <button
+                            onClick={() => navigate('/settings')}
+                            className="mt-2 block text-b3 underline hover:no-underline"
+                          >
+                            前往设置页配置 API Key
+                          </button>
+                        )}
                       </div>
                     )}
 
@@ -878,7 +892,7 @@ export default function FeynmanSessionPage() {
                           setShowQuestionPanel(true);
                           setLocalAnswers([]);
                           generateQuestions(note.concept, note.explanation)
-                            .catch(() => toast({ type: 'error', message: 'AI 追问生成失败，请稍后重试' }));
+                            .catch(handleQuestionError);
                         }}
                         disabled={aiQuestionLoading}
                         className={cn(
@@ -911,6 +925,14 @@ export default function FeynmanSessionPage() {
                         {aiQuestionError && !aiQuestionLoading && (
                           <div className="p-3 rounded-kb-md bg-semantic-error/10 border border-semantic-error/20 text-b2 text-semantic-error">
                             {aiQuestionError}
+                            {aiQuestionNeedsConfig && (
+                              <button
+                                onClick={() => navigate('/settings')}
+                                className="mt-2 block text-b3 underline hover:no-underline"
+                              >
+                                前往设置页配置 API Key
+                              </button>
+                            )}
                           </div>
                         )}
 
@@ -973,7 +995,7 @@ export default function FeynmanSessionPage() {
                                     return;
                                   }
                                   await aiEvaluateAnswers(note.concept, questions, answers)
-                                    .catch(() => toast({ type: 'error', message: 'AI 评估失败，请稍后重试' }));
+                                    .catch(handleEvalError);
                                 }}
                                 disabled={aiAnswerEvalLoading || localAnswers.every(a => !a?.trim())}
                                 loading={aiAnswerEvalLoading}
@@ -994,6 +1016,14 @@ export default function FeynmanSessionPage() {
                             {aiAnswerEvalError && !aiAnswerEvalLoading && (
                               <div className="p-3 rounded-kb-md bg-semantic-error/10 border border-semantic-error/20 text-b2 text-semantic-error">
                                 {aiAnswerEvalError}
+                                {aiAnswerEvalNeedsConfig && (
+                                  <button
+                                    onClick={() => navigate('/settings')}
+                                    className="mt-2 block text-b3 underline hover:no-underline"
+                                  >
+                                    前往设置页配置 API Key
+                                  </button>
+                                )}
                               </div>
                             )}
 

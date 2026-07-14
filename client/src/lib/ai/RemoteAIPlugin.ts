@@ -6,6 +6,7 @@ import type { AIPlugin, SummarizeResult, FlashcardResult, EvaluateResult, Durati
   PredictionPrompt, RescueContext, ResourceLink
 } from './types';
 import { AIError } from './types';
+import { classifyRawError } from './errorClassifier';
 import { aiClient } from '../http/apiClient';
 
 /**
@@ -451,7 +452,7 @@ export class RemoteAIPlugin implements AIPlugin {
         latencyMs: result.latency_ms,
       };
     } catch (error) {
-      throw this.handleError(error, 'socraticEvaluate');
+      throw this.handleError(error);
     }
   }
 
@@ -487,7 +488,7 @@ export class RemoteAIPlugin implements AIPlugin {
         latencyMs: result.latency_ms,
       };
     } catch (error) {
-      throw this.handleError(error, 'socraticDeepening');
+      throw this.handleError(error);
     }
   }
 
@@ -550,37 +551,7 @@ export class RemoteAIPlugin implements AIPlugin {
     }
   }
 
-  private handleError(error: unknown, _context?: string): AIError {
-    if (error instanceof AIError) return error;
-
-    // 离线检查（fetch 调用时网络断开）
-    if (typeof navigator !== 'undefined' && !navigator.onLine) {
-      return new AIError('当前处于离线状态', 'offline', false);
-    }
-
-    // AbortError / 超时
-    if (error instanceof DOMException && error.name === 'AbortError') {
-      return new AIError('AI 服务响应超时，请稍后重试', 'timeout', true);
-    }
-
-    const msg = error instanceof Error ? error.message : String(error);
-
-    if (msg.includes('timeout') || msg.includes('Timeout') || msg.includes('ETIMEDOUT')) {
-      return new AIError('AI 服务响应超时，请稍后重试', 'timeout', true);
-    }
-    if (msg.includes('429')) {
-      return new AIError('AI 调用次数已达上限，请稍后重试', 'rate_limit', true);
-    }
-    if (msg.includes('503')) {
-      return new AIError('AI 服务暂时不可用', 'service_unavailable', true);
-    }
-    // fetch 网络错误
-    if (error instanceof TypeError && msg.includes('fetch')) {
-      return new AIError('AI 服务不可用，请检查网络连接', 'service_unavailable', true);
-    }
-    if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('ECONNREFUSED')) {
-      return new AIError('AI 服务不可用，请检查网络连接', 'service_unavailable', true);
-    }
-    return new AIError(msg || 'AI 功能暂不可用', 'service_unavailable', false);
+  private handleError(error: unknown): never {
+    throw classifyRawError(error, 'fetch');
   }
 }

@@ -10,7 +10,7 @@ import logging
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, Request
 
-from config import call_with_fallback
+from config import call_with_fallback_for_request
 from chains.card_gen_chain import CardGenChain
 from chains.optimize_card_chain import OptimizeCardChain
 from fastapi import HTTPException
@@ -82,8 +82,8 @@ async def generate_cards(request: Request, body: CardGenRequest) -> CardGenRespo
         )
 
     try:
-        chain_result, used_provider = await call_with_fallback(
-            request.app, "generate_cards", _run_chain
+        chain_result, used_provider, is_user_key = await call_with_fallback_for_request(
+            request.app, "generate_cards", request, _run_chain
         )
 
         cards_data = chain_result.get("cards", [])
@@ -146,8 +146,8 @@ async def optimize_card(request: Request, body: OptimizeCardRequest) -> Optimize
         return await chain.run(front=body.front, back=body.back)
 
     try:
-        chain_result, used_provider = await call_with_fallback(
-            request.app, "optimize_card", _run_chain
+        chain_result, used_provider, is_user_key = await call_with_fallback_for_request(
+            request.app, "optimize_card", request, _run_chain
         )
 
         logger.info("闪卡优化完成: provider=%s", used_provider)

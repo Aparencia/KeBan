@@ -12,6 +12,7 @@ import { router } from '@/routes';
 import { useTheme } from '@/hooks/useTheme';
 import { db } from '@/lib/storage/database';
 import { soundPlayer } from '@/lib/audio/SoundPlayer';
+import { getAIConfig } from '@/lib/ai/config';
 import '@/stores/useSettingsStore'; // 导入以触发音效设置初始化
 
 // 启动时预加载所有音效（不阻塞渲染）
@@ -57,6 +58,11 @@ function App() {
     // 应用空闲时预检测 AI 网关健康状态（不阻塞首屏）
     const idle = window.requestIdleCallback ?? ((cb: () => void) => setTimeout(cb, 1500));
     idle(() => {
+      // 同步网关地址到主进程（主进程无法访问 localStorage，需显式传递）
+      const aiConfig = getAIConfig();
+      if (aiConfig.gatewayUrl && window.electronAPI) {
+        window.electronAPI.invoke('ai:set-gateway-url', aiConfig.gatewayUrl).catch(() => {});
+      }
       import('./hooks/useAIGatewayHealth').then(({ precheckGatewayHealth }) => {
         precheckGatewayHealth();
       });

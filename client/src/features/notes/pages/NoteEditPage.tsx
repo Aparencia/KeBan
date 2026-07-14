@@ -31,6 +31,7 @@ import FreeCanvas from '../components/FreeCanvas';
 import type { FreeCanvasData } from '@/types/models';
 import { useFlashcardStore } from '@/features/flashcards/store/useFlashcardStore';
 import { useAISummarize, useAIFlashcards } from '@/lib/ai/useAI';
+import { useAIErrorHandler } from '@/lib/ai/hooks/useAIErrorHandler';
 import { useToast } from '@/components/ui';
 import { ContextMenu } from '@/components/ui/ContextMenu';
 import type { ContextMenuGroup } from '@/components/ui/ContextMenu';
@@ -113,8 +114,10 @@ export default function NoteEditPage() {
 
   // AI Summary state
   const [summaryModalOpen, setSummaryModalOpen] = useState(false);
-  const { loading: aiLoading, data: aiData, error: aiError, summarize } = useAISummarize();
+  const { loading: aiLoading, data: aiData, error: aiError, needsConfig: aiNeedsConfig, summarize } = useAISummarize();
   const { toast } = useToast();
+
+  const handleFlashcardError = useAIErrorHandler('AI 闪卡生成失败');
 
   // 选中文本右键菜单 hook
   const {
@@ -127,6 +130,7 @@ export default function NoteEditPage() {
 
   // AI 摘要后续操作 hooks
   const { loading: flashcardLoading, generate: generateFlashcards } = useAIFlashcards();
+  const handleSummarizeError = useAIErrorHandler('AI 摘要生成失败');
   const [insertMenuOpen, setInsertMenuOpen] = useState(false);
   const [convertedKeys, setConvertedKeys] = useState<Set<number>>(new Set());
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -260,7 +264,7 @@ export default function NoteEditPage() {
             );
             toast({ type: 'success', message: `已生成 ${result.cards.length} 张闪卡` });
           })
-          .catch(() => toast({ type: 'error', message: '闪卡生成失败，请稍后重试' }));
+          .catch(handleFlashcardError);
         break;
       case 'ai-explain':
         // TODO [v0.5.0-B1.4]: 调用 AI 解释选中概念 — 需调用 summarize API 并展示解释结果
@@ -275,7 +279,7 @@ export default function NoteEditPage() {
         editor.chain().focus().toggleHighlight().run();
         break;
     }
-  }, [editor, generateFlashcards, ensureDefaultDeck, createCard, toast]);
+  }, [editor, generateFlashcards, ensureDefaultDeck, createCard, toast, handleFlashcardError]);
 
   // 图片上传处理
   const handleImageSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -329,10 +333,10 @@ export default function NoteEditPage() {
       );
       setConvertedKeys(prev => new Set(prev).add(index));
       toast({ type: 'success', message: `已生成 ${result.cards.length} 张闪卡` });
-    } catch {
-      toast({ type: 'error', message: '闪卡生成失败，请稍后重试' });
+    } catch (error) {
+      handleFlashcardError(error);
     }
-  }, [generateFlashcards, toast, ensureDefaultDeck, createCard]);
+  }, [generateFlashcards, toast, ensureDefaultDeck, createCard, handleFlashcardError]);
 
   const handleGenerateAllFlashcards = useCallback(async () => {
     if (!aiData?.keyPoints?.length) return;
@@ -347,18 +351,18 @@ export default function NoteEditPage() {
       );
       setConvertedKeys(new Set(aiData.keyPoints!.map((_, i) => i)));
       toast({ type: 'success', message: `已从全部要点生成 ${result.cards.length} 张闪卡` });
-    } catch {
-      toast({ type: 'error', message: '闪卡生成失败，请稍后重试' });
+    } catch (error) {
+      handleFlashcardError(error);
     }
-  }, [aiData, generateFlashcards, toast, ensureDefaultDeck, createCard]);
+  }, [aiData, generateFlashcards, toast, ensureDefaultDeck, createCard, handleFlashcardError]);
 
   const handleRegenerate = useCallback(() => {
     if (!editor) return;
     const text = editor.getText();
     if (!text.trim()) { toast({ type: 'warning', message: '笔记内容为空' }); return; }
     setConvertedKeys(new Set());
-    summarize(text).catch(() => toast({ type: 'error', message: 'AI 摘要生成失败' }));
-  }, [editor, summarize, toast]);
+    summarize(text).catch(handleSummarizeError);
+  }, [editor, summarize, toast, handleSummarizeError]);
 
   const handleExport = useCallback(() => {
     if (!aiData) return;
@@ -519,7 +523,7 @@ export default function NoteEditPage() {
             }
             summarize(text)
               .then(() => setSummaryModalOpen(true))
-              .catch(() => toast({ type: 'error', message: 'AI 摘要生成失败，请稍后重试' }));
+              .catch(handleSummarizeError);
           }}
           title={aiLoading ? '正在生成摘要…' : 'AI 摘要'}
         >
@@ -796,6 +800,14 @@ export default function NoteEditPage() {
             {aiError && !aiLoading && (
               <div className="mt-kb-md p-3 rounded-kb-md bg-semantic-error/10 border border-semantic-error/20 text-b2 text-semantic-error">
                 {aiError}
+                {aiNeedsConfig && (
+                  <button
+                    onClick={() => navigate('/settings')}
+                    className="mt-2 block text-b3 underline hover:no-underline"
+                  >
+                    前往设置页配置 API Key
+                  </button>
+                )}
               </div>
             )}
 

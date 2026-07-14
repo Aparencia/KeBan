@@ -625,11 +625,11 @@ body::before {
   }
 }
 
-/* 超级椭圆圆角近似 */
+/* 超级椭圆圆角近似 — 温和曲线，配合 overflow-hidden 确保内容不溢出 */
 .kb-squircle {
-  border-radius: 20px;
-  border-top-left-radius: 20% 15%;
-  border-top-right-radius: 20% 15%;
-  border-bottom-right-radius: 20% 15%;
-  border-bottom-left-radius: 20% 15%;
+  border-radius: 16px;
+  border-top-left-radius: 12% 8%;
+  border-top-right-radius: 12% 8%;
+  border-bottom-right-radius: 12% 8%;
+  border-bottom-left-radius: 12% 8%;
 }

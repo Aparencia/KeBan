@@ -4,10 +4,12 @@
 基于 Redis 的滑动窗口频率限制：
 - 按 user_id + feature 计数
 - 双层计数器：全局每日上限 + 功能级上限
+- 用户 Key 独立限流：携带 X-User-API-Key 时对该 Key 单独限速
 - Redis 不可用时放行（降级到无限制）
 - 超限返回 HTTP 429
 """
 
+import hashlib
 import logging
 from datetime import datetime
 
@@ -19,6 +21,10 @@ from cache.redis_cache import get_cache
 from config import RATE_LIMITS
 
 logger = logging.getLogger(__name__)
+
+# 用户 Key 独立限流参数
+USER_KEY_RATE_LIMIT_PER_MINUTE = 30  # 每个用户 Key 每分钟最多请求数
+USER_KEY_RATE_WINDOW_SECONDS = 60    # 限流窗口（秒）
 
 # API 路径到功能名称的映射
 PATH_TO_FEATURE: dict[str, str] = {
@@ -47,7 +53,20 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         # 获取 user_id（由 JWT 中间件注入）
         user_id = getattr(request.state, "user_id", "anonymous")
 
-        # 检查频率限制
+        # ---- 用户 Key 独立限流 ----
+        user_api_key = getattr(request.state, "user_api_key", None)
+        if user_api_key:
+            is_allowed, detail = await self._check_user_key_rate_limit(user_api_key, feature)
+            if not is_allowed:
+                return JSONResponse(
+                    status_code=429,
+                    content={
+                        "detail": detail,
+                        "feature": feature,
+                    },
+                )
+
+        # 检查常规频率限制
         is_allowed, detail = await self._check_rate_limit(user_id, feature)
         if not is_allowed:
             return JSONResponse(
@@ -59,6 +78,53 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             )
 
         return await call_next(request)
+
+    async def _check_user_key_rate_limit(
+        self, user_api_key: str, feature: str
+    ) -> tuple[bool, str]:
+        """
+        用户 Key 独立限流检查。
+
+        对携带 X-User-API-Key 的请求实施独立限流策略，
+        使用 Key 前 16 字符的 SHA256 哈希作为 Redis key，防止滥用。
+
+        Args:
+            user_api_key: 用户自带的 API Key
+            feature: 功能名称
+
+        Returns:
+            tuple: (是否允许, 拒绝原因)
+        """
+        cache = get_cache()
+        if not cache._client:
+            # Redis 不可用，降级放行
+            return True, ""
+
+        # 用 Key 前 16 字符的哈希作为限流标识（不暴露完整 Key）
+        key_hash = hashlib.sha256(user_api_key[:16].encode()).hexdigest()[:12]
+        rate_key = f"rate_limit:userkey:{key_hash}:{feature}"
+
+        try:
+            count = await cache.increment(rate_key, expire=USER_KEY_RATE_WINDOW_SECONDS)
+        except Exception as exc:
+            logger.warning("用户 Key 限流计数失败: %s", exc)
+            return True, ""  # Redis 异常，降级放行
+
+        if count > USER_KEY_RATE_LIMIT_PER_MINUTE:
+            logger.warning(
+                "用户 Key 限流触发: key_hash=%s, feature=%s, count=%d/%d",
+                key_hash, feature, count, USER_KEY_RATE_LIMIT_PER_MINUTE,
+            )
+            return False, (
+                "您的 API Key 请求过于频繁，请稍后再试"
+                f"（每分钟最多 {USER_KEY_RATE_LIMIT_PER_MINUTE} 次）"
+            )
+
+        logger.debug(
+            "用户 Key 限流通过: key_hash=%s, feature=%s, count=%d/%d",
+            key_hash, feature, count, USER_KEY_RATE_LIMIT_PER_MINUTE,
+        )
+        return True, ""
 
     async def _check_rate_limit(
         self, user_id: str, feature: str

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import { Card, Button, Input } from '@/components/ui';
+import { Card, Button, Input, Modal } from '@/components/ui';
 import { useToast } from '@/components/ui/Toast';
-import { HardDrive, Download, Upload, FolderOpen, AlertTriangle, Lock, Shield } from 'lucide-react';
+import { HardDrive, Download, Upload, FolderOpen, AlertTriangle, Lock, Shield, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { isElectron } from '@/lib/utils/platform';
 import {
@@ -14,6 +14,7 @@ import {
 import type { StorageInfo } from '@/lib/storage';
 import { encryptBackup, decryptBackup, type EncryptedBackup } from '@/lib/crypto/backupCrypto';
 import { syncEngine } from '@/lib/sync/SyncEngine';
+import { db } from '@/lib/storage/database';
 
 export default function DataSettings() {
   const { toast } = useToast();
@@ -34,6 +35,12 @@ export default function DataSettings() {
   const [restoringBackup, setRestoringBackup] = useState(false);
   const [restorePassword, setRestorePassword] = useState('');
   const backupFileInputRef = useRef<HTMLInputElement>(null);
+
+  // 清除数据状态
+  const [showClearDialog, setShowClearDialog] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [clearConfirmText, setClearConfirmText] = useState('');
+  const [clearing, setClearing] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -396,6 +403,188 @@ export default function DataSettings() {
               : '创建备份（未加密）'}
         </Button>
       </div>
+
+      {/* 清除数据 */}
+      <div className="border-t border-border/30 pt-kb-md flex flex-col gap-3">
+        <div className="flex items-center gap-2">
+          <Trash2 className="w-4 h-4 text-red-400" strokeWidth={1.5} />
+          <h3 className="text-b2 font-medium text-text-primary">清除数据</h3>
+        </div>
+        <p className="text-c1 text-text-tertiary">
+          清除部分或全部本地数据，此操作不可撤销，建议先导出备份。
+        </p>
+        <Button
+          variant="secondary"
+          size="md"
+          icon={<Trash2 className="w-icon-sm h-icon-sm text-red-400" strokeWidth={1.5} />}
+          className="w-full text-red-400 hover:bg-red-500/10 border-red-400/30 hover:border-red-400/50"
+          onClick={() => setShowClearDialog(true)}
+        >
+          清除数据
+        </Button>
+      </div>
+
+      {/* 清除数据选择对话框 */}
+      <Modal
+        open={showClearDialog}
+        onClose={() => setShowClearDialog(false)}
+        title="清除数据"
+        description="选择要清除的数据范围，此操作不可撤销"
+        size="sm"
+        footer={
+          <div className="flex gap-2 justify-end">
+            <Button variant="secondary" size="sm" onClick={() => setShowClearDialog(false)}>
+              取消
+            </Button>
+          </div>
+        }
+      >
+        <div className="flex flex-col gap-3 py-2">
+          <Button
+            variant="secondary"
+            size="md"
+            className="w-full justify-start text-left"
+            onClick={async () => {
+              setShowClearDialog(false);
+              setClearing(true);
+              try {
+                await db.transaction('rw', [db.notes, db.noteFolders], async () => {
+                  await db.notes.clear();
+                  await db.noteFolders.clear();
+                });
+                toast({ type: 'success', message: '笔记数据已清除' });
+              } catch {
+                toast({ type: 'error', message: '清除失败，请重试' });
+              } finally {
+                setClearing(false);
+              }
+            }}
+          >
+            <div className="flex flex-col items-start gap-0.5">
+              <span className="font-medium">清除笔记数据</span>
+              <span className="text-c2 text-text-tertiary font-normal">仅清除结礁和文件夹</span>
+            </div>
+          </Button>
+          <Button
+            variant="secondary"
+            size="md"
+            className="w-full justify-start text-left border-red-400/30 hover:border-red-400/50 hover:bg-red-500/10"
+            onClick={() => {
+              setShowClearDialog(false);
+              setShowClearConfirm(true);
+              setClearConfirmText('');
+            }}
+          >
+            <div className="flex flex-col items-start gap-0.5">
+              <span className="font-medium text-red-400">清除全部数据</span>
+              <span className="text-c2 text-text-tertiary font-normal">清除所有本地数据，恢复出厂状态</span>
+            </div>
+          </Button>
+        </div>
+      </Modal>
+
+      {/* 清除全部二次确认对话框 */}
+      <Modal
+        open={showClearConfirm}
+        onClose={() => {
+          setShowClearConfirm(false);
+          setClearConfirmText('');
+        }}
+        title="确认清除全部数据"
+        description="此操作将清除所有本地数据（笔记、牌组、番茄钟记录、设置等），且不可恢复"
+        size="sm"
+        footer={
+          <div className="flex gap-2 justify-end">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                setShowClearConfirm(false);
+                setClearConfirmText('');
+              }}
+            >
+              取消
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              className="bg-red-500 hover:bg-red-600 disabled:opacity-50"
+              disabled={clearConfirmText !== '确认清除' || clearing}
+              onClick={async () => {
+                setShowClearConfirm(false);
+                setClearing(true);
+                try {
+                  // 清除所有 Dexie 表
+                  await db.transaction('rw', [
+                    db.pomodoroSessions, db.pomodoroSettings,
+                    db.notes, db.noteFolders,
+                    db.flashcardDecks, db.flashcards, db.flashcardReviews,
+                    db.feynmanNotes, db.feynmanSummaries, db.feynmanWeakPoints,
+                    db.operationLog, db.appSettings,
+                    db.studyCheckIns, db.achievements,
+                    db.pomodoroGoals, db.syncConflicts, db.offlineQueue,
+                    db.windowCaptures,
+                  ], async () => {
+                    await db.pomodoroSessions.clear();
+                    await db.pomodoroSettings.clear();
+                    await db.notes.clear();
+                    await db.noteFolders.clear();
+                    await db.flashcardDecks.clear();
+                    await db.flashcards.clear();
+                    await db.flashcardReviews.clear();
+                    await db.feynmanNotes.clear();
+                    await db.feynmanSummaries.clear();
+                    await db.feynmanWeakPoints.clear();
+                    await db.operationLog.clear();
+                    await db.appSettings.clear();
+                    await db.studyCheckIns.clear();
+                    await db.achievements.clear();
+                    await db.pomodoroGoals.clear();
+                    await db.syncConflicts.clear();
+                    await db.offlineQueue.clear();
+                    await db.windowCaptures.clear();
+                  });
+                  // 清除 localStorage
+                  localStorage.clear();
+                  toast({ type: 'success', message: '所有数据已清除，即将刷新' });
+                  setTimeout(() => window.location.reload(), 1000);
+                } catch {
+                  toast({ type: 'error', message: '清除失败，请重试' });
+                } finally {
+                  setClearing(false);
+                  setClearConfirmText('');
+                }
+              }}
+            >
+              {clearing ? '清除中…' : '确认清除'}
+            </Button>
+          </div>
+        }
+      >
+        <div className="flex flex-col gap-3 py-2">
+          <div className={cn(
+            'flex items-center gap-2 p-3 rounded-kb-md',
+            'bg-red-500/10 border border-red-400/30',
+          )}>
+            <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" strokeWidth={1.5} />
+            <p className="text-c1 text-red-300 leading-relaxed">
+              警告：此操作将永久删除所有本地数据，包括笔记、牌组、番茄钟记录、设置等。
+            </p>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-c1 text-text-secondary">
+              请输入 <span className="font-mono font-bold text-red-400">确认清除</span> 以继续：
+            </label>
+            <Input
+              size="sm"
+              placeholder="输入「确认清除」"
+              value={clearConfirmText}
+              onChange={(e) => setClearConfirmText(e.target.value)}
+              autoComplete="off"
+            />
+          </div>
+        </div>
+      </Modal>
 
       {/* v0.9.0: 恢复数据 */}
       <div className="border-t border-border/30 pt-kb-md flex flex-col gap-3">

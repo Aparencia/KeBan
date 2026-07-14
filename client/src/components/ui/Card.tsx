@@ -6,7 +6,7 @@ export type CardVariant = NonNullable<VariantProps<typeof cardVariants>['variant
 export type CardPadding = NonNullable<VariantProps<typeof cardVariants>['padding']>;
 
 const cardVariants = cva(
-  'transition-all duration-300 ease-kb-smooth backdrop-blur-xl',
+  'transition-all duration-300 ease-kb-smooth backdrop-blur-xl overflow-hidden',
   {
     variants: {
       variant: {

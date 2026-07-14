@@ -15,6 +15,7 @@ const ALLOWED_CHANNELS = [
   'ai_recommend_duration',
   'ai_feynman_question',
   'ai_feynman_evaluate_answers',
+  'ai:set-gateway-url',
   'screen_list_windows',
   'screen_capture_start',
   'screen_capture_stop',

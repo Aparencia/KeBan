@@ -11,7 +11,7 @@ from typing import Any, Optional
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, Request
 
-from config import call_with_fallback
+from config import call_with_fallback_for_request
 from chains.inspiration_draft_chain import InspirationDraftChain
 
 logger = logging.getLogger(__name__)
@@ -102,8 +102,8 @@ async def inspiration_draft(
         )
 
     try:
-        result, used_provider = await call_with_fallback(
-            request.app, "inspiration_draft", _run_chain
+        result, used_provider, is_user_key = await call_with_fallback_for_request(
+            request.app, "inspiration_draft", request, _run_chain
         )
         draft = result.get("draft", {})
         draft_type = draft.get("type", body.target_type) if draft else body.target_type

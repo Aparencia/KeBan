@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   X, HelpCircle, Lightbulb, Layers, BookOpen,
@@ -38,7 +39,8 @@ const SUGGESTIONS = [
 export function RescuePanel({ isOpen, onClose, context, onSuggestion }: RescuePanelProps) {
   const [activeLevel, setActiveLevel] = useState<RescueLevel>(1);
   const [showIncubation, setShowIncubation] = useState(false);
-  const { loading, data, error, rescue } = useAIRescue();
+  const { loading, data, error, needsConfig, rescue } = useAIRescue();
+  const navigate = useNavigate();
 
   // 面板打开时触发救援请求
   useEffect(() => {
@@ -149,6 +151,14 @@ export function RescuePanel({ isOpen, onClose, context, onSuggestion }: RescuePa
               {error && !loading && (
                 <div className="p-3 rounded-kb-md bg-semantic-error/10 border border-semantic-error/20 text-b2 text-semantic-error">
                   {error}
+                  {needsConfig && (
+                    <button
+                      onClick={() => navigate('/settings')}
+                      className="mt-2 block text-b3 underline hover:no-underline"
+                    >
+                      前往设置页配置 API Key
+                    </button>
+                  )}
                 </div>
               )}
 

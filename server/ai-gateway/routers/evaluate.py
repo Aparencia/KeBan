@@ -10,7 +10,7 @@ import logging
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, Request
 
-from config import call_with_fallback
+from config import call_with_fallback_for_request
 from chains.evaluation_chain import EvaluationChain
 
 logger = logging.getLogger(__name__)
@@ -82,8 +82,8 @@ async def evaluate_explanation(
         )
 
     try:
-        result, used_provider = await call_with_fallback(
-            request.app, "evaluate", _run_chain
+        result, used_provider, is_user_key = await call_with_fallback_for_request(
+            request.app, "evaluate", request, _run_chain
         )
 
         # 从 chain 结果构建 EvaluationResult

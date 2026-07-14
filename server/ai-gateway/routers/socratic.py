@@ -10,7 +10,7 @@ import logging
 from pydantic import BaseModel, Field, field_validator
 from fastapi import APIRouter, Request
 
-from config import call_with_fallback
+from config import call_with_fallback_for_request
 from chains.socratic_brainstorm_chain import SocraticBrainstormChain
 from chains.socratic_evaluate_chain import SocraticEvaluateChain
 from chains.socratic_deepening_chain import SocraticDeepeningChain
@@ -169,8 +169,8 @@ async def socratic_brainstorm(request: Request, body: SocraticBrainstormRequest)
         return await chain.run(topic=body.topic, context=body.context)
 
     try:
-        result, used_provider = await call_with_fallback(
-            request.app, "socratic_brainstorm", _run_chain
+        result, used_provider, is_user_key = await call_with_fallback_for_request(
+            request.app, "socratic_brainstorm", request, _run_chain
         )
         ideas = [
             BrainstormIdeaItem(
@@ -222,8 +222,8 @@ async def socratic_evaluate(request: Request, body: SocraticEvaluateRequest) -> 
         )
 
     try:
-        result, used_provider = await call_with_fallback(
-            request.app, "socratic_evaluate", _run_chain
+        result, used_provider, is_user_key = await call_with_fallback_for_request(
+            request.app, "socratic_evaluate", request, _run_chain
         )
         dims = result.get("dimensions", {})
         response = SocraticEvaluateResult(
@@ -281,8 +281,8 @@ async def socratic_deepening(request: Request, body: SocraticDeepeningRequest) -
         )
 
     try:
-        result, used_provider = await call_with_fallback(
-            request.app, "socratic_deepening", _run_chain
+        result, used_provider, is_user_key = await call_with_fallback_for_request(
+            request.app, "socratic_deepening", request, _run_chain
         )
         angles = [
             DeepeningAngleItem(

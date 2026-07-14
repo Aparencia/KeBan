@@ -12,7 +12,7 @@ import logging
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, Request
 
-from config import call_with_fallback
+from config import call_with_fallback_for_request
 from chains.feynman_question_chain import FeynmanQuestionChain
 
 logger = logging.getLogger(__name__)
@@ -102,8 +102,8 @@ async def feynman_question(
         )
 
     try:
-        result, used_provider = await call_with_fallback(
-            request.app, "feynman_question", _run_chain
+        result, used_provider, is_user_key = await call_with_fallback_for_request(
+            request.app, "feynman_question", request, _run_chain
         )
 
         questions = [
@@ -170,8 +170,8 @@ async def feynman_evaluate_answers(
         )
 
     try:
-        result, used_provider = await call_with_fallback(
-            request.app, "feynman_evaluate", _run_chain
+        result, used_provider, is_user_key = await call_with_fallback_for_request(
+            request.app, "feynman_evaluate", request, _run_chain
         )
 
         response = FeynmanAnswerResult(

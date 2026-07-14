@@ -12,7 +12,7 @@ export interface AIConfig {
 export const AI_CONFIG_STORAGE_KEY = 'kb_ai_config';
 
 const DEFAULT_AI_CONFIG: AIConfig = {
-  provider: 'qwen',
+  provider: 'glm',
   apiKey: '',
   gatewayUrl: import.meta.env.VITE_AI_GATEWAY_URL || 'https://entropydecrease.com',
 };

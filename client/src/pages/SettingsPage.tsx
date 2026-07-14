@@ -30,7 +30,7 @@ export default function SettingsPage() {
     >
       <motion.div
         className="px-kb-md py-kb-md"
-        variants={{ hidden: { opacity: 0, y: -10, filter: 'blur(3px)' }, visible: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.35 } } }}
+        variants={{ hidden: { opacity: 0, y: -8 }, visible: { opacity: 1, y: 0, transition: { duration: 0.3 } } }}
       >
         <h1 className="text-h1 font-semibold text-text-primary">设置</h1>
         <p className="text-b2 text-text-tertiary mt-0.5">个性化你的学习体验</p>

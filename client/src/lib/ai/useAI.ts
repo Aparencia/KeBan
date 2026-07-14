@@ -29,6 +29,10 @@ export { useAISocratic } from './hooks/useAISocratic';
 export { useAIPredict } from './hooks/useAIPredict';
 export { useAIRescue } from './hooks/useAIRescue';
 
+// ── 工厂与工具 Hook ───────────────────────────────────────
+export { useAIFeature } from './hooks/useAIFeature';
+export { useAIErrorHandler } from './hooks/useAIErrorHandler';
+
 // ── 共享类型（供 UI 组件按需引用） ─────────────────────────
 export type { AIState } from './hooks/types';
 export { INITIAL_STATE } from './hooks/types';

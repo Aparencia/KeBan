@@ -10,7 +10,7 @@ import logging
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, Request
 
-from config import call_with_fallback
+from config import call_with_fallback_for_request
 from providers.fallback_provider import FallbackProvider
 from chains.recommend_chain import RecommendChain
 
@@ -90,8 +90,8 @@ async def recommend_duration(
         return await chain.run(history=history_dicts, mode=body.mode)
 
     try:
-        result, used_provider = await call_with_fallback(
-            request.app, "recommend", _run_chain
+        result, used_provider, is_user_key = await call_with_fallback_for_request(
+            request.app, "recommend", request, _run_chain
         )
 
         logger.info("番茄钟推荐完成: provider=%s", used_provider)

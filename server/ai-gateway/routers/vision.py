@@ -11,7 +11,7 @@ import logging
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, HTTPException, Request
 
-from config import call_with_fallback
+from config import call_with_fallback_for_request
 from chains.vision_extract_chain import VisionExtractChain
 
 logger = logging.getLogger(__name__)
@@ -84,8 +84,8 @@ async def extract_vision(request: Request, body: VisionExtractRequest) -> Vision
         )
 
     try:
-        result, used_provider = await call_with_fallback(
-            request.app, "vision_extract", _run_chain
+        result, used_provider, is_user_key = await call_with_fallback_for_request(
+            request.app, "vision_extract", request, _run_chain
         )
     except RuntimeError as e:
         logger.error("视觉提取服务全部不可用: %s", str(e))

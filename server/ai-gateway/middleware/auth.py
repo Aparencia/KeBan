@@ -20,7 +20,7 @@ from errors import AuthenticationError
 logger = logging.getLogger(__name__)
 
 # 不需要认证的路径白名单
-PUBLIC_PATHS = {"/health"}
+PUBLIC_PATHS = {"/health", "/health/quick", "/health/live"}
 
 # 启动时检查密钥配置
 if not APP_CONFIG["jwt_secret"]:
@@ -112,6 +112,13 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
                 status_code=e.status_code,
                 content={"detail": e.message},
             )
+
+        # 提取用户自带的 API Key（X-User-API-Key），用于按用户 Key 路由 Provider
+        user_api_key = request.headers.get("X-User-API-Key", "").strip()
+        if user_api_key and len(user_api_key) > 8 and " " not in user_api_key:
+            request.state.user_api_key = user_api_key
+        else:
+            request.state.user_api_key = None
 
         return await call_next(request)
 

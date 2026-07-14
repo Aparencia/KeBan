@@ -20,6 +20,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { useContextMenu } from '@/lib/contextMenu';
 import type { Note } from '@/types/models';
 import { useAISummarize, useAIFlashcards } from '@/lib/ai/useAI';
+import { useAIErrorHandler } from '@/lib/ai/hooks/useAIErrorHandler';
 
 const templateLabels: Record<NoteTemplate | 'qa', string> = {
   outline: '大纲式', cornell: '康奈尔', mindmap: '思维导图', free: '自由笔记', blank: '空白', qa: '问答',
@@ -90,6 +91,8 @@ export default function NotesPage() {
   const { toast } = useToast();
   const { summarize } = useAISummarize();
   const { generate: aiGenerateCards } = useAIFlashcards();
+  const handleSummarizeError = useAIErrorHandler('AI 摘要生成失败');
+  const handleFlashcardError = useAIErrorHandler('AI 闪卡生成失败');
 
   const {
     isOpen: ctxMenuOpen, position: ctxMenuPos, context: ctxMenuNote,
@@ -182,7 +185,7 @@ export default function NotesPage() {
           const result = await summarize(text, { maxLength: 200, style: 'bullet', language: 'zh' });
           if (result?.summary) { await navigator.clipboard.writeText(result.summary); toast({ type: 'success', message: 'AI 摘要已生成并复制到剪贴板' }); }
           else { toast({ type: 'warning', message: 'AI 未能生成摘要，请检查内容或稍后重试' }); }
-        } catch { toast({ type: 'error', message: 'AI 摘要生成失败，请检查网络后重试' }); }
+        } catch (error) { handleSummarizeError(error); }
         break;
       }
       case 'ai-flashcard': {
@@ -193,11 +196,11 @@ export default function NotesPage() {
           const result = await aiGenerateCards(text, { count: 10, difficulty: 'medium' });
           if (result?.cards?.length) { toast({ type: 'success', message: `AI 已生成 ${result.cards.length} 张闪卡，请在笔记编辑页中使用右键菜单逐张添加` }); }
           else { toast({ type: 'warning', message: 'AI 未能生成闪卡，请检查内容或稍后重试' }); }
-        } catch { toast({ type: 'error', message: 'AI 闪卡生成失败，请检查网络后重试' }); }
+        } catch (error) { handleFlashcardError(error); }
         break;
       }
     }
-  }, [handleSelectNote, handleTogglePin, handleDuplicateNote, handleExportNote, handleDeleteNote, toast, summarize, aiGenerateCards]);
+  }, [handleSelectNote, handleTogglePin, handleDuplicateNote, handleExportNote, handleDeleteNote, toast, summarize, aiGenerateCards, handleSummarizeError, handleFlashcardError]);
 
   return (
     <div className="flex h-[calc(100vh-3rem)] overflow-hidden">

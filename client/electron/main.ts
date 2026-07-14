@@ -14,6 +14,7 @@ import { writeFile, readFile } from 'fs/promises';
 import { safeHandle, setMainWindowId } from './ipcUtils.js';
 import { logger } from './logger.js';
 import { registerAIHandlers } from './ai/index.js';
+import { loadPersistedGatewayUrl, setRuntimeGatewayUrl } from './ai/utils.js';
 import { initAutoUpdater, checkForUpdate, downloadUpdate, installUpdate, destroyAutoUpdater, setAutoCheckEnabled } from './updater.js';
 import { createMainWindow, saveCloseChoice } from './windowManager.js';
 import { destroyTray } from './trayManager.js';
@@ -99,8 +100,8 @@ if (!gotTheLock) {
         // 开发环境：允许 unsafe-inline/unsafe-eval（Vite HMR 需要）
         // 生产环境：禁止 unsafe-eval，保留 unsafe-inline（Tailwind 运行时需要）
         const csp = isDev
-          ? "default-src 'self' 'unsafe-inline' 'unsafe-eval' http://localhost:* ws://localhost:*; connect-src 'self' http://localhost:* ws://localhost:* https://*.supabase.co wss://*.supabase.co; img-src 'self' data: blob: https://*.supabase.co; font-src 'self' data:;"
-          : "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co; font-src 'self' data:; connect-src 'self' https://*.supabase.co wss://*.supabase.co; frame-ancestors 'none';";
+          ? "default-src 'self' 'unsafe-inline' 'unsafe-eval' http://localhost:* ws://localhost:*; connect-src 'self' http://localhost:* ws://localhost:* https://*.supabase.co wss://*.supabase.co https://entropydecrease.com wss://entropydecrease.com; img-src 'self' data: blob: https://*.supabase.co; font-src 'self' data:;"
+          : "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co; font-src 'self' data:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://entropydecrease.com wss://entropydecrease.com; frame-ancestors 'none';";
 
         callback({
           responseHeaders: {
@@ -115,6 +116,8 @@ if (!gotTheLock) {
       logger.error('[SEC] Failed to inject CSP policy', err);
     }
 
+    // 加载持久化的 AI 网关地址（在注册 handler 之前，确保 handler 可用正确的 URL）
+    await loadPersistedGatewayUrl();
     registerAIHandlers();
     registerCaptureHandlers();
 
@@ -129,6 +132,12 @@ if (!gotTheLock) {
 
     // 隐藏默认 Electron 菜单栏
     Menu.setApplicationMenu(null);
+
+    // AI 网关地址同步（渲染进程 → 主进程）
+    safeHandle('ai:set-gateway-url', async (_event, url: string) => {
+      await setRuntimeGatewayUrl(url);
+      return { success: true };
+    });
 
     // 通用 IPC handlers
     safeHandle('get-app-version', async () => {

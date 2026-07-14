@@ -115,6 +115,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     const { aiConfig } = get();
     persistAIConfig(aiConfig);
     updateAIGatewayUrl(aiConfig.gatewayUrl);
+    // 同步网关地址到 Electron 主进程（主进程无法访问 localStorage）
+    if (window.electronAPI) {
+      window.electronAPI.invoke('ai:set-gateway-url', aiConfig.gatewayUrl).catch(() => {});
+    }
   },
 
   saveUserKeysAction: () => {

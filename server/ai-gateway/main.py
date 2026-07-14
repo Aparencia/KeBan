@@ -2,10 +2,10 @@
 课伴 AI 网关 — FastAPI 应用入口
 
 MVP-2 阶段的 AI 增强服务网关。
+- 安全头中间件（纵深防御，与 Nginx 互为补充）
 - CORS 中间件（生产环境严格模式 / 开发环境宽松模式）
 - JWT 认证中间件
 - 频率限制中间件
-- 安全头中间件（HSTS / CSP / X-Frame-Options 等）
 - 健康检查端点
 - 全局异常处理器
 """
@@ -16,10 +16,9 @@ import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
-from pythonjsonlogger import jsonlogger
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-
+from pythonjsonlogger import jsonlogger
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 
@@ -170,15 +169,15 @@ app = FastAPI(
 
 
 # ============================================================
-# 安全头中间件
+# 纵深防御：安全头中间件（与 Nginx 互为补充）
 # ============================================================
 
+
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
-    """为每个响应添加安全头"""
+    """为每个响应添加安全头（纵深防御，与 Nginx 互为补充）"""
 
     async def dispatch(self, request: Request, call_next):
         response: Response = await call_next(request)
-        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
@@ -192,11 +191,17 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 # ============================================================
 # 中间件注册（执行顺序与注册顺序相反：后注册的先执行）
 #
+# 纵深防御策略：
+#   FastAPI 层添加安全头（X-Content-Type-Options / X-Frame-Options /
+#   Referrer-Policy / CSP），与 Nginx 互为补充。
+#   HSTS 由 Nginx 独占管理（FastAPI 层不重复添加）。
+#   X-XSS-Protection 已废弃，不再添加。
+#
 # 注册顺序（从内到外）：
-#   1. SecurityHeaders   — 最先注册 = 最内层
-#   2. JWTAuth           — 第二层
-#   3. RateLimit         — 第三层
-#   4. InputValidation   — 第四层
+#   1. SecurityHeaders   — 最内层，确保所有响应都带安全头
+#   2. JWTAuth           — 认证层
+#   3. RateLimit         — 频率限制层
+#   4. InputValidation   — 输入校验层
 #   5. CORS              — 最后注册 = 最外层，最先处理请求（含 OPTIONS 预检）
 #
 # CORS 策略：
@@ -204,10 +209,10 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 #   - 开发环境：允许所有来源（便于调试）
 # ============================================================
 
-app.add_middleware(SecurityHeadersMiddleware)   # 最内层
-app.add_middleware(JWTAuthMiddleware)           # 第二层
-app.add_middleware(RateLimitMiddleware)         # 第三层
-app.add_middleware(InputValidationMiddleware)   # 第四层
+app.add_middleware(SecurityHeadersMiddleware)   # 最内层：纵深防御安全头
+app.add_middleware(JWTAuthMiddleware)           # 认证层
+app.add_middleware(RateLimitMiddleware)         # 频率限制层
+app.add_middleware(InputValidationMiddleware)   # 输入校验层
 
 # CORS 中间件：根据 APP_ENV 区分严格/宽松模式
 if APP_CONFIG.get("app_env") == "production":
@@ -217,7 +222,7 @@ if APP_CONFIG.get("app_env") == "production":
         allow_origins=APP_CONFIG["cors_origins"],
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        allow_headers=["Authorization", "Content-Type"],
+        allow_headers=["Authorization", "Content-Type", "X-Requested-With", "X-User-API-Key"],
     )
 else:
     # 开发环境 CORS 宽松模式：允许所有来源（便于调试）
@@ -302,6 +307,20 @@ async def health_check():
 async def liveness():
     """K8s liveness probe — 仅检查进程存活"""
     return {"status": "alive"}
+
+
+@app.get("/health/quick", tags=["系统"])
+async def health_quick():
+    """
+    轻量级健康检查 — 仅检查进程存活，不 ping 上游 Provider
+
+    供桌面客户端频繁轮询使用，避免每次触发重量级 Provider 健康检查。
+    """
+    return {
+        "status": "ok",
+        "service": "ai-gateway",
+        "version": APP_CONFIG["version"],
+    }
 
 
 # ============================================================

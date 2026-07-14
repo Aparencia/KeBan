@@ -83,7 +83,7 @@ export default function AppLayout() {
           {/* Page content */}
           <main className="flex-1 overflow-y-auto overflow-x-hidden pb-16 md:pb-0 relative">
             <AnimatePresence mode="wait" initial={false}>
-              <PageTransition key={pathname}>
+              <PageTransition key={pathname} variant={pathname === '/' ? 'none' : 'default'}>
                 <Outlet />
               </PageTransition>
             </AnimatePresence>

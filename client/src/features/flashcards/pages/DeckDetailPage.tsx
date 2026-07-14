@@ -26,6 +26,7 @@ import { exportDeck, downloadDeckFile } from '@/lib/storage/exportImport';
 import { useFlashcardStore } from '../store/useFlashcardStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useAIFlashcards } from '@/lib/ai/useAI';
+import { useAIErrorHandler } from '@/lib/ai/hooks/useAIErrorHandler';
 import { useContextMenu } from '@/lib/contextMenu/useContextMenu';
 import type { Flashcard } from '@/types/models';
 import { createNewCardState } from '@/lib/sm2';
@@ -99,8 +100,9 @@ export default function DeckDetailPage() {
   const [aiInputContent, setAIInputContent] = useState('');
   const [aiGeneratedCards, setAIGeneratedCards] = useState<AIFlashcard[]>([]);
   const [aiAddingIndex, setAIAddingIndex] = useState<number | null>(null);
-  const { loading: aiLoading, error: aiError, generate } = useAIFlashcards();
+  const { loading: aiLoading, error: aiError, needsConfig: aiNeedsConfig, generate } = useAIFlashcards();
   const { toast } = useToast();
+  const handleAIGenerateError = useAIErrorHandler('AI 闪卡生成失败');
   const [exporting, setExporting] = useState(false);
 
   // Context menu
@@ -575,7 +577,7 @@ export default function DeckDetailPage() {
                     .then((result) => {
                       if (result) setAIGeneratedCards(result.cards);
                     })
-                    .catch(() => toast({ type: 'error', message: 'AI 生成失败，请稍后重试' }));
+                    .catch(handleAIGenerateError);
                 }}
                 loading={aiLoading}
                 disabled={!aiInputContent.trim()}
@@ -609,6 +611,14 @@ export default function DeckDetailPage() {
               {aiError && (
                 <div className="p-3 rounded-kb-md bg-semantic-error/10 border border-semantic-error/20 text-b2 text-semantic-error">
                   {aiError}
+                  {aiNeedsConfig && (
+                    <button
+                      onClick={() => { setAIModalOpen(false); navigate('/settings'); }}
+                      className="mt-2 block text-b3 underline hover:no-underline"
+                    >
+                      前往设置页配置 API Key
+                    </button>
+                  )}
                 </div>
               )}
             </>

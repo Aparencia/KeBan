@@ -11,7 +11,7 @@ from typing import Optional
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, Request
 
-from config import call_with_fallback
+from config import call_with_fallback_for_request
 from chains.sort_inspiration_chain import SortInspirationChain
 
 logger = logging.getLogger(__name__)
@@ -83,8 +83,8 @@ async def sort_inspiration(
         )
 
     try:
-        result, used_provider = await call_with_fallback(
-            request.app, "sort_inspiration", _run_chain
+        result, used_provider, is_user_key = await call_with_fallback_for_request(
+            request.app, "sort_inspiration", request, _run_chain
         )
 
         suggestions = [
