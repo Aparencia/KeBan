@@ -181,7 +181,7 @@ export default function FeynmanPage() {
         variants={headerVariants}
       >
         <div>
-          <h1 className="text-h1 font-semibold text-text-primary">费曼学习</h1>
+          <h1 className="text-h1 font-semibold text-text-primary">浮出水面</h1>
           <p className="text-b2 text-text-tertiary mt-0.5">用讲解检验理解，以简化证明掌握</p>
         </div>
         <motion.button
@@ -215,8 +215,8 @@ export default function FeynmanPage() {
           >
             <EmptyState
               icon={<BookOpen className="w-12 h-12" strokeWidth={1.2} />}
-              title="还没有学习会话"
-              description="点击「新学习」开始你的第一次费曼学习"
+              title="炉火已备好"
+              description="讲给火听，直到模糊的轮廓，变得清晰透亮"
               action={
                 <motion.button
                   whileHover={{ scale: 1.05 }}
@@ -429,7 +429,7 @@ export default function FeynmanPage() {
       <Modal
         open={modalOpen}
         onClose={() => { setModalOpen(false); setNewConcept(''); }}
-        title="新建费曼学习"
+        title="新建浮出水面"
         description="输入你想要深入理解的概念名称"
         footer={
           <>

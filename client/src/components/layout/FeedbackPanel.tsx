@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Bug, Lightbulb, Star, Send, CheckCircle, Copy, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -86,7 +87,7 @@ function shortId(id: string): string {
 /** 将反馈内容格式化为纯文本，便于复制 */
 function formatFeedbackText(item: FeedbackItem): string {
   const lines = [
-    `[课伴反馈] ${TYPE_LABEL_MAP[item.type]}`,
+    `[熵减反馈] ${TYPE_LABEL_MAP[item.type]}`,
     `编号: ${shortId(item.id)}`,
     `时间: ${new Date(item.createdAt).toLocaleString('zh-CN')}`,
     '',
@@ -274,7 +275,7 @@ function FeedbackForm({ onSubmit }: FeedbackFormProps) {
           <button
             type="button"
             onClick={() => setSuccessInfo(null)}
-            className="text-text-quaternary hover:text-text-tertiary transition-colors p-0.5"
+            className="text-text-tertiary/50 hover:text-text-tertiary transition-colors p-0.5"
             aria-label="关闭提示"
           >
             <X className="w-3.5 h-3.5" />
@@ -359,7 +360,7 @@ function FeedbackHistory({ items, onDelete }: FeedbackHistoryProps) {
                       {'★'.repeat(item.rating)}
                     </span>
                   )}
-                  <span className="text-c2 text-text-quaternary font-mono">
+                  <span className="text-c2 text-text-tertiary/50 font-mono">
                     #{shortId(item.id)}
                   </span>
                   <span className="ml-auto text-c2 text-text-tertiary flex-shrink-0">
@@ -447,7 +448,9 @@ export default function FeedbackPanel({ isOpen, onClose }: FeedbackPanelProps) {
     return () => window.removeEventListener('keydown', handler);
   }, [isOpen, onClose]);
 
-  return (
+  // 使用 createPortal 渲染到 body，避免 Sidebar 的 backdrop-blur
+  // 创建新包含块导致 fixed 定位元素被约束在侧边栏内
+  return createPortal(
     <>
       {/* Backdrop */}
       <div
@@ -512,7 +515,7 @@ export default function FeedbackPanel({ isOpen, onClose }: FeedbackPanelProps) {
                 历史记录
               </h3>
               {items.length > 0 && (
-                <span className="text-c2 text-text-quaternary">{items.length} 条</span>
+                <span className="text-c2 text-text-tertiary/50">{items.length} 条</span>
               )}
             </div>
             <FeedbackHistory items={items} onDelete={handleDelete} />
@@ -520,15 +523,16 @@ export default function FeedbackPanel({ isOpen, onClose }: FeedbackPanelProps) {
         </div>
 
         {/* Footer */}
-        <div className="px-kb-lg py-kb-md border-t border-border-light flex-shrink-0">
+        <div className="px-kb-lg py-kb-md border-t border-border/30 flex-shrink-0">
           <p className="text-c2 text-text-tertiary">
             点击历史反馈可展开，复制内容后通过其他渠道发送
           </p>
           <p className="text-c2 text-text-tertiary mt-0.5">
-            您的反馈将帮助我们改进课伴
+            您的反馈将帮助我们改进熵减
           </p>
         </div>
       </aside>
-    </>
+    </>,
+    document.body,
   );
 }

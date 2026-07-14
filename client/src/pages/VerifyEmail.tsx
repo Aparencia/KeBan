@@ -79,7 +79,7 @@ export default function VerifyEmail() {
                 </div>
                 <div className="text-center space-y-1">
                   <p className="text-b1 font-medium text-text-primary">验证成功！</p>
-                  <p className="text-b2 text-text-tertiary">你的邮箱已通过验证，可以开始使用课伴了</p>
+                  <p className="text-b2 text-text-tertiary">你的邮箱已通过验证，可以开始使用熵减了</p>
                 </div>
                 <Button
                   variant="primary"

@@ -38,12 +38,23 @@ export class CaptureManager {
   private fusionIntervalId: ReturnType<typeof setInterval> | null = null;
   private isPaused = false;
 
+  // ---- 帧超时保底重启 ----
+  private frameWatchdogTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly frameWatchdogTimeoutMs: number;
+  private onFrameWatchdogTimeout: (() => void) | null = null;
+
   constructor(options?: {
     apiBaseUrl?: string;
     routeConfig?: Partial<RouteDispatcherConfig>;
+    /** 帧超时毫秒数，默认 3000 */
+    frameWatchdogTimeoutMs?: number;
+    /** 帧超时触发时的回调（通常为重启截图采集的函数） */
+    onFrameWatchdogTimeout?: () => void;
   }) {
     // apiBaseUrl 保留供未来直接使用，当前 VisionWorker 通过 aiClient 全局配置
     void options?.apiBaseUrl;
+    this.frameWatchdogTimeoutMs = options?.frameWatchdogTimeoutMs ?? 3000;
+    this.onFrameWatchdogTimeout = options?.onFrameWatchdogTimeout ?? null;
 
     this.crossFusion = new CrossFusionEngine(
       (segment) => {
@@ -126,6 +137,9 @@ export class CaptureManager {
       }
     }, 3000);
 
+    // 启动帧超时保底检测
+    this.resetFrameWatchdog();
+
     return this.sessionId;
   }
 
@@ -135,6 +149,9 @@ export class CaptureManager {
    */
   async stopSession(): Promise<void> {
     if (!this.sessionId) return;
+
+    // 最先停止帧超时保底计时器，防止在后续 await 期间触发重启
+    this.stopFrameWatchdog();
 
     this.pipeline.clear();
     this.dispatcher.reset();
@@ -188,6 +205,8 @@ export class CaptureManager {
     const accepted = this.pipeline.push(message);
     if (accepted) {
       this.frameCount++;
+      // 每收到一帧，重置保底计时器
+      this.resetFrameWatchdog();
       captureEventBus.emit('frame:pushed', {
         sessionId: this.sessionId,
         messageId: message.id,
@@ -283,6 +302,7 @@ export class CaptureManager {
       clearInterval(this.fusionIntervalId);
       this.fusionIntervalId = null;
     }
+    this.stopFrameWatchdog();
     this.pipeline.dispose();
     this.dispatcher.dispose();
     this.crossFusion.reset();
@@ -381,5 +401,34 @@ export class CaptureManager {
       messageId: message.id,
       error: error.message,
     });
+  }
+
+  // ================================================================
+  // 帧超时保底重启
+  // ================================================================
+
+  /**
+   * 重置帧超时计时器（每收到一帧调用）
+   * 如果连续 frameWatchdogTimeoutMs 未收到帧，触发 onFrameWatchdogTimeout
+   */
+  resetFrameWatchdog(): void {
+    if (this.frameWatchdogTimer !== null) {
+      clearTimeout(this.frameWatchdogTimer);
+    }
+    if (!this.sessionId || !this.onFrameWatchdogTimeout) return;
+    this.frameWatchdogTimer = setTimeout(() => {
+      this.frameWatchdogTimer = null;
+      // eslint-disable-next-line no-console -- 保底重启警告
+      console.warn(`[CaptureManager] 帧超时 ${this.frameWatchdogTimeoutMs}ms，触发保底重启`);
+      this.onFrameWatchdogTimeout?.();
+    }, this.frameWatchdogTimeoutMs);
+  }
+
+  /** 停止帧超时计时器 */
+  private stopFrameWatchdog(): void {
+    if (this.frameWatchdogTimer !== null) {
+      clearTimeout(this.frameWatchdogTimer);
+      this.frameWatchdogTimer = null;
+    }
   }
 }

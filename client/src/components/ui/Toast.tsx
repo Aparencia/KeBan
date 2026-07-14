@@ -29,10 +29,10 @@ export function useToast(): ToastContextValue {
 
 // Default duration per type (ms)
 const defaultDuration: Record<ToastType, number> = {
-  success: 3000,
-  info: 3000,
-  error: 5000,
-  warning: 5000,
+  success: 2000,
+  info: 2000,
+  error: 3000,
+  warning: 3000,
 };
 
 // Radix toast type mapping

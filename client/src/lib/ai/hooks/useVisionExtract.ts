@@ -1,0 +1,40 @@
+import { useState, useCallback } from 'react';
+import { aiPluginLoader } from '../AIPluginLoader';
+import { AIError } from '../types';
+import { hasUserKeys } from '../apiKeyManager';
+import type { VisionExtractResult } from '../types';
+
+/**
+ * AI 视觉提取 hook
+ */
+export function useVisionExtract() {
+  const [data, setData] = useState<VisionExtractResult | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [needsConfig, setNeedsConfig] = useState(false);
+
+  const extract = useCallback(async (imageBase64: string, language = 'zh') => {
+    setLoading(true);
+    setError(null);
+    setNeedsConfig(false);
+    try {
+      const result = await aiPluginLoader.extractScreenContent(imageBase64, language);
+      setData(result);
+      return result;
+    } catch (err) {
+      const aiError = err instanceof AIError ? err : null;
+      if (aiError?.code === 'service_unavailable' && !hasUserKeys()) {
+        setError('当前还没有配置 API Key 呢，请前往设置页面配置');
+        setNeedsConfig(true);
+      } else {
+        const msg = err instanceof Error ? err.message : '视觉提取失败';
+        setError(msg);
+      }
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  return { extract, data, loading, error, needsConfig };
+}

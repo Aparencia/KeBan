@@ -8,13 +8,16 @@
 import * as electronUpdater from 'electron-updater';
 const { autoUpdater } = electronUpdater;
 import type { UpdateInfo, ProgressInfo } from 'electron-updater';
-import { BrowserWindow, app } from 'electron';
+import { BrowserWindow, app, net } from 'electron';
 import { logger } from './logger.js';
 
 /** 自动检查开关（由渲染进程通过 IPC 设置，默认开启） */
 let autoCheckEnabled = true;
 
-// ---- 下载重试状态 ----
+/** 检查更新超时时间（毫秒） */
+const CHECK_UPDATE_TIMEOUT = 10_000;
+
+/** 下载重试状态 */
 let downloadRetryCount = 0;
 const MAX_DOWNLOAD_RETRIES = 3;
 const DOWNLOAD_RETRY_DELAYS = [30_000, 60_000, 120_000]; // 30s, 60s, 120s
@@ -28,6 +31,28 @@ let isDownloading = false;
 export function setAutoCheckEnabled(enabled: boolean): void {
   autoCheckEnabled = enabled;
   logger.info(`[AutoUpdater] Auto check ${enabled ? 'enabled' : 'disabled'}`);
+}
+
+/**
+ * 带超时保护的 checkForUpdates 封装
+ * 超过 CHECK_UPDATE_TIMEOUT 未响应则视为失败
+ */
+function checkForUpdatesWithTimeout(): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error('未成功取得资源，请检查网络连接后重试'));
+    }, CHECK_UPDATE_TIMEOUT);
+
+    autoUpdater.checkForUpdates()
+      .then((result) => {
+        clearTimeout(timer);
+        resolve(result);
+      })
+      .catch((err: unknown) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+  });
 }
 
 export function initAutoUpdater(mainWindow: BrowserWindow | null): void {
@@ -106,6 +131,13 @@ export function initAutoUpdater(mainWindow: BrowserWindow | null): void {
     // 重试耗尽或非下载阶段的错误
     downloadRetryCount = 0;
     isDownloading = false;
+
+    // 断网时静默忽略，不弹窗打扰用户
+    if (!net.isOnline()) {
+      logger.info('[AutoUpdater] Offline, skipping error notification');
+      return;
+    }
+
     sendToRenderer(mainWindow, 'update-status', {
       status: 'error',
       message: error.message,
@@ -115,15 +147,32 @@ export function initAutoUpdater(mainWindow: BrowserWindow | null): void {
   // 启动时检查更新（延迟 10 秒，等窗口加载完）
   setTimeout(() => {
     if (!autoCheckEnabled) return;
-    autoUpdater.checkForUpdates().catch((err) => {
+    // 断网时跳过检查，静默等待下次启动
+    if (!net.isOnline()) {
+      logger.info('[AutoUpdater] Offline, skipping auto check');
+      return;
+    }
+    checkForUpdatesWithTimeout().catch((err: unknown) => {
       logger.error('[AutoUpdater] Initial check failed', err);
+      // 断网导致的失败不通知前端
+      if (!net.isOnline()) return;
+      sendToRenderer(mainWindow, 'update-status', {
+        status: 'error',
+        message: err instanceof Error ? err.message : String(err),
+      });
     });
   }, 10_000);
 }
 
 export function checkForUpdate(): void {
-  autoUpdater.checkForUpdates().catch((err) => {
+  checkForUpdatesWithTimeout().catch((err: unknown) => {
     logger.error('[AutoUpdater] Manual check failed', err);
+    // 手动检查时也将超时错误通知到渲染进程
+    sendToRenderer(
+      BrowserWindow.getAllWindows().find((w) => !w.isDestroyed()) ?? null,
+      'update-status',
+      { status: 'error', message: err instanceof Error ? err.message : String(err) },
+    );
   });
 }
 

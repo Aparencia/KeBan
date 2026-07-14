@@ -39,6 +39,24 @@ export class SyncEngine {
   }
 
   /**
+   * 暂停同步引擎
+   * 停止自动同步并阻止新的同步请求（用于路径切换等关键操作前）
+   */
+  pause(): void {
+    this.stopAutoSync();
+    this.syncInProgress = true;
+  }
+
+  /**
+   * 恢复同步引擎
+   * 解除同步锁定并重新启动自动同步（用于路径切换完成后）
+   */
+  resume(): void {
+    this.syncInProgress = false;
+    this.startAutoSync();
+  }
+
+  /**
    * 执行完整同步流程：push → pull → replay offline queue
    */
   async sync(): Promise<SyncResult> {

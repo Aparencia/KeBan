@@ -19,6 +19,7 @@ import {
   ExternalLink,
   RotateCcw,
 } from 'lucide-react';
+import { AIThinkingIndicator } from '@/components/ui/AIThinkingIndicator';
 import { cn } from '@/lib/utils';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { exportDeck, downloadDeckFile } from '@/lib/storage/exportImport';
@@ -278,7 +279,7 @@ export default function DeckDetailPage() {
         <Button
           size="sm"
           variant="secondary"
-          icon={aiLoading ? <Loader2 className="w-icon-sm h-icon-sm animate-spin" /> : <Sparkles className="w-icon-sm h-icon-sm" />}
+          icon={aiLoading ? <AIThinkingIndicator size={4} gap={3} /> : <Sparkles className="w-icon-sm h-icon-sm" />}
           onClick={() => {
             setAIInputContent('');
             setAIGeneratedCards([]);

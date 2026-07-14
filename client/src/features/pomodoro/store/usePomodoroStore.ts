@@ -35,6 +35,10 @@ interface PomodoroState {
   isImmersive: boolean;
   /** 退出沉浸后标记，用于 resume 时自动重入 */
   wasImmersive: boolean;
+  /** AI 推荐的工作时长（分钟） */
+  aiRecommendedDuration?: number;
+  /** AI 推荐理由文本 */
+  aiReasoning?: string;
 
   start: () => void;
   pause: () => void;
@@ -47,6 +51,8 @@ interface PomodoroState {
   exitImmersive: () => void;
   tick: () => void;
   updateSettings: (settings: Partial<PomodoroSettings>) => void;
+  /** 设置 AI 推荐结果 */
+  setAIRecommendation: (duration: number, reasoning: string) => void;
   initialize: () => Promise<void>;
 }
 
@@ -103,6 +109,8 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
     currentGoal: null,
     isImmersive: false,
     wasImmersive: false,
+    aiRecommendedDuration: undefined,
+    aiReasoning: undefined,
 
     initialize: async () => {
       const saved = await loadSettings();
@@ -187,6 +195,9 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
 
     setCurrentGoal: (goal) => set({ currentGoal: goal }),
 
+    setAIRecommendation: (duration, reasoning) =>
+      set({ aiRecommendedDuration: duration, aiReasoning: reasoning }),
+
     enterImmersive: () => set({ isImmersive: true }),
     exitImmersive: () => {
       const { isRunning } = get();
@@ -265,7 +276,7 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
         // 发送浏览器通知
         if (settings.notificationEnabled) {
           if (phase === 'work') {
-            sendNotification('工作完成！', '休息一下吧 ☕').catch(() => {});
+            sendNotification('又添了一段暖意', '继续深潜吧 ☕').catch(() => {});
           } else {
             sendNotification('休息结束！', '开始下一个番茄 🍅').catch(() => {});
           }

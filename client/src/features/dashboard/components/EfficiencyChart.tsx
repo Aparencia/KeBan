@@ -152,9 +152,9 @@ function ModuleTimePieChart({
       return sum + diffSec;
     }, 0) / 60;
     return [
-      { name: '番茄钟', value: Math.round(pomodoroMin) },
-      { name: '闪卡复习', value: Math.round(flashcardMin) },
-      { name: '费曼学习', value: Math.round(feynmanMin) },
+      { name: '深潜', value: Math.round(pomodoroMin) },
+      { name: '反衰减呼吸复习', value: Math.round(flashcardMin) },
+      { name: '浮出水面学习', value: Math.round(feynmanMin) },
     ].filter((d) => d.value > 0);
   }, [sessions, reviews, feynmanNotes]);
 

@@ -41,7 +41,7 @@ export function CloseConfirmDialog({ open, onClose }: CloseConfirmDialogProps) {
     <Modal
       open={open}
       onClose={() => handleAction('cancel')}
-      title="关闭课伴"
+      title="关闭熵减"
       description="你希望如何处理？"
       size="sm"
     >

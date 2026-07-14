@@ -103,15 +103,35 @@ export class VisionWorker implements PipelineWorker {
     // 从 metadata 中获取提取模式，或使用默认值
     const mode = (message.metadata?.visionMode as VisionExtractMode) ?? this.defaultMode;
 
-    // 调用后端视觉提取 API
-    const response = await aiClient.post<VisionExtractApiResponse>(
-      '/api/v1/vision/extract',
-      {
-        image_base64: base64,
-        language: 'zh',
-        mode,
-      },
-    );
+    // 调用后端视觉提取 API（带详细错误分类）
+    let response: VisionExtractApiResponse;
+    try {
+      response = await aiClient.post<VisionExtractApiResponse>(
+        '/api/v1/vision/extract',
+        {
+          image_base64: base64,
+          language: 'zh',
+          mode,
+        },
+      );
+    } catch (err: unknown) {
+      const errorInfo = classifyVisionError(err);
+      console.error(
+        `[VisionWorker] 视觉提取失败: ${errorInfo.type} | ${errorInfo.message}`,
+        { statusCode: errorInfo.statusCode, cause: err },
+      );
+
+      // 通过 metadata 将错误信息传递给 pipeline 下游 / UI 层
+      message.metadata = {
+        ...message.metadata,
+        visionError: {
+          type: errorInfo.type,
+          message: errorInfo.message,
+          statusCode: errorInfo.statusCode,
+        },
+      };
+      return null;
+    }
 
     // 3. 内容相似度去重：提取文本与上次高度相似则跳过
     if (response.text && this.isSimilarToLast(response.text)) {
@@ -169,6 +189,88 @@ export class VisionWorker implements PipelineWorker {
     const unionSize = setA.size + setB.size - intersectionSize;
     return unionSize > 0 && intersectionSize / unionSize > this.similarityThreshold;
   }
+}
+
+// ================================================================
+// 错误分类工具
+// ================================================================
+
+/** 视觉提取错误类型 */
+export type VisionErrorType =
+  | 'network'        // 网络不可达 / fetch 失败
+  | 'timeout'        // 请求超时
+  | 'auth'           // 认证失败 401/403
+  | 'service_error'  // 服务端错误 5xx
+  | 'client_error'   // 客户端错误 4xx（非认证）
+  | 'unknown';       // 未分类
+
+/** 分类后的错误信息 */
+export interface VisionErrorInfo {
+  type: VisionErrorType;
+  message: string;
+  statusCode?: number;
+}
+
+/**
+ * 将未知错误分类为具体的视觉提取错误类型，
+ * 并生成用户友好的中文提示。
+ */
+function classifyVisionError(err: unknown): VisionErrorInfo {
+  // 提取 HTTP 状态码（兼容 axios / fetch / 自定义错误对象）
+  const status: number | undefined =
+    (err as { status?: number })?.status ??
+    (err as { response?: { status?: number } })?.response?.status;
+
+  // 判断是否为超时
+  const errMsg = (err as Error)?.message ?? String(err);
+  const isTimeout = /timeout|timed out|aborted/i.test(errMsg);
+
+  if (isTimeout) {
+    return {
+      type: 'timeout',
+      message: '视觉提取请求超时，请检查网络连接或稍后重试',
+    };
+  }
+
+  if (status === 401 || status === 403) {
+    return {
+      type: 'auth',
+      message: 'AI 服务认证失败，请检查 API Key 是否正确配置',
+      statusCode: status,
+    };
+  }
+
+  if (status && status >= 500) {
+    return {
+      type: 'service_error',
+      message: `AI 服务暂时不可用（${status}），请稍后重试`,
+      statusCode: status,
+    };
+  }
+
+  if (status && status >= 400) {
+    return {
+      type: 'client_error',
+      message: `视觉提取请求参数错误（${status}），请检查配置`,
+      statusCode: status,
+    };
+  }
+
+  // 网络层错误（fetch 失败、DNS 解析失败等）
+  if (
+    err instanceof TypeError ||
+    /failed to fetch|network|econnrefused|enetunreach/i.test(errMsg)
+  ) {
+    return {
+      type: 'network',
+      message: '无法连接 AI 网关服务，请确认网关已启动并检查网络连接',
+    };
+  }
+
+  return {
+    type: 'unknown',
+    message: `视觉提取失败：${errMsg}`,
+  };
 }
 
 // ================================================================

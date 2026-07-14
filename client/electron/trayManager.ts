@@ -38,7 +38,7 @@ export function setQuittingRef(ref: { value: boolean }): void {
  * @returns 创建的 Tray 实例
  */
 export function createTray(win: BrowserWindow, onQuit: () => void): Tray {
-  const iconPath = path.join(__dirname, '..', 'app-icon.png');
+  const iconPath = path.join(app.getAppPath(), 'app-icon.png');
   let trayIcon = nativeImage.createFromPath(iconPath);
 
   // 如果图标加载失败则创建 16x16 空白图标作为 fallback
@@ -49,7 +49,7 @@ export function createTray(win: BrowserWindow, onQuit: () => void): Tray {
   }
 
   tray = new Tray(trayIcon);
-  tray.setToolTip('课伴 KeBan');
+  tray.setToolTip('熵减');
 
   const contextMenu = Menu.buildFromTemplate([
     {

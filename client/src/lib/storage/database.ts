@@ -189,6 +189,16 @@ export class KeBanDatabase extends Dexie {
         // 搜索索引表不存在时忽略
       }
     });
+
+    // 去掉 studyCheckIns.date 的唯一约束，允许并发写入安全
+    this.version(10).stores({
+      studyCheckIns: 'id, date, checkInTime, streakDays',
+    });
+
+    // 新增 sortStatus 索引，支持灵感分拣状态查询
+    this.version(11).stores({
+      inspirations: 'id, createdAt, updatedAt, sortStatus, [tags.content_nature+tags.cognitive_depth+tags.subject]',
+    });
   }
 }
 

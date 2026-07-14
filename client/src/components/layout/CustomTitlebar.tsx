@@ -64,7 +64,7 @@ export function CustomTitlebar({ className }: CustomTitlebarProps) {
           <div className="absolute top-[3px] left-[3px] w-2.5 h-2.5 border border-white/30 dark:border-white/50 rounded-full" />
         </div>
         <span className="text-xs font-medium text-text-primary tracking-wide">
-          课伴
+          熵减
         </span>
       </div>
 

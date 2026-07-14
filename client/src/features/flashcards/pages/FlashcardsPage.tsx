@@ -292,8 +292,8 @@ export default function FlashcardsPage() {
           <motion.div variants={emptyVariants}>
             <EmptyState
               icon={<Layers3 className="w-12 h-12" strokeWidth={1.2} />}
-              title="还没有牌组"
-              description="创建你的第一个牌组，开始间隔重复学习之旅"
+              title="记忆的泥土还在沉睡"
+              description="创建你的第一个牌组，让知识的种子开始生根发芽"
               action={
                 <motion.button
                   whileHover={{ scale: 1.05 }}

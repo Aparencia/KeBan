@@ -45,7 +45,7 @@ export function useCheckIn(moduleName: string) {
       streakDays: newStreak,
     };
 
-    await db.studyCheckIns.add(record);
+    await db.studyCheckIns.put(record);
     soundPlayer.play('daily_checkin');
     setTodayCheckIn(record);
     setStreakDays(newStreak);

@@ -3,9 +3,10 @@ import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft, ArrowRight, Check, Highlighter, X,
-  Star, Trash2, CheckCircle2, Circle, Sparkles, Loader2,
-  MessageCircle, Lightbulb, SearchCheck,
+  Star, Trash2, CheckCircle2, Circle, Sparkles,
+  MessageCircle, Lightbulb, SearchCheck, HelpCircle,
 } from 'lucide-react';
+import { AIThinkingIndicator } from '@/components/ui/AIThinkingIndicator';
 import { Button, Skeleton, EmptyState, useToast, ContextMenu } from '@/components/ui';
 import { AIButton } from '@/components/ui/AIButton';
 import type { ContextMenuGroup } from '@/components/ui';
@@ -16,6 +17,8 @@ import { useShallow } from 'zustand/react/shallow';
 import type { FeynmanWeakPoint } from '@/types/models';
 import { cn } from '@/lib/utils';
 import { useAIEvaluate, useAIFeynmanQuestion, useAIFeynmanEvaluateAnswers } from '@/lib/ai/useAI';
+import { RescuePanel } from '@/components/RescuePanel';
+import { useStuckTimer } from '@/hooks/useStuckTimer';
 
 export default function FeynmanSessionPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -46,6 +49,14 @@ export default function FeynmanSessionPage() {
   const [showAIEval, setShowAIEval] = useState(false);
   const [localAnswers, setLocalAnswers] = useState<string[]>([]);
   const [showQuestionPanel, setShowQuestionPanel] = useState(false);
+
+  // === 卡壳救援 ===
+  const [rescueOpen, setRescueOpen] = useState(false);
+  const stuckTimer = useStuckTimer({
+    onThreshold: () => {
+      window.dispatchEvent(new Event('rescue:show-incubation'));
+    },
+  });
 
   // AI Evaluate
   const {
@@ -84,6 +95,19 @@ export default function FeynmanSessionPage() {
       loadNote(noteId);
     }
   }, [noteId, loadNote]);
+
+  // Ctrl+Shift+H 快捷键打开救援面板
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.shiftKey && e.key === 'H') {
+        e.preventDefault();
+        setRescueOpen(true);
+        stuckTimer.start();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [stuckTimer]);
 
   // Derive current view from store
   const view = noteId && currentNoteId === noteId ? getCurrentView() : null;
@@ -390,8 +414,26 @@ export default function FeynmanSessionPage() {
           <ArrowLeft className="w-icon-md h-icon-md" strokeWidth={1.5} />
         </button>
         <h1 className="text-b1 font-semibold text-text-primary flex-1 truncate">
-          {note?.concept || '费曼学习'}
+          {note?.concept || '浮出水面'}
         </h1>
+        {note?.explanation && (
+          <button
+            onClick={() => {
+              setRescueOpen(true);
+              stuckTimer.start();
+            }}
+            className={cn(
+              'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-kb-md text-b2 font-medium',
+              'bg-bg-secondary text-text-secondary border border-border/50',
+              'hover:bg-bg-tertiary hover:text-text-primary',
+              'active:scale-95 transition-all duration-kb-fast',
+            )}
+            title="卡壳了 (Ctrl+Shift+H)"
+          >
+            <HelpCircle className="w-icon-sm h-icon-sm" strokeWidth={1.5} />
+            卡壳了
+          </button>
+        )}
         {note?.explanation && (
           <AIButton
             size="sm"
@@ -464,7 +506,7 @@ export default function FeynmanSessionPage() {
                 <div>
                   <h2 className="text-h2 font-semibold text-text-primary">选择要学习的概念</h2>
                   <p className="text-b2 text-text-tertiary mt-1">
-                    输入一个你想要深入理解的概念名称，这将成为本次费曼学习的主题。
+                    输入一个你想要深入理解的概念名称，这将成为本次浮出水面学习的主题。
                   </p>
                 </div>
                 <div>
@@ -501,7 +543,7 @@ export default function FeynmanSessionPage() {
                   'bg-feynman/5 border border-feynman/20',
                   'text-b2 text-text-secondary leading-relaxed',
                 )}>
-                  <p className="font-medium text-feynman mb-1">费曼学习法小贴士</p>
+                  <p className="font-medium text-feynman mb-1">浮出水面小贴士</p>
                   <p className="text-text-tertiary">
                     选择一个你正在学习但尚未完全掌握的概念。用简单的语言向"一个完全不懂的人"解释它，
                     是检验真正理解的最佳方式。
@@ -706,7 +748,7 @@ export default function FeynmanSessionPage() {
 
                     {aiEvalLoading && (
                       <div className="flex items-center gap-2 text-b2 text-text-secondary py-4">
-                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <AIThinkingIndicator size={4} gap={3} />
                         正在评估你的讲解…
                       </div>
                     )}
@@ -847,7 +889,7 @@ export default function FeynmanSessionPage() {
                         )}
                       >
                         {aiQuestionLoading ? (
-                          <Loader2 className="w-icon-sm h-icon-sm animate-spin" />
+                          <AIThinkingIndicator size={4} gap={3} />
                         ) : (
                           <MessageCircle className="w-icon-sm h-icon-sm" strokeWidth={1.5} />
                         )}
@@ -860,7 +902,7 @@ export default function FeynmanSessionPage() {
                         {/* 加载中 */}
                         {aiQuestionLoading && (
                           <div className="flex items-center gap-2 text-b2 text-text-secondary py-4">
-                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <AIThinkingIndicator size={4} gap={3} />
                             AI 正在思考追问...
                           </div>
                         )}
@@ -944,7 +986,7 @@ export default function FeynmanSessionPage() {
                             {/* 评估结果 */}
                             {aiAnswerEvalLoading && (
                               <div className="flex items-center gap-2 text-b2 text-text-secondary py-4">
-                                <Loader2 className="w-4 h-4 animate-spin" />
+                                <AIThinkingIndicator size={4} gap={3} />
                                 正在评估你的回答...
                               </div>
                             )}
@@ -1167,6 +1209,24 @@ export default function FeynmanSessionPage() {
           onClose={closeMenu}
         />
       )}
+
+      {/* 卡壳救援面板 */}
+      <RescuePanel
+        isOpen={rescueOpen}
+        onClose={() => {
+          setRescueOpen(false);
+          stuckTimer.stop();
+        }}
+        context={{
+          topic: note?.concept || '浮出水面',
+          relatedContent: note?.explanation?.slice(0, 500),
+          mode: 'feynman',
+        }}
+        onSuggestion={(action) => {
+          if (action === 'pomodoro') navigate('/pomodoro');
+          else if (action === 'flashcard') navigate('/flashcards');
+        }}
+      />
 
       {/* 动画样式 */}
       <style>{`

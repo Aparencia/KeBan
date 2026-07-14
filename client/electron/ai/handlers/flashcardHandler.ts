@@ -82,7 +82,7 @@ function register(): void {
 
 export const feature: AIFeatureDef = {
   id: 'ai_generate_cards',
-  name: 'AI 闪卡生成',
+  name: 'AI 反衰减呼吸生成',
   version: '1.0.0',
   register,
 };

@@ -2,13 +2,15 @@ import { useLocation } from 'react-router-dom';
 
 const routeTitles: Record<string, string> = {
   '/': '学习看板',
-  '/pomodoro': '番茄钟',
+  '/pomodoro': '深潜',
   '/pomodoro/stats': '专注统计',
-  '/pomodoro/settings': '番茄钟设置',
-  '/notes': '智能笔记',
-  '/flashcards': '闪卡',
-  '/feynman': '费曼学习',
+  '/pomodoro/settings': '深潜设置',
+  '/notes': '结礁',
+  '/flashcards': '反衰减呼吸',
+  '/feynman': '浮出水面',
   '/settings': '设置',
+  '/analytics': '数据分析',
+  '/inspiration': '萤火海沟',
   '/onboarding': '欢迎',
 };
 
@@ -19,12 +21,12 @@ export function usePageTitle(): string {
   if (routeTitles[pathname]) return routeTitles[pathname];
 
   // Prefix match for dynamic routes
-  if (pathname.startsWith('/notes/')) return '编辑笔记';
+  if (pathname.startsWith('/notes/')) return '编辑结礁';
   if (pathname.match(/^\/flashcards\/[^/]+\/study$/)) return '学习会话';
   if (pathname.startsWith('/flashcards/')) return '卡组详情';
-  if (pathname.startsWith('/feynman/')) return '费曼会话';
+  if (pathname.startsWith('/feynman/')) return '浮出水面会话';
 
-  return '课伴';
+  return '熵减';
 }
 
 // ---------------------------------------------------------------------------
@@ -38,13 +40,15 @@ export interface BreadcrumbItem {
 
 /** 将路径段映射为可读标签 */
 const segmentLabels: Record<string, string> = {
-  pomodoro: '番茄钟',
+  pomodoro: '深潜',
   stats: '专注统计',
   settings: '设置',
-  notes: '笔记',
-  flashcards: '闪卡',
+  notes: '结礁',
+  flashcards: '反衰减呼吸',
   study: '学习会话',
-  feynman: '费曼',
+  feynman: '浮出水面',
+  analytics: '数据分析',
+  inspiration: '萤火海沟',
 };
 
 /**

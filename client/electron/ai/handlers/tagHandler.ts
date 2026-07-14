@@ -83,9 +83,10 @@ function register(): void {
       };
 
       interface SortSuggestionResp {
-        type: string;
+        category: string;
         reason: string;
         confidence: number;
+        suggested_action: string;
       }
       interface SortInspirationResp {
         suggestions: SortSuggestionResp[];
@@ -104,9 +105,10 @@ function register(): void {
       logger.info(`[IPC] ai_sort_inspiration end, suggestions_count=${resp.suggestions.length}`);
       return {
         suggestions: resp.suggestions.map((s) => ({
-          type: s.type,
+          category: s.category,
           reason: s.reason,
           confidence: s.confidence,
+          suggestedAction: s.suggested_action,
         })),
         model: resp.model,
         tokensUsed: resp.tokens_used,
@@ -123,7 +125,7 @@ function register(): void {
 
 export const feature: AIFeatureDef = {
   id: 'ai_tag',
-  name: 'AI 标签与灵感分类',
+  name: 'AI 标签与萤火海沟分类',
   version: '1.0.0',
   register,
 };

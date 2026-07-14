@@ -125,7 +125,7 @@ function register(): void {
 
 export const feature: AIFeatureDef = {
   id: 'ai_feynman',
-  name: '费曼学习法',
+  name: '浮出水面',
   version: '1.0.0',
   register,
 };

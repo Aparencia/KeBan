@@ -6,7 +6,8 @@ import { ContextMenu, type ContextMenuGroup } from '@/components/ui/ContextMenu'
 import { FlipCard, type FlipCardGlow } from '../components/FlipCard';
 import { ConfidenceSelector } from '../components/ConfidenceSelector';
 import { GoldenErrorPanel } from '../components/GoldenErrorPanel';
-import { X, RotateCcw, BookOpen, PauseCircle, AlertTriangle, Sparkles, ExternalLink, Loader2, Check, XIcon, Star } from 'lucide-react';
+import { X, RotateCcw, BookOpen, PauseCircle, AlertTriangle, Sparkles, ExternalLink, Check, XIcon, Star } from 'lucide-react';
+import { AIThinkingIndicator } from '@/components/ui/AIThinkingIndicator';
 import { cn } from '@/lib/utils';
 import { useStudySessionStore } from '../store/useStudySessionStore';
 import { useFlashcardStore } from '../store/useFlashcardStore';
@@ -454,7 +455,7 @@ export default function StudySessionPage() {
                   title="AI 优化建议"
                 >
                   {optimizeLoading ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" strokeWidth={1.5} />
+                    <AIThinkingIndicator size={4} gap={2} />
                   ) : (
                     <Sparkles className="w-3.5 h-3.5" strokeWidth={1.5} />
                   )}
@@ -620,7 +621,7 @@ export default function StudySessionPage() {
 
             {optimizeLoading && (
               <div className="flex flex-col items-center gap-3 py-kb-lg">
-                <Loader2 className="w-8 h-8 animate-spin text-brand-600" strokeWidth={1.5} />
+                <AIThinkingIndicator />
                 <p className="text-b2 text-text-secondary">AI 正在分析卡片内容…</p>
               </div>
             )}

@@ -35,7 +35,7 @@ export default function ConsentModal({ onAccept }: ConsentModalProps) {
         <div className="p-kb-lg border-b border-border">
           <h2 className="text-h2 font-semibold text-text-primary flex items-center gap-2">
             <Shield className="w-icon-lg h-icon-lg text-brand-500" />
-            欢迎使用课伴
+            欢迎使用熵减
           </h2>
           <p className="text-b2 text-text-secondary mt-1">
             请阅读以下隐私政策和用户协议
@@ -56,9 +56,9 @@ export default function ConsentModal({ onAccept }: ConsentModalProps) {
               <Shield className="w-icon-sm h-icon-sm" /> 隐私政策摘要
             </h3>
             <div className="mt-2 text-b2 text-text-secondary space-y-2">
-              <p>课伴是一款本地优先的学习工具。我们重视您的隐私：</p>
+              <p>熵减是一款本地优先的学习工具。我们重视您的隐私：</p>
               <ul className="list-disc pl-5 space-y-1">
-                <li>您的学习数据（笔记、闪卡、番茄钟记录等）默认存储在本地设备上</li>
+                <li>您的学习数据（结礁、反衰减呼吸、深潜记录等）默认存储在本地设备上</li>
                 <li>仅在您主动开启云端同步时，数据才会传输到服务器</li>
                 <li>我们不会收集、出售或共享您的个人学习数据</li>
                 <li>AI 功能仅将您主动提交的内容发送至 AI 服务进行处理</li>
@@ -72,9 +72,9 @@ export default function ConsentModal({ onAccept }: ConsentModalProps) {
               <FileText className="w-icon-sm h-icon-sm" /> 用户协议摘要
             </h3>
             <div className="mt-2 text-b2 text-text-secondary space-y-2">
-              <p>使用课伴即表示您同意以下条款：</p>
+              <p>使用熵减即表示您同意以下条款：</p>
               <ul className="list-disc pl-5 space-y-1">
-                <li>课伴仅供个人学习使用，不得用于商业目的</li>
+                <li>熵减仅供个人学习使用，不得用于商业目的</li>
                 <li>AI 生成的内容仅供参考，不构成专业建议</li>
                 <li>您对自己的学习数据负责，建议定期备份</li>
                 <li>本软件按"现状"提供，不提供任何形式的保证</li>

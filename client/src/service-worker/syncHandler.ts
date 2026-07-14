@@ -1,5 +1,5 @@
 /**
- * 课伴 Service Worker 同步处理器
+ * 熵减 Service Worker 同步处理器
  *
  * 利用 Background Sync API（渐进增强）在网络恢复时
  * 通知客户端应用执行离线队列重放。

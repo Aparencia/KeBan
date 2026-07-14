@@ -54,7 +54,7 @@ interface FlowItem {
 const featureSteps: OnboardingStep[] = [
   {
     id: 'pomodoro',
-    title: '番茄钟',
+    title: '深潜',
     subtitle: '专注计时',
     description: '科学管理时间，高效专注每一刻。设定时间 → 开始专注 → 短暂休息 → 循环往复。',
     icon: Timer,
@@ -70,23 +70,23 @@ const featureSteps: OnboardingStep[] = [
   },
   {
     id: 'notes',
-    title: '智能笔记',
+    title: '结礁',
     subtitle: '结构化记录',
-    description: '使用富文本编辑器创建笔记，借助 AI 一键生成摘要和闪卡，知识不再遗漏。',
+    description: '使用富文本编辑器创建结礁，借助 AI 一键生成摘要和反衰减呼吸，知识不再遗漏。',
     icon: FileText,
     accent: 'text-note',
     bg: 'bg-note/10',
     ringColor: 'ring-note/20',
     flowItems: [
-      { icon: FileText, label: '创建笔记' },
+      { icon: FileText, label: '创建结礁' },
       { icon: Sparkles, label: 'AI 摘要' },
-      { icon: Layers, label: '生成闪卡' },
+      { icon: Layers, label: '生成反衰减呼吸' },
       { icon: CheckCircle2, label: '知识沉淀' },
     ],
   },
   {
     id: 'flashcards',
-    title: '闪卡复习',
+    title: '反衰减呼吸',
     subtitle: '间隔重复',
     description: '基于 SM-2 算法的间隔复习系统，创建牌组和卡片，科学规划复习节奏。',
     icon: Layers,
@@ -102,7 +102,7 @@ const featureSteps: OnboardingStep[] = [
   },
   {
     id: 'feynman',
-    title: '费曼学习法',
+    title: '浮出水面',
     subtitle: '以教代学',
     description: '输入一个概念，用通俗语言解释它，AI 帮你评估理解深度，发现知识盲区。',
     icon: Lightbulb,
@@ -251,7 +251,7 @@ function StepMode({
           <div className="flex flex-col gap-1">
             <span className="text-c1 font-medium text-brand-600">混合模式说明</span>
             <p className="text-c2 text-text-secondary leading-relaxed">
-              默认以本地存储为主，学习数据（笔记、闪卡、进度等）全部保存在你的设备上。当你登录账户后，可选择将数据同步到云端，实现多设备访问和自动备份。AI 功能（如 AI 摘要、AI 闪卡生成）需要联网使用，但核心学习功能离线即可运行。
+              默认以本地存储为主，学习数据（结礁、反衰减呼吸、进度等）全部保存在你的设备上。当你登录账户后，可选择将数据同步到云端，实现多设备访问和自动备份。AI 功能（如 AI 摘要、AI 反衰减呼吸生成）需要联网使用，但核心学习功能离线即可运行。
             </p>
           </div>
         </div>
@@ -328,11 +328,11 @@ function StepWelcome({
       </div>
 
       {/* 品牌名 */}
-      <h1 className="text-d1 font-bold text-brand-600 tracking-tight">课伴</h1>
+      <h1 className="text-d1 font-bold text-brand-600 tracking-tight">熵减</h1>
 
       {/* 文案 */}
       <div className="flex flex-col gap-kb-xs max-w-sm">
-        <h2 className="text-d2 font-bold text-text-primary">欢迎使用课伴</h2>
+        <h2 className="text-d2 font-bold text-text-primary">欢迎使用熵减</h2>
         <p className="text-b1 text-text-secondary">你的本地优先智能学习助手</p>
       </div>
 

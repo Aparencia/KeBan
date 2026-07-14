@@ -1,7 +1,10 @@
 import type { AIPlugin, SummarizeResult, FlashcardResult, EvaluateResult, DurationResult,
   SummarizeOptions, FlashcardOptions, EvaluateOptions, DurationOptions, DurationHistoryData,
   OptimizeCardResult, FeynmanQuestionResult, FeynmanAnswerEvalResult,
-  TagContentResult, SortResult } from './types';
+  TagContentResult, SortResult,
+  AnchorPoint, BrainstormIdea, ChatMessage, SocraticEvaluateResult, SocraticDeepeningResult,
+  PredictionPrompt, RescueContext, ResourceLink
+} from './types';
 import { AIError } from './types';
 import { aiClient } from '../http/apiClient';
 
@@ -299,7 +302,7 @@ export class RemoteAIPlugin implements AIPlugin {
     this.checkOnline();
     try {
       const result = await aiClient.post<{
-        suggestions: Array<{ type: string; reason: string; confidence: number }>;
+        suggestions: Array<{ category: string; reason: string; confidence: number; suggested_action?: string }>;
         model: string;
         tokens_used: number;
         latency_ms: number;
@@ -310,9 +313,10 @@ export class RemoteAIPlugin implements AIPlugin {
 
       return {
         suggestions: result.suggestions.map(s => ({
-          type: s.type as SortResult['suggestions'][0]['type'],
+          category: s.category as SortResult['suggestions'][0]['category'],
           reason: s.reason,
           confidence: s.confidence,
+          suggestedAction: s.suggested_action,
         })),
         model: result.model,
         tokensUsed: result.tokens_used,
@@ -323,7 +327,230 @@ export class RemoteAIPlugin implements AIPlugin {
     }
   }
 
-  private handleError(error: unknown): AIError {
+  // ── POST /api/v1/ai/anchor-point ─────────────────────────────
+  async generateAnchorPoint(noteId: string, content: string): Promise<{ anchorPoints: AnchorPoint[] }> {
+    this.checkOnline();
+    try {
+      const result = await aiClient.post<{
+        anchor_points: Array<{
+          concept: string; association: string; memory_technique: string; importance: number;
+        }>;
+        status: string; model: string; tokens_used: number; latency_ms: number;
+      }>(
+        '/api/v1/ai/anchor-point',
+        { content, title: '' },
+      );
+
+      return {
+        anchorPoints: result.anchor_points.map(ap => ({
+          concept: ap.concept,
+          importance: ap.importance,
+          explanation: ap.association || ap.memory_technique || undefined,
+          relatedConcepts: ap.memory_technique ? [ap.memory_technique] : undefined,
+        })),
+      };
+    } catch (error: unknown) {
+      throw this.handleError(error);
+    }
+  }
+
+  // ── POST /api/v1/ai/socratic (brainstorm) ───────────────────
+  async socraticBrainstorm(topic: string, context?: string): Promise<{ ideas: BrainstormIdea[] }> {
+    this.checkOnline();
+    try {
+      const result = await aiClient.post<{
+        question: string; hint: string; thinking_direction: string;
+        depth_level: number; turn_count: number;
+        status: string; model: string; tokens_used: number; latency_ms: number;
+      }>(
+        '/api/v1/ai/socratic',
+        { topic, history: context ? [{ role: 'learner', content: context }] : null },
+      );
+
+      // 将苏格拉底追问结果映射为 BrainstormIdea 列表
+      return {
+        ideas: [
+          {
+            title: result.question || '思考方向',
+            description: result.hint || result.thinking_direction || '',
+            category: result.thinking_direction || undefined,
+            feasibility: 0.7,
+            source: 'socratic_brainstorm',
+          },
+        ],
+      };
+    } catch (error: unknown) {
+      throw this.handleError(error);
+    }
+  }
+
+  // ── POST /api/v1/ai/socratic (question) ─────────────────────
+  async socraticQuestion(
+    conversationId: string,
+    topic: string,
+    history: ChatMessage[],
+  ): Promise<{ question: string; hints: string[] }> {
+    this.checkOnline();
+    try {
+      const backendHistory = history.map(h => ({
+        role: h.role === 'assistant' ? 'tutor' : 'learner',
+        content: h.content,
+      }));
+
+      const result = await aiClient.post<{
+        question: string; hint: string; thinking_direction: string;
+        depth_level: number; turn_count: number;
+        status: string; model: string; tokens_used: number; latency_ms: number;
+      }>(
+        '/api/v1/ai/socratic',
+        { topic, history: backendHistory.length > 0 ? backendHistory : null },
+      );
+
+      return {
+        question: result.question,
+        hints: [result.hint, result.thinking_direction].filter(Boolean),
+      };
+    } catch (error: unknown) {
+      throw this.handleError(error);
+    }
+  }
+
+  // ── POST /api/v1/ai/socratic/evaluate ────────────────────────
+  async socraticEvaluate(
+    topic: string,
+    question: string,
+    answer: string,
+    history: ChatMessage[],
+  ): Promise<SocraticEvaluateResult> {
+    this.checkOnline();
+    try {
+      const backendHistory = history.map(h => ({
+        role: h.role === 'assistant' ? 'tutor' : 'learner',
+        content: h.content,
+      }));
+
+      const result = await aiClient.post<{
+        dimensions: { accuracy: number; completeness: number; logic: number; expression: number };
+        feedback: string;
+        encouragement: string;
+        status: string;
+        model: string;
+        tokens_used: number;
+        latency_ms: number;
+      }>(
+        '/api/v1/ai/socratic/evaluate',
+        { topic, question, answer, history: backendHistory },
+      );
+
+      return {
+        dimensions: result.dimensions,
+        feedback: result.feedback,
+        encouragement: result.encouragement,
+        model: result.model,
+        tokensUsed: result.tokens_used,
+        latencyMs: result.latency_ms,
+      };
+    } catch (error) {
+      throw this.handleError(error, 'socraticEvaluate');
+    }
+  }
+
+  // ── POST /api/v1/ai/socratic/deepening ───────────────────────
+  async socraticDeepening(
+    topic: string,
+    dialogueSummary: string,
+    history: ChatMessage[],
+  ): Promise<SocraticDeepeningResult> {
+    this.checkOnline();
+    try {
+      const backendHistory = history.map(h => ({
+        role: h.role === 'assistant' ? 'tutor' : 'learner',
+        content: h.content,
+      }));
+
+      const result = await aiClient.post<{
+        angles: Array<{ key: string; label: string; question: string }>;
+        status: string;
+        model: string;
+        tokens_used: number;
+        latency_ms: number;
+      }>(
+        '/api/v1/ai/socratic/deepening',
+        { topic, dialogue_summary: dialogueSummary, history: backendHistory },
+      );
+
+      return {
+        angles: result.angles,
+        status: result.status,
+        model: result.model,
+        tokensUsed: result.tokens_used,
+        latencyMs: result.latency_ms,
+      };
+    } catch (error) {
+      throw this.handleError(error, 'socraticDeepening');
+    }
+  }
+
+  // ── POST /api/v1/ai/predict ─────────────────────────────────
+  async predictQuestion(noteId: string, content: string): Promise<{ predictions: PredictionPrompt[] }> {
+    this.checkOnline();
+    try {
+      const result = await aiClient.post<{
+        predictions: Array<{
+          question: string; type: string; reason: string; curiosity_score: number;
+        }>;
+        status: string; model: string; tokens_used: number; latency_ms: number;
+      }>(
+        '/api/v1/ai/predict',
+        { content },
+      );
+
+      return {
+        predictions: result.predictions.map(p => ({
+          question: p.question,
+          expectedAnswer: p.reason || '',
+          difficulty: Math.round(p.curiosity_score * 5) as PredictionPrompt['difficulty'],
+          relatedConcepts: p.type ? [p.type] : undefined,
+        })),
+      };
+    } catch (error: unknown) {
+      throw this.handleError(error);
+    }
+  }
+
+  // ── POST /api/v1/ai/rescue ──────────────────────────────────
+  async rescue(context: RescueContext): Promise<{ hints: string[]; resources: ResourceLink[]; alternativeApproach?: string }> {
+    this.checkOnline();
+    try {
+      const result = await aiClient.post<{
+        rescue_levels: Array<{
+          level: number; label: string; suggestion: string; hint_question: string;
+        }>;
+        encouragement: string;
+        status: string; model: string; tokens_used: number; latency_ms: number;
+      }>(
+        '/api/v1/ai/rescue',
+        {
+          content: context.relatedContent || context.topic,
+          stuck_description: context.stuckPoint || context.topic,
+          attempted_methods: context.attempts?.join('; ') || '',
+        },
+      );
+
+      const hints = result.rescue_levels.map(lv => lv.hint_question || lv.suggestion);
+      const alternativeApproach = result.rescue_levels.find(lv => lv.level === 3)?.suggestion;
+
+      return {
+        hints,
+        resources: [], // 后端暂不返回资源链接
+        alternativeApproach,
+      };
+    } catch (error: unknown) {
+      throw this.handleError(error);
+    }
+  }
+
+  private handleError(error: unknown, _context?: string): AIError {
     if (error instanceof AIError) return error;
 
     // 离线检查（fetch 调用时网络断开）

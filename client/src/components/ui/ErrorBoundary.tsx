@@ -50,8 +50,11 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
             this.props.className,
           )}
         >
-          <p className="text-center text-base text-text-primary">
-            学习伙伴遇到了一点小问题，不过别担心！点击下方按钮重新加载，马上就能继续学习了。
+          <h2 className="text-center text-lg font-semibold text-text-primary">
+            深潜时遇到了一点暗流
+          </h2>
+          <p className="text-center text-base text-text-secondary">
+            别担心，试试刷新页面重新出发
           </p>
           <button
             type="button"

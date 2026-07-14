@@ -209,7 +209,7 @@ export default function PomodoroStatsPage() {
           <EmptyState
             icon={<Clock className="w-12 h-12" strokeWidth={1.2} />}
             title="暂无专注记录"
-            description="完成一次番茄钟后，这里会展示你的专注数据统计"
+            description="完成一次深潜后，这里会展示你的专注数据统计"
           />
         </Card>
       </div>
@@ -282,9 +282,9 @@ export default function PomodoroStatsPage() {
           <div className="flex flex-col gap-kb-xs relative z-10">
             <div className="flex items-center gap-1.5 text-text-tertiary">
               <Target className="w-icon-xs h-icon-xs" strokeWidth={1.5} />
-              <span className="text-c1">完成番茄</span>
+              <span className="text-c1">完成深潜</span>
             </div>
-            <RichTooltip content="今日完成的番茄钟数量" position="bottom" delay={200}>
+            <RichTooltip content="今日完成的深潜数量" position="bottom" delay={200}>
               <span className="text-h1 font-semibold text-text-primary font-timer cursor-help">
                 {pomodoroCount}
               </span>
@@ -388,7 +388,7 @@ export default function PomodoroStatsPage() {
         <div className="flex items-center justify-between mb-kb-md">
           <div className="flex items-center gap-2">
             <Target className="w-icon-sm h-icon-sm text-brand-600" strokeWidth={1.5} />
-            <h2 className="text-h3 font-medium text-text-primary">每日番茄数</h2>
+            <h2 className="text-h3 font-medium text-text-primary">每日深潜数</h2>
           </div>
           <div className="flex items-center gap-1 p-0.5 bg-bg-secondary rounded-kb-md border border-border/30">
             {([7, 14, 30] as ChartRange[]).map((r) => (
@@ -415,7 +415,7 @@ export default function PomodoroStatsPage() {
             <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: 'var(--kb-text-tertiary, #9ca3af)' }} tickLine={false} width={28} />
             <Tooltip
               contentStyle={{ background: 'var(--kb-bg-elevated, #fff)', border: '1px solid var(--kb-border, #e5e7eb)', borderRadius: 8, fontSize: 12 }}
-              formatter={(value) => [`${value} 个`, '番茄数']}
+              formatter={(value) => [`${value} 个`, '深潜数']}
               labelFormatter={(label) => `日期: ${label}`}
             />
             <Bar dataKey="count" fill="#7C3AED" radius={[4, 4, 0, 0]} />

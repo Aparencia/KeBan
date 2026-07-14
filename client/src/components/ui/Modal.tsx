@@ -15,7 +15,7 @@ export type ModalSize = 'sm' | 'md' | 'lg';
  * @param children - 内容
  * @param footer - 底部操作区
  * @param size - 尺寸：sm | md | lg
- * @ai-context 深海静谧主题 Modal，入场动效 fade+slideY(8px) 300ms ease-out
+ * @ai-context 极夜深海主题 Modal，进场动效 fade+slideY(8px) 400ms ease-out
  */
 export interface ModalProps {
   open: boolean;
@@ -34,7 +34,7 @@ const sizeClasses: Record<ModalSize, string> = {
 };
 
 /**
- * 课伴模态框组件
+ * 熵减模态框组件
  * @param props - ModalProps
  * @returns React 模态框元素
  * @ai-context 使用 Radix Dialog + Framer Motion，支持双主题色板
@@ -47,7 +47,7 @@ export const Modal: React.FC<ModalProps> = ({
       <AnimatePresence>
         {open && (
           <Dialog.Portal forceMount>
-            {/* ── Backdrop ── */}
+            {/* ── 背景遮罩 ── */}
             <Dialog.Overlay asChild>
               <motion.div
                 className="fixed inset-0 z-50 bg-black/40 backdrop-blur-md"
@@ -58,7 +58,7 @@ export const Modal: React.FC<ModalProps> = ({
               />
             </Dialog.Overlay>
 
-            {/* ── Dialog ── */}
+            {/* ── 对话框 ── */}
             <Dialog.Content
               asChild
               onPointerDownOutside={(e) => e.preventDefault()}
@@ -73,7 +73,7 @@ export const Modal: React.FC<ModalProps> = ({
                 <motion.div
                   className={cn(
                     'relative w-full',
-                    'bg-bg-elevated/90 backdrop-blur-2xl rounded-kb-xl shadow-2xl',
+                    'bg-bg-elevated/90 backdrop-blur-2xl rounded-kb-xl shadow-2xl kb-squircle',
                     'border border-border/40',
                     'p-kb-lg',
                     sizeClasses[size],
@@ -81,12 +81,12 @@ export const Modal: React.FC<ModalProps> = ({
                   initial={{ opacity: 0, y: 8, filter: 'blur(4px)' }}
                   animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
                   exit={{ opacity: 0, y: 8, filter: 'blur(2px)' }}
-                  transition={{ duration: 0.3, ease: [0, 0, 0.2, 1] }}
+                  transition={{ duration: 0.4, ease: [0, 0, 0.2, 1] }}
                 >
                   {/* ── 顶部渐变装饰线 ── */}
                   <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-brand-400/30 to-transparent" />
 
-                  {/* Close button */}
+                  {/* 关闭按钮 */}
                   <Dialog.Close asChild>
                     <motion.button
                       className="absolute top-4 right-4 p-1.5 rounded-kb-full text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-kb-fast"
@@ -98,7 +98,7 @@ export const Modal: React.FC<ModalProps> = ({
                     </motion.button>
                   </Dialog.Close>
 
-                  {/* Header */}
+                  {/* 头部 */}
                   <div className="pr-8">
                     <Dialog.Title className="text-h2 font-semibold text-text-primary">
                       {title}
@@ -110,10 +110,10 @@ export const Modal: React.FC<ModalProps> = ({
                     )}
                   </div>
 
-                  {/* Body */}
+                  {/* 内容区 */}
                   <div className="mt-kb-md">{children}</div>
 
-                  {/* Footer */}
+                  {/* 底部操作区 */}
                   {footer && (
                     <div className="mt-kb-lg flex justify-end gap-kb-sm">{footer}</div>
                   )}

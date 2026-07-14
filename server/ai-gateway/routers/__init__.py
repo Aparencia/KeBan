@@ -11,6 +11,7 @@ from routers.feynman_question import router as feynman_question_router
 from routers.inspiration import router as inspiration_router
 from routers.learning import router as learning_router
 from routers.inspiration_draft import router as inspiration_draft_router
+from routers.socratic import router as socratic_router
 
 __all__ = [
     "summarize_router",
@@ -24,4 +25,5 @@ __all__ = [
     "inspiration_router",
     "learning_router",
     "inspiration_draft_router",
+    "socratic_router",
 ]

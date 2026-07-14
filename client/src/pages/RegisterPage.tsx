@@ -99,7 +99,7 @@ export default function RegisterPage() {
             <span className="text-h2 font-bold">课</span>
           </div>
           <div className="text-center">
-            <h1 className="text-h1 font-semibold text-text-primary">注册课伴</h1>
+            <h1 className="text-h1 font-semibold text-text-primary">注册熵减</h1>
             <p className="text-b2 text-text-tertiary mt-1">创建账号以同步学习数据</p>
           </div>
         </div>

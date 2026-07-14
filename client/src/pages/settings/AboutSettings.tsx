@@ -186,15 +186,16 @@ export default function AboutSettings() {
       <h2 className="text-b1 font-semibold text-text-primary">关于</h2>
 
       <div className="flex items-center gap-3">
-        <div className={cn(
-          'w-11 h-11 rounded-kb-lg flex items-center justify-center flex-shrink-0',
-          'bg-brand-600 text-white',
-          'shadow-kb-sm',
-        )}>
-          <span className="text-b1 font-bold">课</span>
-        </div>
+        <img
+          src="/app-icon.png"
+          alt="熵减"
+          className={cn(
+            'w-11 h-11 rounded-kb-lg flex-shrink-0 object-cover',
+            'shadow-kb-sm',
+          )}
+        />
         <div>
-          <p className="text-b1 font-semibold text-text-primary">课伴</p>
+          <p className="text-b1 font-semibold text-text-primary">熵减</p>
           <p className="text-c1 text-text-tertiary">{displayVersion}</p>
         </div>
       </div>
@@ -272,7 +273,7 @@ export default function AboutSettings() {
       )}>
         <Info className="w-icon-sm h-icon-sm text-text-tertiary flex-shrink-0 mt-0.5" strokeWidth={1.5} />
         <p className="text-c1 text-text-tertiary leading-relaxed">
-          课伴是一款面向学生的本地优先学习工具，集成番茄钟、智能笔记、间隔重复闪卡和费曼学习法四大核心模块，
+          熵减是一款面向学生的本地优先学习工具，集成深潜、结礁、反衰减呼吸和浮出水面四大核心模块，
           帮助你建立科学高效的学习习惯。
         </p>
       </div>

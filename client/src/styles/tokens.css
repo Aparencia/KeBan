@@ -1,10 +1,10 @@
 /* ============================================
-   课伴 KeBan - Design Tokens (深海静谧主题)
+   熵减 - Design Tokens
    前缀: --kb-
-   双主题: 浅色(暖色奶油调, 默认) + 深色(深海静谧)
+   双主题: 晨曦浮光(浅色, 默认) + 极夜深海(深色)
    ============================================ */
 
-/* ---- 浅色主题（默认 — 暖色奶油调） ---- */
+/* ---- 晨曦浮光（浅色主题，默认） ---- */
 :root {
   /* 品牌主色 - 蓝色系（专注/平静） */
   --kb-brand-50: #EFF6FF;
@@ -33,14 +33,15 @@
   /* 功能色 */
   --kb-focus-blue: #3B82F6;
   --kb-amber: #F59E0B;
-  --kb-moss-green: #22C55E;
+  --kb-moss-green: #6BAF8A;
+  --kb-stone-purple: #8B8494;
   --kb-cyber-cyan: #06B6D4;
   --kb-color-error: #EF4444;
   --kb-color-warning: #F97316;
   --kb-color-success: #22C55E;
   --kb-color-info: #3B82F6;
 
-  /* 背景色 — 暖色奶油调 */
+  /* 背景色 — 晨曦浮光调 */
   --kb-bg-primary: #FAF8F5;
   --kb-bg-secondary: #F2EDE6;
   --kb-bg-tertiary: #EBE5DC;
@@ -63,6 +64,7 @@
 
   /* 字体系统 */
   --kb-font-sans: 'Inter', 'PingFang SC', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
+  --kb-font-serif: 'LXGW WenKai Lite', 'Noto Serif SC', 'Source Han Serif SC', serif;
   --kb-font-mono: 'JetBrains Mono', 'Fira Code', monospace;
   --kb-font-timer: 'JetBrains Mono', monospace;
 
@@ -228,7 +230,7 @@
   50% { opacity: 0.6; transform: scale(1.02); }
 }
 
-/* ---- 深色主题（深海静谧） ---- */
+/* ---- 极夜深海（深色主题） ---- */
 [data-theme="dark"] {
   /* 品牌主色 - 深空蓝紫（深色模式） */
   --kb-brand-50: #1A1B3A;
@@ -257,14 +259,15 @@
   /* 功能色（深色模式微调亮度） */
   --kb-focus-blue: #60A5FA;
   --kb-amber: #FBBF24;
-  --kb-moss-green: #4ADE80;
+  --kb-moss-green: #82C9A3;
+  --kb-stone-purple: #3A3545;
   --kb-cyber-cyan: #22D3EE;
   --kb-color-error: #F87171;
   --kb-color-warning: #FB923C;
   --kb-color-success: #4ADE80;
   --kb-color-info: #60A5FA;
 
-  /* 背景色 — 深海静谧 */
+  /* 背景色 — 极夜深海 */
   --kb-bg-primary: #0C1524;
   --kb-bg-secondary: #12203A;
   --kb-bg-tertiary: #182A48;
@@ -280,10 +283,10 @@
   --kb-border-default: #223550;
   --kb-border-strong: #2E4568;
 
-  /* 阴影（深蓝色阴影） */
-  --kb-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --kb-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.3);
-  --kb-shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.4);
+  /* 阴影（深蓝色阴影 + 品牌蓝色弥散光晕） */
+  --kb-shadow-sm: 0 1px 3px rgba(12, 21, 36, 0.4), 0 0 8px rgba(59, 130, 246, 0.05);
+  --kb-shadow-md: 0 4px 12px rgba(12, 21, 36, 0.5), 0 0 16px rgba(59, 130, 246, 0.08);
+  --kb-shadow-lg: 0 8px 24px rgba(12, 21, 36, 0.6), 0 0 24px rgba(59, 130, 246, 0.12);
 
   --kb-shadow-brand: 0 4px 12px rgba(99, 102, 241, 0.25);
   --kb-shadow-accent: 0 4px 12px rgba(6, 182, 212, 0.25);

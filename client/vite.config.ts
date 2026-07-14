@@ -14,8 +14,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
       manifest: {
-        name: '课伴 - 学习伴侣',
-        short_name: '课伴',
+        name: '熵减 - 学习伴侣',
+        short_name: '熵减',
         description: '智能学习管理工具 - 笔记、闪卡、费曼学习法、番茄钟',
         theme_color: '#3b82f6',
         background_color: '#111827',
@@ -43,6 +43,7 @@ export default defineConfig({
         ],
       },
       workbox: {
+        maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         runtimeCaching: [
           {
@@ -95,8 +96,8 @@ export default defineConfig({
     },
   },
   // electron-updater 是纯 ESM 模块，仅 Electron 主进程使用，
-  // 排除 Vite 预构建避免 ERR_REQUIRE_ESM 错误
+  // better-sqlite3 是原生 C++ addon，均排除 Vite 预构建以避免 ERR_REQUIRE_ESM / .node 加载错误
   optimizeDeps: {
-    exclude: ['electron-updater'],
+    exclude: ['electron-updater', 'better-sqlite3'],
   },
 })

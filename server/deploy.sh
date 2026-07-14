@@ -124,6 +124,9 @@ check_service "sync-service" "http://127.0.0.1:8080/health" || ERRORS=$((ERRORS 
 # ai-gateway
 check_service "ai-gateway" "http://127.0.0.1:8000/health" || ERRORS=$((ERRORS + 1))
 
+# Nginx
+check_service "nginx" "http://127.0.0.1:80/health" || ERRORS=$((ERRORS + 1))
+
 echo ""
 if [ $ERRORS -eq 0 ]; then
     log_info "============================================"
@@ -131,6 +134,7 @@ if [ $ERRORS -eq 0 ]; then
     log_info "============================================"
     echo ""
     echo "  服务地址："
+    echo "    Nginx:         http://0.0.0.0:80"
     echo "    sync-service:  http://127.0.0.1:8080"
     echo "    ai-gateway:    http://127.0.0.1:8000"
     echo "    PostgreSQL:    127.0.0.1:5432"

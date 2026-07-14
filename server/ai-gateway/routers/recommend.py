@@ -36,6 +36,10 @@ class RecommendRequest(BaseModel):
     history: list[FocusSession] = Field(
         default_factory=list, description="历史专注记录"
     )
+    mode: str = Field(
+        default="general",
+        description="推荐模式：general（通用）| pomodoro（14天增强+科目分布）",
+    )
 
 
 class DurationConfig(BaseModel):
@@ -73,8 +77,8 @@ async def recommend_duration(
     """
     user_id = getattr(request.state, "user_id", "anonymous")
     logger.info(
-        "番茄钟推荐请求: user=%s, history_count=%d",
-        user_id, len(body.history),
+        "番茄钟推荐请求: user=%s, history_count=%d, mode=%s",
+        user_id, len(body.history), body.mode,
     )
 
     # 将历史记录转为 dict 列表供 chain 使用
@@ -83,7 +87,7 @@ async def recommend_duration(
     # 通过 fallback 链自动选择 Provider 并在失败时重试/降级
     async def _run_chain(provider, model_name):
         chain = RecommendChain(provider=provider, model=model_name)
-        return await chain.run(history=history_dicts)
+        return await chain.run(history=history_dicts, mode=body.mode)
 
     try:
         result, used_provider = await call_with_fallback(

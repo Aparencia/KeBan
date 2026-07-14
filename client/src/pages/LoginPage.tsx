@@ -52,7 +52,7 @@ export default function LoginPage() {
             <span className="text-h2 font-bold">课</span>
           </div>
           <div className="text-center">
-            <h1 className="text-h1 font-semibold text-text-primary">登录课伴</h1>
+            <h1 className="text-h1 font-semibold text-text-primary">登录熵减</h1>
             <p className="text-b2 text-text-tertiary mt-1">登录以同步你的学习数据</p>
           </div>
         </div>

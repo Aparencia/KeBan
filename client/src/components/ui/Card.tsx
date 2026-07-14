@@ -11,17 +11,17 @@ const cardVariants = cva(
     variants: {
       variant: {
         default: [
-          'bg-bg-secondary/60 rounded-kb-lg shadow-kb-sm',
+          'bg-bg-secondary/60 rounded-kb-lg shadow-kb-sm kb-squircle',
           'border border-border/40',
           'hover:shadow-kb-md hover:border-border/60',
         ].join(' '),
         elevated: [
-          'bg-bg-secondary/60 rounded-kb-lg shadow-kb-md',
+          'bg-bg-secondary/60 rounded-kb-lg shadow-kb-md kb-squircle',
           'border border-border/20',
           'hover:shadow-lg hover:border-border/40',
         ].join(' '),
         outlined: [
-          'bg-bg-secondary/40 rounded-kb-lg',
+          'bg-bg-secondary/40 rounded-kb-lg kb-squircle',
           'border border-border/50',
           'hover:border-border-strong hover:shadow-kb-sm',
         ].join(' '),
@@ -50,14 +50,14 @@ const cardVariants = cva(
  * @param variant - 变体：default | elevated | outlined
  * @param padding - 内边距：none | sm | md | lg
  * @param hoverable - 是否启用悬浮动效（CSS translateY(-2px) + shadow 增强, 200ms）
- * @ai-context 深海静谧主题卡片，hoverable 使用 CSS hover:-translate-y-0.5 (2px)
+ * @ai-context 极夜深海主题卡片，hoverable 使用 CSS hover:-translate-y-0.5 (2px)
  */
 export interface CardProps
   extends React.HTMLAttributes<HTMLDivElement>,
     VariantProps<typeof cardVariants> {}
 
 /**
- * 课伴通用卡片组件
+ * 熵减通用卡片组件
  * @param props - CardProps
  * @returns React 卡片元素
  * @ai-context hoverable=true 时 CSS 驱动 translateY(-2px) + shadow 增强 200ms

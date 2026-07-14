@@ -8,20 +8,21 @@
 
 import { app } from 'electron';
 import * as fs from 'fs';
+import { mkdir } from 'fs/promises';
 import * as path from 'path';
 
 class Logger {
   private stream: fs.WriteStream | null = null;
   private initialized = false;
 
-  /** 初始化日志目录和文件流（惰性调用，确保 app 已 ready） */
-  private ensureInit(): void {
+  /** 初始化日志目录和文件流（异步，需在 app ready 后调用） */
+  async initLogger(): Promise<void> {
     if (this.initialized) return;
     this.initialized = true;
 
     try {
       const logsDir = path.join(app.getPath('userData'), 'logs');
-      fs.mkdirSync(logsDir, { recursive: true });
+      await mkdir(logsDir, { recursive: true });
 
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
       const logFile = path.join(logsDir, `app-${timestamp}.log`);
@@ -30,6 +31,14 @@ class Logger {
     } catch (err) {
       console.error('[Logger] Failed to initialize file logger:', err);
       this.stream = null;
+    }
+  }
+
+  /** 同步降级：若尚未初始化则跳过文件写入，仅输出控制台 */
+  private ensureInit(): void {
+    // 初始化已由 initLogger() 异步完成，此处仅做安全守卫
+    if (!this.initialized) {
+      console.warn('[Logger] Logger not yet initialized, file output skipped');
     }
   }
 

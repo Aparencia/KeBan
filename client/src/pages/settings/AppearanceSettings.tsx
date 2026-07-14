@@ -48,8 +48,8 @@ export default function AppearanceSettings() {
         <label className="text-b2 font-medium text-text-secondary">主题模式</label>
         <div className="grid grid-cols-2 gap-3">
           {([
-            { key: 'light' as const, label: '亮色模式', icon: Sun, desc: '清爽明亮，适合日间使用' },
-            { key: 'dark' as const, label: '暗色模式', icon: Moon, desc: '护眼舒适，适合夜间使用' },
+            { key: 'light' as const, label: '晨曦浮光', icon: Sun, desc: '清爽明亮，适合日间使用' },
+            { key: 'dark' as const, label: '极夜深海', icon: Moon, desc: '护眼舒适，适合夜间使用' },
           ]).map(({ key, label, icon: Icon, desc }) => (
             <button
               key={key}

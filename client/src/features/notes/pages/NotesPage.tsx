@@ -318,8 +318,8 @@ export default function NotesPage() {
             <div className="flex items-center justify-center min-h-[40vh]">
               <EmptyState
                 icon={<FileText className="w-12 h-12" strokeWidth={1.2} />}
-                title="暂无笔记"
-                description="点击「新建笔记」开始记录你的第一篇笔记"
+                title="礁石尚在沉睡"
+                description="开始记录你的第一个想法，让思维的珊瑚慢慢生长"
               />
             </div>
           ) : filteredNotes.length > 50 ? (

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * AI 插件接口 — 定义所有 AI 功能
  * v0.9.0 扩展：锚点生成、苏格拉底头脑风暴/追问、学习预测、救援、草稿生成
  */
@@ -19,6 +19,10 @@ export interface AIPlugin {
   socraticBrainstorm?(topic: string, context?: string): Promise<{ ideas: BrainstormIdea[] }>;
   /** v0.9.0: 苏格拉底式追问，引导深度思考 */
   socraticQuestion?(conversationId: string, topic: string, history: ChatMessage[]): Promise<{ question: string; hints: string[] }>;
+  /** FEAT-022: 苏格拉底回答评估，返回四维度评分 */
+  socraticEvaluate?(topic: string, question: string, answer: string, history: ChatMessage[]): Promise<SocraticEvaluateResult>;
+  /** FEAT-022: 苏格拉底深化角度生成 */
+  socraticDeepening?(topic: string, dialogueSummary: string, history: ChatMessage[]): Promise<SocraticDeepeningResult>;
   /** v0.9.0: 基于笔记内容预测可能的问题 */
   predictQuestion?(noteId: string, content: string): Promise<{ predictions: PredictionPrompt[] }>;
   /** v0.9.0: 学习救援，当用户卡住时提供提示与资源 */
@@ -163,12 +167,15 @@ export interface TagContentResult {
 }
 
 // === Sort Inspiration ===
-export type SortTargetType = 'feynman' | 'flashcard' | 'note' | 'todo';
+export type SortTargetType = 'feynman' | 'flashcard' | 'note' | 'todo' | 'action_item';
 
 export interface SortSuggestion {
-  type: SortTargetType;
+  /** AI 推荐的归类方向 */
+  category: SortTargetType;
   reason: string;
   confidence: number;
+  /** AI 推荐的后续操作描述 */
+  suggestedAction?: string;
 }
 
 export interface SortResult {
@@ -275,6 +282,37 @@ export interface DraftContent {
   tags?: string[];
   /** 转化说明 */
   rationale?: string;
+}
+
+/** FEAT-022: 苏格拉底回答评估结果 */
+export interface SocraticEvaluateResult {
+  /** 四维度评分 */
+  dimensions: {
+    accuracy: number;     // 准确度 0-10
+    completeness: number; // 完整度 0-10
+    logic: number;        // 逻辑清晰度 0-10
+    expression: number;   // 表达通俗度 0-10
+  };
+  /** 整体反馋 */
+  feedback: string;
+  /** 鼓励语 */
+  encouragement: string;
+  model?: string;
+  tokensUsed?: number;
+  latencyMs?: number;
+}
+
+/** FEAT-022: 苏格拉底深化角度结果 */
+export interface SocraticDeepeningResult {
+  angles: Array<{
+    key: string;        // 角度标识符
+    label: string;      // 角度标签
+    question: string;   // 引导问题
+  }>;
+  status?: string;
+  model?: string;
+  tokensUsed?: number;
+  latencyMs?: number;
 }
 
 // === Error types ===

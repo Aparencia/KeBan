@@ -7,9 +7,18 @@
     "strict": true,
     "esModuleInterop": true,
     "outDir": "../dist-electron",
-    "rootDir": ".",
+    "rootDir": "..",
+    "baseUrl": "..",
+    "paths": {
+      "@/*": ["src/*"]
+    },
+    "typeRoots": ["../node_modules/@types"],
     "skipLibCheck": true,
     "resolveJsonModule": true
   },
-  "include": ["./**/*.ts"]
+  "include": [
+    "./**/*.ts",
+    "../src/lib/storage/interfaces.ts",
+    "../src/types/models.ts"
+  ]
 }

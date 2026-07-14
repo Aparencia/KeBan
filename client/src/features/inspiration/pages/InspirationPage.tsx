@@ -1,12 +1,15 @@
-﻿import { useEffect, useState, useCallback, useRef } from 'react';
+﻿import { useEffect, useState, useCallback, useRef, forwardRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, Send, Trash2, ChevronDown, ChevronUp, X, Check, Wand2, Loader2, ArrowRight } from 'lucide-react';
+import { Sparkles, Send, Trash2, ChevronDown, ChevronUp, X, Check, Wand2, ArrowRight, Pencil, Layers, Loader2, CheckCircle2 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import { AIThinkingIndicator } from '@/components/ui/AIThinkingIndicator';
 import { EmptyState, useToast } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { useInspirationStore, type InspirationItem, type InspirationTags } from '../store/inspirationStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useAITagContent, useAISortInspiration } from '@/lib/ai/useAI';
 import type { SortSuggestion } from '@/lib/ai/types';
+import { useBatchSort } from '../hooks/useBatchSort';
 
 // ─────────────────────────────────────────────────────────────
 // Constants
@@ -15,7 +18,7 @@ import type { SortSuggestion } from '@/lib/ai/types';
 const CONTENT_NATURE_OPTIONS: { value: InspirationTags['content_nature']; label: string; color: string; bg: string }[] = [
   { value: 'concept',     label: '概念', color: 'text-accent-600',   bg: 'bg-accent-50 border-accent-200 dark:bg-accent-900/20 dark:border-accent-700' },
   { value: 'question',    label: '疑问', color: 'text-orange-600', bg: 'bg-orange-50 border-orange-200 dark:bg-orange-900/20 dark:border-orange-700' },
-  { value: 'inspiration', label: '灵感', color: 'text-purple-600', bg: 'bg-purple-50 border-purple-200 dark:bg-purple-900/20 dark:border-purple-700' },
+  { value: 'inspiration', label: '萤火', color: 'text-purple-600', bg: 'bg-purple-50 border-purple-200 dark:bg-purple-900/20 dark:border-purple-700' },
   { value: 'todo',        label: '待办', color: 'text-green-600',  bg: 'bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-700' },
 ];
 
@@ -181,11 +184,20 @@ function TagEditPopover({ item, onClose }: TagEditPopoverProps) {
 // ─────────────────────────────────────────────────────────────
 
 const SORT_TYPE_MAP: Record<string, { label: string; color: string; bg: string }> = {
-  feynman:  { label: '费曼讲解', color: 'text-amber-700',   bg: 'bg-amber-50 border-amber-200 dark:bg-amber-900/20 dark:border-amber-700' },
-  flashcard: { label: '闪卡',    color: 'text-cyan-700',    bg: 'bg-cyan-50 border-cyan-200 dark:bg-cyan-900/20 dark:border-cyan-700' },
-  note:     { label: '笔记',     color: 'text-indigo-700',  bg: 'bg-indigo-50 border-indigo-200 dark:bg-indigo-900/20 dark:border-indigo-700' },
+  feynman:  { label: '浮出水面讲解', color: 'text-amber-700',   bg: 'bg-amber-50 border-amber-200 dark:bg-amber-900/20 dark:border-amber-700' },
+  flashcard: { label: '反衰减呼吸',    color: 'text-cyan-700',    bg: 'bg-cyan-50 border-cyan-200 dark:bg-cyan-900/20 dark:border-cyan-700' },
+  note:     { label: '结礁',     color: 'text-indigo-700',  bg: 'bg-indigo-50 border-indigo-200 dark:bg-indigo-900/20 dark:border-indigo-700' },
   todo:     { label: '待办',     color: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-200 dark:bg-emerald-900/20 dark:border-emerald-700' },
+  action_item: { label: '立即执行', color: 'text-red-700 dark:text-red-400', bg: 'bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-700' },
 };
+
+/** 分拣状态视觉配置映射 */
+const SORT_STATUS_CONFIG = {
+  sorting: { label: '分拣中...', icon: Loader2, color: 'text-cyan-500', bg: 'bg-cyan-50 border-cyan-200 dark:bg-cyan-900/20 dark:border-cyan-700', animate: true },
+  sorted: { label: '已分拣', icon: null, color: 'text-amber-700 dark:text-amber-400', bg: 'bg-amber-50 border-amber-200 dark:bg-amber-900/20 dark:border-amber-700', animate: false },
+  confirmed: { label: '已确认', icon: CheckCircle2, color: 'text-emerald-700 dark:text-emerald-400', bg: 'bg-emerald-50 border-emerald-200 dark:bg-emerald-900/20 dark:border-emerald-700', animate: false },
+  transformed: { label: '已转化', icon: CheckCircle2, color: 'text-emerald-700 dark:text-emerald-400', bg: 'bg-emerald-50 border-emerald-200 dark:bg-emerald-900/20 dark:border-emerald-700', animate: false },
+} as const satisfies Record<string, { label: string; icon: LucideIcon | null; color: string; bg: string; animate: boolean }>;
 
 // ─────────────────────────────────────────────────────────────
 // AI Sort Panel
@@ -193,8 +205,39 @@ const SORT_TYPE_MAP: Record<string, { label: string; color: string; bg: string }
 
 interface AISortPanelProps { suggestions: SortSuggestion[]; item: InspirationItem; onClose: () => void; }
 
+const SORT_TYPE_ENTRIES = Object.entries(SORT_TYPE_MAP) as [string, { label: string; color: string; bg: string }][];
+
 function AISortPanel({ suggestions, item, onClose }: AISortPanelProps) {
   const { toast } = useToast();
+  const { confirmSort } = useInspirationStore(useShallow(s => s));
+  const [localSuggestions, setLocalSuggestions] = useState<SortSuggestion[]>(suggestions);
+  const [openDropdownIdx, setOpenDropdownIdx] = useState<number | null>(null);
+  const [overriddenSet, setOverriddenSet] = useState<Set<number>>(new Set());
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // 点击外部关闭下拉
+  useEffect(() => {
+    if (openDropdownIdx === null) return;
+    const handler = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setOpenDropdownIdx(null);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [openDropdownIdx]);
+
+  const handleSelectCategory = useCallback((idx: number, newCategory: string) => {
+    // 更新本地建议列表
+    setLocalSuggestions(prev => prev.map((s, i) => i === idx ? { ...s, category: newCategory as SortSuggestion['category'] } : s));
+    // 标记为已手动覆盖
+    setOverriddenSet(prev => new Set(prev).add(idx));
+    // 调用 store 的 confirmSort 持久化
+    confirmSort(item.id, newCategory);
+    setOpenDropdownIdx(null);
+    toast({ type: 'success', message: `已更改分类为「${SORT_TYPE_MAP[newCategory]?.label ?? newCategory}」` });
+  }, [item.id, confirmSort, toast]);
+
   const handleConvert = useCallback((type: string) => {
     const label = SORT_TYPE_MAP[type]?.label ?? type;
     const text = `[${label}] ${item.content}`;
@@ -219,22 +262,70 @@ function AISortPanel({ suggestions, item, onClose }: AISortPanelProps) {
           </motion.button>
         </div>
         <motion.div initial="hidden" animate="visible" variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.06 } } }}>
-          {suggestions.map((s, idx) => {
-            const typeInfo = SORT_TYPE_MAP[s.type] ?? { label: s.type, color: 'text-text-secondary', bg: 'bg-bg-secondary border-border' };
+          {localSuggestions.map((s, idx) => {
+            const typeInfo = SORT_TYPE_MAP[s.category] ?? { label: s.category, color: 'text-text-secondary', bg: 'bg-bg-secondary border-border' };
+            const isOverridden = overriddenSet.has(idx);
+            const isDropdownOpen = openDropdownIdx === idx;
             return (
               <motion.div key={idx}
                 variants={{ hidden: { opacity: 0, x: -10 }, visible: { opacity: 1, x: 0, transition: { duration: 0.25 } } }}
                 className={cn('flex items-center gap-2 p-kb-sm rounded-kb-lg border bg-bg-secondary/50', typeInfo.bg)}>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className={cn('text-xs font-semibold', typeInfo.color)}>{typeInfo.label}</span>
+                  <div className="flex items-center gap-2 flex-wrap relative" ref={isDropdownOpen ? dropdownRef : undefined}>
+                    {/* ── 可交互分类标签 ── */}
+                    <motion.button
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => setOpenDropdownIdx(isDropdownOpen ? null : idx)}
+                      className={cn(
+                        'inline-flex items-center gap-1 text-xs font-semibold rounded-md px-1.5 py-0.5 border transition-all cursor-pointer',
+                        typeInfo.color,
+                        isOverridden && 'border-dashed border-current',
+                        !isOverridden && 'border-transparent hover:border-current/30',
+                      )}
+                    >
+                      {isOverridden && <Pencil className="w-3 h-3" />}
+                      {typeInfo.label}
+                      <ChevronDown className={cn('w-3 h-3 transition-transform', isDropdownOpen && 'rotate-180')} />
+                    </motion.button>
                     <span className="text-c1 text-text-tertiary">{Math.round(s.confidence * 100)}%</span>
                     {s.confidence < 0.5 && <span className="text-c1 text-orange-500 font-medium">仅供参考</span>}
+                    {isOverridden && <span className="text-c1 text-brand-500 font-medium">已手动调整</span>}
+
+                    {/* ── 分类下拉面板 ── */}
+                    <AnimatePresence>
+                      {isDropdownOpen && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -4, scale: 0.95 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: -4, scale: 0.95 }}
+                          transition={{ duration: 0.15 }}
+                          className="absolute left-0 top-full mt-1 z-30 bg-bg-elevated/95 backdrop-blur-xl border border-border/60 rounded-kb-lg shadow-xl p-1.5 w-44"
+                        >
+                          {SORT_TYPE_ENTRIES.map(([key, opt]) => {
+                            const isSelected = s.category === key;
+                            return (
+                              <motion.button
+                                key={key}
+                                whileTap={{ scale: 0.97 }}
+                                onClick={() => handleSelectCategory(idx, key)}
+                                className={cn(
+                                  'w-full flex items-center gap-2 px-2 py-1.5 rounded-kb-md text-xs font-medium transition-colors text-left',
+                                  isSelected ? cn(opt.color, opt.bg) : 'text-text-secondary hover:bg-bg-secondary',
+                                )}
+                              >
+                                {isSelected && <Check className="w-3 h-3 flex-shrink-0" />}
+                                <span className={cn(!isSelected && 'ml-5')}>{opt.label}</span>
+                              </motion.button>
+                            );
+                          })}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
                   <p className="text-c1 text-text-secondary mt-0.5 truncate">{s.reason}</p>
                 </div>
                 <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-                  onClick={() => handleConvert(s.type)}
+                  onClick={() => handleConvert(s.category)}
                   className={cn('flex items-center gap-1 px-2 py-1 rounded-kb-md text-xs font-medium bg-bg-elevated border border-border/50 text-text-secondary hover:text-brand-600 hover:border-brand-300 transition-colors whitespace-nowrap')}>
                   转化 <ArrowRight className="w-3 h-3" />
                 </motion.button>
@@ -251,9 +342,9 @@ function AISortPanel({ suggestions, item, onClose }: AISortPanelProps) {
 // Inspiration Card
 // ─────────────────────────────────────────────────────────────
 
-interface InspirationCardProps { item: InspirationItem; }
+interface InspirationCardProps { item: InspirationItem; batchMode?: boolean; selected?: boolean; onToggleSelect?: () => void; }
 
-function InspirationCard({ item }: InspirationCardProps) {
+const InspirationCard = forwardRef<HTMLDivElement, InspirationCardProps>(function InspirationCard({ item, batchMode, selected, onToggleSelect }, ref) {
   const { deleteItem } = useInspirationStore(useShallow(s => s));
   const [expanded, setExpanded] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -280,6 +371,7 @@ function InspirationCard({ item }: InspirationCardProps) {
 
   return (
     <motion.div
+      ref={ref}
       layout
       variants={cardVariants}
       whileHover={{ y: -2, transition: { duration: 0.15 } }}
@@ -289,13 +381,49 @@ function InspirationCard({ item }: InspirationCardProps) {
       <div className={cn(
         'relative bg-bg-secondary/60 backdrop-blur-xl border border-border/30 rounded-[var(--kb-radius-xl)] p-kb-md',
         'hover:border-purple-400/25 transition-colors duration-300 overflow-hidden',
+        batchMode && selected && 'ring-2 ring-purple-400 border-purple-400/40',
       )}>
+        {/* ── 批量模式 checkbox ── */}
+        {batchMode && (
+          <div className="absolute top-3 left-3 z-20">
+            <input
+              type="checkbox"
+              checked={selected}
+              onChange={onToggleSelect}
+              className="w-4 h-4 rounded accent-purple-500 cursor-pointer"
+            />
+          </div>
+        )}
+        {/* ── 分拣状态指示器 ── */}
+        <AnimatePresence>
+          {item.sortStatus && item.sortStatus !== 'pending' && SORT_STATUS_CONFIG[item.sortStatus] && (() => {
+            const cfg = SORT_STATUS_CONFIG[item.sortStatus];
+            const Icon = cfg.icon;
+            return (
+              <motion.div
+                layout
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.8 }}
+                transition={{ duration: 0.4 }}
+                className={cn(
+                  'absolute top-2 right-2 z-20 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border',
+                  cfg.color, cfg.bg,
+                  cfg.animate && 'animate-pulse',
+                )}
+              >
+                {Icon && <Icon className={cn('w-3 h-3', cfg.animate && 'animate-spin')} />}
+                {cfg.label}
+              </motion.div>
+            );
+          })()}
+        </AnimatePresence>
         {/* ── hover 光泽 ── */}
         <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
           style={{ background: 'linear-gradient(135deg, rgba(147,51,234,0.04) 0%, transparent 50%, rgba(147,51,234,0.02) 100%)' }} />
 
         {/* ── Content ── */}
-        <div className="relative z-10">
+        <div className={cn('relative z-10', batchMode && 'pl-6')}>
           <p onClick={() => setExpanded(v => !v)}
             className={cn('text-b2 text-text-primary leading-relaxed cursor-pointer', !expanded && 'line-clamp-3')}>
             {item.content}
@@ -341,7 +469,7 @@ function InspirationCard({ item }: InspirationCardProps) {
                 'disabled:opacity-60 disabled:cursor-not-allowed',
               )}
             >
-              {sortLoading ? (<><Loader2 className="w-3 h-3 animate-spin" />分析中...</>) : (<><Wand2 className="w-3 h-3" />AI 整理</>)}
+              {sortLoading ? (<><AIThinkingIndicator size={3} gap={2} />分析中...</>) : (<><Wand2 className="w-3 h-3" />AI 整理</>)}
             </motion.button>
             <motion.button
               whileHover={{ scale: 1.05 }}
@@ -363,7 +491,7 @@ function InspirationCard({ item }: InspirationCardProps) {
       </div>
     </motion.div>
   );
-}
+});
 
 // ─────────────────────────────────────────────────────────────
 // Filter Bar
@@ -412,12 +540,20 @@ export default function InspirationPage() {
   const { items, loadAll, addItem } = useInspirationStore(useShallow(s => s));
   const { tagContent, loading: aiLoading } = useAITagContent();
   const { toast } = useToast();
+  const { progress, total, isProcessing: batchProcessing, batchSort } = useBatchSort();
   const [input, setInput] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [filters, setFilters] = useState<FilterState>({ content_nature: null, cognitive_depth: null, subject: null });
+  const [batchMode, setBatchMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => { loadAll(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!batchMode) setSelectedIds(new Set()); }, [batchMode]);
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  }, []);
 
   const handleSubmit = useCallback(async () => {
     const content = input.trim();
@@ -463,6 +599,14 @@ export default function InspirationPage() {
   });
   const subjects = [...new Set(items.map(i => i.tags.subject))].filter(Boolean);
 
+  const selectAll = useCallback(() => setSelectedIds(new Set(filteredItems.map(i => i.id))), [filteredItems]);
+  const deselectAll = useCallback(() => setSelectedIds(new Set()), []);
+  const handleBatchSort = async () => {
+    const selected = filteredItems.filter(i => selectedIds.has(i.id));
+    if (selected.length === 0) { toast({ type: 'error', message: '请先选择要整理的灵感' }); return; }
+    await batchSort(selected);
+  };
+
   return (
     <motion.div
       className="max-w-2xl mx-auto px-kb-lg py-kb-xl space-y-6 relative"
@@ -496,8 +640,8 @@ export default function InspirationPage() {
           <Sparkles className="w-5 h-5 text-text-inverse" strokeWidth={1.5} />
         </motion.div>
         <div>
-          <h1 className="text-h2 font-bold text-text-primary">灵感空间</h1>
-          <p className="text-c1 text-text-tertiary">随手捕捉灵感，AI 自动整理分类</p>
+          <h1 className="text-h2 font-bold text-text-primary">萤火海沟</h1>
+          <p className="text-c1 text-text-tertiary">随手捕捉萤火海沟，AI 自动整理分类</p>
         </div>
       </motion.div>
 
@@ -517,7 +661,7 @@ export default function InspirationPage() {
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="随手记录灵感、疑问、想法..."
+          placeholder="随手记录萤火海沟、疑问、想法..."
           rows={3}
           className="w-full resize-none text-b2 text-text-primary placeholder:text-text-tertiary bg-transparent focus:outline-none"
         />
@@ -548,10 +692,76 @@ export default function InspirationPage() {
       <AnimatePresence>
         {items.length > 0 && (
           <motion.div
-            className="bg-bg-secondary/60 backdrop-blur-xl border border-border/30 rounded-[var(--kb-radius-xl)] p-3 relative z-10"
+            className="bg-bg-secondary/60 backdrop-blur-xl border border-border/30 rounded-[var(--kb-radius-xl)] p-3 relative z-10 space-y-2"
             variants={filterVariants}
           >
             <FilterBar filters={filters} onChange={setFilters} />
+            {/* ── 批量模式入口 ── */}
+            <div className="flex items-center justify-between mt-1">
+              <motion.button
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setBatchMode(v => !v)}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border transition-colors',
+                  batchMode
+                    ? 'bg-purple-500/10 border-purple-400/40 text-purple-600 dark:text-purple-400'
+                    : 'bg-bg-secondary border-border/40 text-text-tertiary hover:text-text-secondary',
+                )}
+              >
+                <Layers className="w-3.5 h-3.5" />
+                {batchMode ? '退出批量' : '批量整理'}
+              </motion.button>
+              {batchMode && selectedIds.size > 0 && (
+                <span className="text-c1 text-text-tertiary">已选中 {selectedIds.size} 条</span>
+              )}
+            </div>
+            {/* ── 批量操作条 ── */}
+            <AnimatePresence>
+              {batchMode && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="flex items-center gap-2 flex-wrap pt-1"
+                >
+                  <motion.button whileTap={{ scale: 0.95 }} onClick={selectAll}
+                    className="px-2 py-0.5 rounded-full text-xs font-medium text-text-secondary bg-bg-secondary border border-border/40 hover:text-text-primary transition-colors">
+                    全选
+                  </motion.button>
+                  <motion.button whileTap={{ scale: 0.95 }} onClick={deselectAll}
+                    className="px-2 py-0.5 rounded-full text-xs font-medium text-text-tertiary bg-bg-secondary border border-border/40 hover:text-text-secondary transition-colors">
+                    取消全选
+                  </motion.button>
+                  <motion.button
+                    whileTap={{ scale: 0.95 }}
+                    onClick={handleBatchSort}
+                    disabled={selectedIds.size === 0 || batchProcessing}
+                    className={cn(
+                      'flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium',
+                      'bg-gradient-to-r from-purple-500 to-cyan-500 text-text-inverse',
+                      'hover:from-purple-600 hover:to-cyan-600 shadow-sm shadow-purple-500/20',
+                      'disabled:opacity-50 disabled:cursor-not-allowed',
+                    )}
+                  >
+                    {batchProcessing ? (<><AIThinkingIndicator size={3} gap={2} />分析中...</>) : (<><Wand2 className="w-3 h-3" />一键分析</>)}
+                  </motion.button>
+                  {batchProcessing && (
+                    <span className="text-c1 text-text-tertiary">正在分析 {progress}/{total}...</span>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+            {/* ── 批量进度条 ── */}
+            {batchProcessing && total > 0 && (
+              <div className="w-full h-1.5 rounded-full bg-bg-secondary overflow-hidden mt-1">
+                <motion.div
+                  className="h-full rounded-full bg-gradient-to-r from-purple-500 to-cyan-500"
+                  initial={{ width: 0 }}
+                  animate={{ width: `${(progress / total) * 100}%` }}
+                  transition={{ duration: 0.3 }}
+                />
+              </div>
+            )}
             {subjects.length > 0 && (
               <motion.div
                 className="flex items-center gap-2 flex-wrap mt-2"
@@ -586,13 +796,21 @@ export default function InspirationPage() {
       {filteredItems.length > 0 ? (
         <motion.div className="space-y-3 relative z-10" variants={listVariants}>
           <AnimatePresence mode="popLayout">
-            {filteredItems.map(item => <InspirationCard key={item.id} item={item} />)}
+            {filteredItems.map(item => (
+              <InspirationCard
+                key={item.id}
+                item={item}
+                batchMode={batchMode}
+                selected={selectedIds.has(item.id)}
+                onToggleSelect={() => toggleSelect(item.id)}
+              />
+            ))}
           </AnimatePresence>
         </motion.div>
       ) : items.length > 0 ? (
         <motion.div className="text-center py-12 relative z-10"
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}>
-          <p className="text-b2 text-text-tertiary">没有匹配的灵感记录</p>
+          <p className="text-b2 text-text-tertiary">没有匹配的萤火海沟记录</p>
           <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
             onClick={() => setFilters({ content_nature: null, cognitive_depth: null, subject: null })}
             className="mt-2 text-sm text-brand-600 hover:underline">
@@ -604,8 +822,8 @@ export default function InspirationPage() {
           initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.5 }}>
           <EmptyState
             icon={<Sparkles className="w-12 h-12 text-purple-300" strokeWidth={1} />}
-            title="还没有灵感记录"
-            description="开始记录你的第一个想法吧"
+            title="萤火尚未亮起"
+            description="收集微小的闪烁，它们终将照亮整片夜空"
           />
         </motion.div>
       )}

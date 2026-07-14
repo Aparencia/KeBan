@@ -30,7 +30,7 @@ beforeEach(() => {
     error: null,
   });
   // Set up AI gateway URL in localStorage for aiClient tests
-  localStorage.setItem('kb_ai_config', JSON.stringify({ gatewayUrl: 'http://localhost:8000' }));
+  localStorage.setItem('kb_ai_config', JSON.stringify({ gatewayUrl: 'https://entropydecrease.com' }));
 });
 
 afterEach(() => {
@@ -53,7 +53,7 @@ describe('apiClient', () => {
     await apiClient.get('/test');
     expect(mockFetch).toHaveBeenCalledTimes(1);
     const url = mockFetch.mock.calls[0][0] as string;
-    // Default fallback is http://localhost:8080
+    // Default fallback is https://entropydecrease.com
     expect(url).toContain('/test');
   });
 

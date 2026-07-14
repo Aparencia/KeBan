@@ -90,16 +90,20 @@ function VolumeSlider({ value, onChange, disabled }: {
  * @param settings - 该类别的设置
  * @param onUpdate - 更新回调
  */
-function CategorySection({ category, settings, onUpdate }: {
+function CategorySection({ category, settings, onUpdate, masterMute }: {
   category: SoundCategory;
   settings: CategorySoundSettings;
   onUpdate: (patch: Partial<CategorySoundSettings>) => void;
+  masterMute: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const sounds = getSoundsByCategory(category);
 
   return (
-    <div className="border border-[#1e3456] rounded-kb-md overflow-hidden">
+    <div className={cn(
+      'border border-[#1e3456] rounded-kb-md overflow-hidden transition-opacity duration-kb-normal',
+      masterMute && 'opacity-40',
+    )}>
       {/* 类别头部 */}
       <div
         className="w-full flex items-center justify-between px-4 py-3 hover:bg-white/[0.03] transition-colors cursor-pointer"
@@ -123,6 +127,7 @@ function CategorySection({ category, settings, onUpdate }: {
             <Toggle
               checked={settings.enabled}
               onChange={(v) => onUpdate({ enabled: v })}
+              disabled={masterMute}
             />
           </span>
           <motion.div
@@ -149,7 +154,7 @@ function CategorySection({ category, settings, onUpdate }: {
               <VolumeSlider
                 value={settings.volume}
                 onChange={(v) => onUpdate({ volume: v })}
-                disabled={!settings.enabled}
+                disabled={!settings.enabled || masterMute}
               />
 
               {/* 音效列表 */}
@@ -162,11 +167,13 @@ function CategorySection({ category, settings, onUpdate }: {
                     <span className="text-c1 text-[#8b9bb8]">{sound.name}</span>
                     <button
                       onClick={() => soundPlayer.previewSound(sound.id)}
+                      disabled={masterMute}
                       className={cn(
                         'inline-flex items-center gap-1 px-2 py-1 rounded-kb-sm text-c1 font-medium',
                         'bg-white/[0.05] text-[#8b9bb8] border border-[#1e3456]/60',
-                        'hover:bg-[#6366f1]/20 hover:text-[#e8edf5] hover:border-[#6366f1]/40',
+                        !masterMute && 'hover:bg-[#6366f1]/20 hover:text-[#e8edf5] hover:border-[#6366f1]/40',
                         'active:scale-95 transition-all duration-kb-fast',
+                        masterMute && 'opacity-40 cursor-not-allowed',
                       )}
                     >
                       <Play className="w-3 h-3" fill="currentColor" />
@@ -218,7 +225,9 @@ export default function SoundSettings() {
           )}
           <div className="flex flex-col">
             <span className="text-b2 font-medium text-[#e8edf5]">全局静音</span>
-            <span className="text-c1 text-[#8b9bb8]">开启后所有音效将被静音</span>
+            <span className="text-c1 text-[#8b9bb8]">
+              {soundSettings.masterMute ? '已静音，下方设置将被覆盖' : '开启后所有音效将被静音'}
+            </span>
           </div>
         </div>
         <Toggle
@@ -235,6 +244,7 @@ export default function SoundSettings() {
             category={cat}
             settings={soundSettings.categories[cat]}
             onUpdate={(patch) => handleCategoryUpdate(cat, patch)}
+            masterMute={soundSettings.masterMute}
           />
         ))}
       </div>

@@ -20,6 +20,7 @@ import {
   Code, Quote, Undo2, Redo2, Save, Sparkles, X,
   Copy, RefreshCw, Download, ChevronDown, Check,
   Table2, ListTodo, ImageIcon, AlignLeft, AlignCenter, AlignRight, AlignJustify, Palette,
+  HelpCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AIButton } from '@/components/ui/AIButton';
@@ -38,6 +39,8 @@ import { CaptureSidebar } from '../components/CaptureSidebar';
 import { TodoStats } from '../components/TodoStats';
 import { useCaptureStore } from '@/stores/useCaptureStore';
 import { soundPlayer } from '@/lib/audio/SoundPlayer';
+import { RescuePanel } from '@/components/RescuePanel';
+import { useStuckTimer } from '@/hooks/useStuckTimer';
 
 const SAVE_STATUS_HIDE_DELAY_MS = 2000;
 const AUTOSAVE_DEBOUNCE_MS = 500;
@@ -79,6 +82,14 @@ export default function NoteEditPage() {
   const navigate = useNavigate();
   const noteId = id ?? null;
   const captureOpen = useCaptureStore((s) => s.open);
+
+  // === 卡壳救援 ===
+  const [rescueOpen, setRescueOpen] = useState(false);
+  const stuckTimer = useStuckTimer({
+    onThreshold: () => {
+      window.dispatchEvent(new Event('rescue:show-incubation'));
+    },
+  });
 
   const { notes, updateNote, selectNote, loadNotes } = useNoteStore(useShallow(s => s));
   const note = notes.find((n) => n.id === noteId) || null;
@@ -356,7 +367,7 @@ export default function NoteEditPage() {
       md += '\n## 关键要点\n\n';
       aiData.keyPoints.forEach((kp, i) => { md += `${i + 1}. ${kp}\n`; });
     }
-    md += `\n---\n*由课伴 AI 生成于 ${new Date(aiData.generatedAt).toLocaleString()}*\n`;
+    md += `\n---\n*由熵减 AI 生成于 ${new Date(aiData.generatedAt).toLocaleString()}*\n`;
     const url = URL.createObjectURL(new Blob([md], { type: 'text/markdown;charset=utf-8' }));
     const a = document.createElement('a');
     a.href = url; a.download = `ai-summary-${Date.now()}.md`; a.click();
@@ -368,6 +379,19 @@ export default function NoteEditPage() {
   useEffect(() => {
     loadNotes();
   }, [loadNotes]);
+
+  // Ctrl+Shift+H 快捷键打开救援面板
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.shiftKey && e.key === 'H') {
+        e.preventDefault();
+        setRescueOpen(true);
+        stuckTimer.start();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [stuckTimer]);
 
   // 选中当前笔记
   useEffect(() => {
@@ -462,6 +486,23 @@ export default function NoteEditPage() {
         >
           <Save className="w-icon-sm h-icon-sm" strokeWidth={1.5} />
           保存
+        </button>
+
+        <button
+          onClick={() => {
+            setRescueOpen(true);
+            stuckTimer.start();
+          }}
+          className={cn(
+            'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-kb-md text-b2 font-medium',
+            'bg-bg-secondary text-text-secondary border border-border/50',
+            'hover:bg-bg-tertiary hover:text-text-primary',
+            'active:scale-95 transition-all duration-kb-fast',
+          )}
+          title="卡壳了 (Ctrl+Shift+H)"
+        >
+          <HelpCircle className="w-icon-sm h-icon-sm" strokeWidth={1.5} />
+          卡壳了
         </button>
 
         <AIButton
@@ -688,7 +729,7 @@ export default function NoteEditPage() {
         />
       )}
 
-      {/* 课堂助手侧边栏 */}
+      {/* 回声定位侧边栏 */}
       </div>
       {captureOpen && (
         <CaptureSidebar
@@ -700,6 +741,24 @@ export default function NoteEditPage() {
           }}
         />
       )}
+
+      {/* 卡壳救援面板 */}
+      <RescuePanel
+        isOpen={rescueOpen}
+        onClose={() => {
+          setRescueOpen(false);
+          stuckTimer.stop();
+        }}
+        context={{
+          topic: note?.title || '笔记',
+          relatedContent: editor?.getText().slice(0, 500),
+          mode: 'note',
+        }}
+        onSuggestion={(action) => {
+          if (action === 'pomodoro') navigate('/pomodoro');
+          else if (action === 'flashcard') navigate('/flashcards');
+        }}
+      />
 
       {/* AI 摘要结果弹窗 */}
       {summaryModalOpen && (

@@ -57,8 +57,8 @@ export class ScreenCapture {
   private readonly onScreenshot: (data: ScreenshotFrameData) => void;
   private disposed = false;
 
-  /** 上一帧的简化 hash，用于快速判断画面是否变化 */
-  private lastFrameHash = '';
+  /** 上一帧的分块 hash 数组，用于快速判断画面是否变化 */
+  private lastFrameBlockHashes: string[] = [];
 
   constructor(
     options: ScreenCaptureOptions,
@@ -134,7 +134,7 @@ export class ScreenCapture {
   dispose(): void {
     this.stop();
     this.disposed = true;
-    this.lastFrameHash = '';
+    this.lastFrameBlockHashes = [];
     logger.info('[ScreenCapture] 已销毁');
   }
 
@@ -211,28 +211,58 @@ export class ScreenCapture {
   }
 
   /**
-   * 基于采样字节的快速帧比较
+   * 基于分块采样 + hash 对比的帧变化检测（含 1px 容差）
    *
-   * 对图片数据按固定步长采样，拼接为简化 hash 字符串，
-   * 与上一帧 hash 对比以判断画面是否发生变化。
+   * 将截图数据分为 8 个区域块，每块采样 ~60 字节（共约 500 字节），
+   * 分别计算 hash 后对比。为过滤 1px 鼠标微动导致的误判，
+   * 要求至少 2 个块同时发生变化才认为帧已变化。
+   * 无论是否判定为“变化”，均更新基准 hash，防止亚阈值变化累积。
    */
   private hasFrameChanged(imageBuffer: ArrayBuffer): boolean {
     const view = new Uint8Array(imageBuffer);
     const size = view.length;
     if (size === 0) return false;
 
-    // 采样 ~100 个字节 + 数据长度，构造简短 hash
-    let hash = size.toString(36);
-    const step = Math.max(1, Math.floor(size / 100));
-    for (let i = 0; i < size; i += step) {
-      hash += view[i].toString(16);
+    // 分为 8 个块，每块采样 ~60 字节，总采样约 500 字节
+    const BLOCK_COUNT = 8;
+    const SAMPLES_PER_BLOCK = 60;
+    const blockHashes: string[] = [];
+
+    for (let b = 0; b < BLOCK_COUNT; b++) {
+      const blockStart = Math.floor((size * b) / BLOCK_COUNT);
+      const blockEnd = Math.floor((size * (b + 1)) / BLOCK_COUNT);
+      const blockSize = blockEnd - blockStart;
+      if (blockSize <= 0) {
+        blockHashes.push('');
+        continue;
+      }
+
+      const step = Math.max(1, Math.floor(blockSize / SAMPLES_PER_BLOCK));
+      let hash = blockSize.toString(36);
+      for (let i = blockStart; i < blockEnd; i += step) {
+        hash += view[i].toString(16);
+      }
+      blockHashes.push(hash);
     }
 
-    if (hash === this.lastFrameHash) {
-      return false; // 帧未变化
+    // 与上一帧的分块 hash 逐块对比，统计变化块数
+    // 要求至少 2 个块变化才认为帧已变化（过滤 1px 鼠标微动误判）
+    const MIN_CHANGED_BLOCKS = 2;
+    let changedCount = 0;
+    if (blockHashes.length === this.lastFrameBlockHashes.length) {
+      for (let i = 0; i < blockHashes.length; i++) {
+        if (blockHashes[i] !== this.lastFrameBlockHashes[i]) {
+          changedCount++;
+          if (changedCount >= MIN_CHANGED_BLOCKS) break; // 提前退出
+        }
+      }
+    } else {
+      // 块数不一致（首帧或尺寸变化），视为已变化
+      changedCount = MIN_CHANGED_BLOCKS;
     }
 
-    this.lastFrameHash = hash;
-    return true;
+    // 无论是否判定为变化，均更新基准 hash，防止亚阈值变化累积
+    this.lastFrameBlockHashes = blockHashes;
+    return changedCount >= MIN_CHANGED_BLOCKS;
   }
 }

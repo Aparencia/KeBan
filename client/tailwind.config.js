@@ -40,6 +40,7 @@ module.exports = {
         amber: { DEFAULT: 'var(--kb-amber)' },
         moss: { DEFAULT: 'var(--kb-moss-green)' },
         cyber: { DEFAULT: 'var(--kb-cyber-cyan)' },
+        'stone-purple': 'var(--kb-stone-purple)',
         bg: {
           primary: 'var(--kb-bg-primary)',
           secondary: 'var(--kb-bg-secondary)',
@@ -94,6 +95,7 @@ module.exports = {
       },
       fontFamily: {
         sans: ['var(--kb-font-sans)'],
+        serif: ['var(--kb-font-serif)'],
         mono: ['var(--kb-font-mono)'],
         timer: ['var(--kb-font-timer)'],
       },

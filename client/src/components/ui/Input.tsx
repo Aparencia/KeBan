@@ -37,7 +37,7 @@ const inputVariants = cva(
  * @param prefix - 输入框前缀节点（图标等）
  * @param suffix - 输入框后缀节点（图标等）
  * @param size - 尺寸变体：sm(32px) | md(40px) | lg(48px)
- * @ai-context 深海静谧主题输入框，4px 基准网格，双主题色板
+ * @ai-context 极夜深海主题输入框，4px 基准网格，双主题色板
  */
 export interface InputProps
   extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'size' | 'prefix'> {
@@ -49,7 +49,7 @@ export interface InputProps
 }
 
 /**
- * 课伴通用输入框组件
+ * 熵减通用输入框组件
  * @param props - InputProps
  * @returns React 输入框元素
  * @ai-context 使用 cva 变体，支持错误态/正常态边框色切换

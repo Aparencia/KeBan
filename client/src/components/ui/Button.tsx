@@ -70,7 +70,7 @@ const buttonVariants = cva(
  * @param icon - 左侧图标
  * @param iconRight - 右侧图标
  * @param asChild - 是否渲染为子元素（Slot 模式）
- * @ai-context 深海静谧主题按钮，CSS active:scale(0.97) 按压反馈 150ms
+ * @ai-context 极夜深海主题按钮，CSS active:scale(0.97) 按压反馈 150ms
  */
 export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement>,
@@ -82,7 +82,7 @@ export interface ButtonProps
 }
 
 /**
- * 课伴通用按钮组件
+ * 熵减通用按钮组件
  * @param props - ButtonProps
  * @returns React 按钮元素
  * @ai-context 支持 cva 变体 + CSS active scale(0.97) 按压动效 150ms bounce ease

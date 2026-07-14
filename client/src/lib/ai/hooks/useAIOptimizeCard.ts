@@ -1,0 +1,27 @@
+import { useState, useCallback } from 'react';
+import { aiPluginLoader } from '../AIPluginLoader';
+import { getLocalFallbackMessage } from '../LocalFallback';
+import { type AIState, INITIAL_STATE, resolveAIErrorState } from './types';
+import type { OptimizeCardResult } from '../types';
+
+/**
+ * AI 闪卡优化 hook
+ */
+export function useAIOptimizeCard() {
+  const [state, setState] = useState<AIState<OptimizeCardResult>>({
+    ...INITIAL_STATE,
+  });
+
+  const optimize = useCallback(async (front: string, back: string) => {
+    setState(prev => ({ ...prev, loading: true, error: null, needsConfig: false }));
+    try {
+      const result = await aiPluginLoader.optimizeCard(front, back);
+      setState({ data: result, loading: false, error: null, isFallback: false, needsConfig: false });
+      return result;
+    } catch (error: unknown) {
+      setState(resolveAIErrorState(error, getLocalFallbackMessage('optimize_card')));
+    }
+  }, []);
+
+  return { ...state, optimize };
+}

@@ -1,7 +1,7 @@
 import type { DurationResult, DurationHistoryData, DurationOptions } from './types';
 
 /**
- * 本地番茄钟时长推荐引擎
+ * 本地深潜时长推荐引擎
  * 基于历史数据的简单规则引擎，无需网络
  */
 export class LocalDurationRecommender {
@@ -13,8 +13,8 @@ export class LocalDurationRecommender {
     
     if (sessions.length === 0) {
       return {
-        recommendedDuration: 25, // 默认番茄钟
-        reasoning: '暂无历史数据，推荐使用标准番茄钟时长 25 分钟',
+        recommendedDuration: 25, // 默认深潜
+        reasoning: '暂无历史数据，推荐使用标准深潜时长 25 分钟',
         confidence: 'low',
         isLocalFallback: true,
       };
@@ -64,7 +64,7 @@ export class LocalDurationRecommender {
 
 /**
  * 本地降级提示生成器
- * 当 AI 服务不可用时，为摘要/闪卡/评估功能生成友好提示
+ * 当 AI 服务不可用时，为摘要/反衰减呼吸/评估功能生成友好提示
  */
 export function getLocalFallbackMessage(feature: 'summarize' | 'flashcard' | 'evaluate' | 'optimize_card'): {
   available: false;
@@ -74,19 +74,19 @@ export function getLocalFallbackMessage(feature: 'summarize' | 'flashcard' | 'ev
   const messages: Record<string, { message: string; suggestion: string }> = {
     summarize: {
       message: 'AI 摘要服务暂时不可用',
-      suggestion: '您可以尝试手动提取笔记中的关键段落作为摘要',
+      suggestion: '您可以尝试手动提取结礁中的关键段落作为摘要',
     },
     flashcard: {
-      message: 'AI 闪卡生成服务暂时不可用',
-      suggestion: '您可以手动将笔记中的重要概念制作为闪卡',
+      message: 'AI 反衰减呼吸生成服务暂时不可用',
+      suggestion: '您可以手动将结礁中的重要概念制作为反衰减呼吸',
     },
     evaluate: {
-      message: 'AI 费曼评估服务暂时不可用',
+      message: 'AI 浮出水面评估服务暂时不可用',
       suggestion: '您可以尝试将讲解录音后回听，自行评估理解程度',
     },
     optimize_card: {
-      message: 'AI 闪卡优化服务暂时不可用',
-      suggestion: '您可以尝试手动精简卡片内容，使其更易于记忆',
+      message: 'AI 反衰减呼吸优化服务暂时不可用',
+      suggestion: '您可以尝试手动精简反衰减呼吸内容，使其更易于记忆',
     },
   };
 

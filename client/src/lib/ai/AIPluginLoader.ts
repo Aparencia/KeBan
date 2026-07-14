@@ -7,7 +7,9 @@ import type { AIPlugin, DurationHistoryData, DurationOptions, DurationResult,
   SummarizeResult, FlashcardResult, EvaluateResult,
   SummarizeOptions, FlashcardOptions, EvaluateOptions,
   VisionExtractResult, TagContentResult, OptimizeCardResult,
-  FeynmanQuestionResult, FeynmanAnswerEvalResult, SortResult } from './types';
+  FeynmanQuestionResult, FeynmanAnswerEvalResult, SortResult,
+  AnchorPoint, BrainstormIdea, ChatMessage, SocraticEvaluateResult, SocraticDeepeningResult,
+  PredictionPrompt, RescueContext, ResourceLink } from './types';
 
 /**
  * AI 插件加载器（单例）
@@ -220,6 +222,131 @@ class AIPluginLoader {
         throw new AIError('当前 AI 插件不支持灵感分拣', 'service_unavailable', false);
       })(),
       { contentCheck: content, feature: 'sort_inspiration' }
+    );
+  }
+
+  /**
+   * 记忆锚点生成 — 从笔记中提取知识锚点
+   */
+  async generateAnchorPoint(noteId: string, content: string): Promise<{ anchorPoints: AnchorPoint[] }> {
+    return this.withGuard(
+      () => (async () => {
+        const plugin = await this.getAIPlugin();
+        if (plugin.generateAnchorPoint) {
+          return plugin.generateAnchorPoint(noteId, content);
+        }
+        throw new AIError('当前 AI 插件不支持锚点生成', 'service_unavailable', false);
+      })(),
+      { contentCheck: content, feature: 'anchor_point' }
+    );
+  }
+
+  /**
+   * 苏格拉底式头脑风暴 — 激发创意与联想
+   */
+  async socraticBrainstorm(topic: string, context?: string): Promise<{ ideas: BrainstormIdea[] }> {
+    return this.withGuard(
+      () => (async () => {
+        const plugin = await this.getAIPlugin();
+        if (plugin.socraticBrainstorm) {
+          return plugin.socraticBrainstorm(topic, context);
+        }
+        throw new AIError('当前 AI 插件不支持苏格拉底头脑风暴', 'service_unavailable', false);
+      })(),
+      { contentCheck: topic, feature: 'socratic_brainstorm' }
+    );
+  }
+
+  /**
+   * 苏格拉底式追问 — 引导深度思考
+   */
+  async socraticQuestion(
+    conversationId: string,
+    topic: string,
+    history: ChatMessage[],
+  ): Promise<{ question: string; hints: string[] }> {
+    return this.withGuard(
+      () => (async () => {
+        const plugin = await this.getAIPlugin();
+        if (plugin.socraticQuestion) {
+          return plugin.socraticQuestion(conversationId, topic, history);
+        }
+        throw new AIError('当前 AI 插件不支持苏格拉底追问', 'service_unavailable', false);
+      })(),
+      { contentCheck: topic, feature: 'socratic_question' }
+    );
+  }
+
+  /**
+   * FEAT-022: 苏格拉底回答评估 — 四维度评分
+   */
+  async socraticEvaluate(
+    topic: string,
+    question: string,
+    answer: string,
+    history: ChatMessage[],
+  ): Promise<SocraticEvaluateResult> {
+    return this.withGuard(
+      () => (async () => {
+        const plugin = await this.getAIPlugin();
+        if (plugin.socraticEvaluate) {
+          return plugin.socraticEvaluate(topic, question, answer, history);
+        }
+        throw new AIError('当前 AI 插件不支持苏格拉底评估', 'service_unavailable', false);
+      })(),
+      { contentCheck: answer, feature: 'socratic_evaluate' }
+    );
+  }
+
+  /**
+   * FEAT-022: 苏格拉底深化角度生成
+   */
+  async socraticDeepening(
+    topic: string,
+    dialogueSummary: string,
+    history: ChatMessage[],
+  ): Promise<SocraticDeepeningResult> {
+    return this.withGuard(
+      () => (async () => {
+        const plugin = await this.getAIPlugin();
+        if (plugin.socraticDeepening) {
+          return plugin.socraticDeepening(topic, dialogueSummary, history);
+        }
+        throw new AIError('当前 AI 插件不支持苏格拉底深化', 'service_unavailable', false);
+      })(),
+      { contentCheck: topic, feature: 'socratic_deepening' }
+    );
+  }
+
+  /**
+   * 学习预测 — 基于笔记预测可能的问题
+   */
+  async predictQuestion(noteId: string, content: string): Promise<{ predictions: PredictionPrompt[] }> {
+    return this.withGuard(
+      () => (async () => {
+        const plugin = await this.getAIPlugin();
+        if (plugin.predictQuestion) {
+          return plugin.predictQuestion(noteId, content);
+        }
+        throw new AIError('当前 AI 插件不支持学习预测', 'service_unavailable', false);
+      })(),
+      { contentCheck: content, feature: 'predict' }
+    );
+  }
+
+  /**
+   * 学习救援 — 当用户卡住时提供提示与资源
+   */
+  async rescue(context: RescueContext): Promise<{ hints: string[]; resources: ResourceLink[]; alternativeApproach?: string }> {
+    return this.withGuard(
+      () => (async () => {
+        const plugin = await this.getAIPlugin();
+        if (plugin.rescue) {
+          return plugin.rescue(context);
+        }
+        throw new AIError('当前 AI 插件不支持学习救援', 'service_unavailable', false);
+      })(),
+      { contentCheck: context.topic, feature: 'rescue' }
     );
   }
 }

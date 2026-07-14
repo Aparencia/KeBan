@@ -74,7 +74,7 @@ export function PWAInstallPrompt() {
         'sm:left-auto sm:right-4 sm:max-w-sm',
       )}
       role="alert"
-      aria-label="安装课伴应用"
+      aria-label="安装熵减应用"
     >
       <div className="flex items-center gap-3 min-w-0">
         <div className="flex-shrink-0 w-10 h-10 rounded-kb-md bg-brand-600/20 flex items-center justify-center">
@@ -82,7 +82,7 @@ export function PWAInstallPrompt() {
         </div>
         <div className="min-w-0">
           <p className="text-b2 font-medium text-text-primary truncate">
-            安装课伴
+            安装熵减
           </p>
           <p className="text-b3 text-text-secondary truncate">
             添加到桌面，随时离线使用

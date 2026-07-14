@@ -14,6 +14,14 @@ import type {
   FeynmanAnswerEvalResult,
   TagContentResult,
   SortResult,
+  AnchorPoint,
+  BrainstormIdea,
+  ChatMessage,
+  SocraticEvaluateResult,
+  SocraticDeepeningResult,
+  PredictionPrompt,
+  RescueContext,
+  ResourceLink,
 } from './types';
 import { AIError } from './types';
 
@@ -353,7 +361,7 @@ export class ElectronAIPlugin implements AIPlugin {
         existingTags,
         authToken: this.authToken,
       }) as {
-        suggestions: Array<{ type: string; reason: string; confidence: number }>;
+        suggestions: Array<{ category: string; reason: string; confidence: number; suggestedAction?: string }>;
         model: string;
         tokensUsed: number;
         latencyMs: number;
@@ -362,9 +370,10 @@ export class ElectronAIPlugin implements AIPlugin {
 
       return {
         suggestions: result.suggestions.map(s => ({
-          type: s.type as SortResult['suggestions'][0]['type'],
+          category: s.category as SortResult['suggestions'][0]['category'],
           reason: s.reason,
           confidence: s.confidence,
+          suggestedAction: s.suggestedAction,
         })),
         model: result.model,
         tokensUsed: result.tokensUsed,
@@ -375,7 +384,229 @@ export class ElectronAIPlugin implements AIPlugin {
     }
   }
 
-  private handleError(error: unknown): AIError {
+  // ── invoke('ai_anchor_point') ─────────────────────────────────
+  async generateAnchorPoint(noteId: string, content: string): Promise<{ anchorPoints: AnchorPoint[] }> {
+    this.checkOnline();
+    try {
+      const result = await window.electronAPI!.invoke('ai_anchor_point', {
+        content,
+        title: '',
+        authToken: this.authToken,
+      }) as {
+        anchorPoints: Array<{ concept: string; association: string; memoryTechnique: string; importance: number }>;
+        status: string; model: string; tokensUsed: number; latencyMs: number;
+      };
+
+      return {
+        anchorPoints: (result.anchorPoints || []).map(ap => ({
+          concept: ap.concept,
+          importance: ap.importance,
+          explanation: ap.association || ap.memoryTechnique || undefined,
+          relatedConcepts: ap.memoryTechnique ? [ap.memoryTechnique] : undefined,
+        })),
+      };
+    } catch (error: unknown) {
+      throw this.handleError(error);
+    }
+  }
+
+  // ── invoke('ai_socratic') brainstorm ──────────────────────────
+  async socraticBrainstorm(topic: string, context?: string): Promise<{ ideas: BrainstormIdea[] }> {
+    this.checkOnline();
+    try {
+      const result = await window.electronAPI!.invoke('ai_socratic', {
+        topic,
+        history: context ? [{ role: 'learner', content: context }] : null,
+        authToken: this.authToken,
+      }) as {
+        question: string; hint: string; thinkingDirection: string;
+        depthLevel: number; turnCount: number;
+        status: string; model: string; tokensUsed: number; latencyMs: number;
+      };
+
+      return {
+        ideas: [
+          {
+            title: result.question || '思考方向',
+            description: result.hint || result.thinkingDirection || '',
+            category: result.thinkingDirection || undefined,
+            feasibility: 0.7,
+            source: 'socratic_brainstorm',
+          },
+        ],
+      };
+    } catch (error: unknown) {
+      throw this.handleError(error);
+    }
+  }
+
+  // ── invoke('ai_socratic') question ────────────────────────────
+  async socraticQuestion(
+    conversationId: string,
+    topic: string,
+    history: ChatMessage[],
+  ): Promise<{ question: string; hints: string[] }> {
+    this.checkOnline();
+    try {
+      const backendHistory = history.map(h => ({
+        role: h.role === 'assistant' ? 'tutor' : 'learner',
+        content: h.content,
+      }));
+
+      const result = await window.electronAPI!.invoke('ai_socratic', {
+        topic,
+        history: backendHistory.length > 0 ? backendHistory : null,
+        authToken: this.authToken,
+      }) as {
+        question: string; hint: string; thinkingDirection: string;
+        depthLevel: number; turnCount: number;
+        status: string; model: string; tokensUsed: number; latencyMs: number;
+      };
+
+      return {
+        question: result.question,
+        hints: [result.hint, result.thinkingDirection].filter(Boolean),
+      };
+    } catch (error: unknown) {
+      throw this.handleError(error);
+    }
+  }
+
+  // ── invoke('ai_socratic_evaluate') ────────────────────────────
+  async socraticEvaluate(
+    topic: string,
+    question: string,
+    answer: string,
+    history: ChatMessage[],
+  ): Promise<SocraticEvaluateResult> {
+    this.checkOnline();
+    try {
+      const backendHistory = history.map(h => ({
+        role: h.role === 'assistant' ? 'tutor' : 'learner',
+        content: h.content,
+      }));
+
+      const result = await window.electronAPI!.invoke('ai_socratic_evaluate', {
+        topic,
+        question,
+        answer,
+        history: backendHistory,
+        authToken: this.authToken,
+      }) as {
+        dimensions: { accuracy: number; completeness: number; logic: number; expression: number };
+        feedback: string;
+        encouragement: string;
+        status: string;
+        model: string;
+        tokensUsed: number;
+        latencyMs: number;
+      };
+
+      return {
+        dimensions: result.dimensions,
+        feedback: result.feedback,
+        encouragement: result.encouragement,
+        model: result.model,
+        tokensUsed: result.tokensUsed,
+        latencyMs: result.latencyMs,
+      };
+    } catch (error) {
+      throw this.handleError(error, 'socraticEvaluate');
+    }
+  }
+
+  // ── invoke('ai_socratic_deepening') ───────────────────────────
+  async socraticDeepening(
+    topic: string,
+    dialogueSummary: string,
+    history: ChatMessage[],
+  ): Promise<SocraticDeepeningResult> {
+    this.checkOnline();
+    try {
+      const backendHistory = history.map(h => ({
+        role: h.role === 'assistant' ? 'tutor' : 'learner',
+        content: h.content,
+      }));
+
+      const result = await window.electronAPI!.invoke('ai_socratic_deepening', {
+        topic,
+        dialogueSummary,
+        history: backendHistory,
+        authToken: this.authToken,
+      }) as {
+        angles: Array<{ key: string; label: string; question: string }>;
+        status: string;
+        model: string;
+        tokensUsed: number;
+        latencyMs: number;
+      };
+
+      return {
+        angles: result.angles,
+        status: result.status,
+        model: result.model,
+        tokensUsed: result.tokensUsed,
+        latencyMs: result.latencyMs,
+      };
+    } catch (error) {
+      throw this.handleError(error, 'socraticDeepening');
+    }
+  }
+
+  // ── invoke('ai_predict') ──────────────────────────────────────
+  async predictQuestion(noteId: string, content: string): Promise<{ predictions: PredictionPrompt[] }> {
+    this.checkOnline();
+    try {
+      const result = await window.electronAPI!.invoke('ai_predict', {
+        content,
+        authToken: this.authToken,
+      }) as {
+        predictions: Array<{ question: string; type: string; reason: string; curiosityScore: number }>;
+        status: string; model: string; tokensUsed: number; latencyMs: number;
+      };
+
+      return {
+        predictions: (result.predictions || []).map(p => ({
+          question: p.question,
+          expectedAnswer: p.reason || '',
+          difficulty: Math.round(p.curiosityScore * 5) as PredictionPrompt['difficulty'],
+          relatedConcepts: p.type ? [p.type] : undefined,
+        })),
+      };
+    } catch (error: unknown) {
+      throw this.handleError(error);
+    }
+  }
+
+  // ── invoke('ai_rescue') ───────────────────────────────────────
+  async rescue(context: RescueContext): Promise<{ hints: string[]; resources: ResourceLink[]; alternativeApproach?: string }> {
+    this.checkOnline();
+    try {
+      const result = await window.electronAPI!.invoke('ai_rescue', {
+        content: context.relatedContent || context.topic,
+        stuckDescription: context.stuckPoint || context.topic,
+        attemptedMethods: context.attempts?.join('; ') || '',
+        authToken: this.authToken,
+      }) as {
+        rescueLevels: Array<{ level: number; label: string; suggestion: string; hintQuestion: string }>;
+        encouragement: string;
+        status: string; model: string; tokensUsed: number; latencyMs: number;
+      };
+
+      const hints = (result.rescueLevels || []).map(lv => lv.hintQuestion || lv.suggestion);
+      const alternativeApproach = (result.rescueLevels || []).find(lv => lv.level === 3)?.suggestion;
+
+      return {
+        hints,
+        resources: [],
+        alternativeApproach,
+      };
+    } catch (error: unknown) {
+      throw this.handleError(error);
+    }
+  }
+
+  private handleError(error: unknown, _ctx?: string): AIError {
     if (error instanceof AIError) return error;
 
     const msg = error instanceof Error ? error.message : String(error);

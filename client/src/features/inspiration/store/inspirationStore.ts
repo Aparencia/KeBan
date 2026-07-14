@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '@/lib/storage/database';
+import type { SortSuggestion } from '@/lib/ai/types';
 
 export interface InspirationTags {
   content_nature: 'concept' | 'question' | 'inspiration' | 'todo';
@@ -15,6 +16,10 @@ export interface InspirationItem {
   tagsManuallyEdited: boolean;
   createdAt: string;
   updatedAt: string;
+  /** AI 分拣状态 */
+  sortStatus?: 'pending' | 'sorting' | 'sorted' | 'confirmed' | 'transformed';
+  /** AI 分拣建议结果列表 */
+  sortResult?: SortSuggestion[];
 }
 
 interface InspirationState {
@@ -24,6 +29,9 @@ interface InspirationState {
   addItem: (content: string, tags: InspirationTags) => void;
   updateTags: (id: string, tags: Partial<InspirationTags>) => void;
   deleteItem: (id: string) => void;
+  updateSortStatus: (id: string, status: string, result?: SortSuggestion[]) => void;
+  confirmSort: (id: string, selectedCategory?: string) => void;
+  batchUpdateSortStatus: (ids: string[], status: string) => void;
 }
 
 export const useInspirationStore = create<InspirationState>((set, get) => ({
@@ -83,6 +91,72 @@ export const useInspirationStore = create<InspirationState>((set, get) => ({
     set((s) => ({ items: s.items.filter((i) => i.id !== id) }));
     // Persist to Dexie async
     db.inspirations.delete(id).catch(() => {
+      // Silent failure
+    });
+  },
+
+  updateSortStatus: (id, status, result) => {
+    const now = new Date().toISOString();
+    const updates: Partial<InspirationItem> = {
+      sortStatus: status as InspirationItem['sortStatus'],
+      updatedAt: now,
+    };
+    if (result !== undefined) {
+      updates.sortResult = result;
+    }
+    // Optimistic update
+    set((s) => ({
+      items: s.items.map((i) => (i.id === id ? { ...i, ...updates } : i)),
+    }));
+    // Persist to Dexie async
+    db.inspirations.update(id, updates).catch(() => {
+      // Silent failure
+    });
+  },
+
+  confirmSort: (id, selectedCategory) => {
+    const now = new Date().toISOString();
+    const item = get().items.find((i) => i.id === id);
+    if (!item) return;
+
+    let sortResult = item.sortResult;
+    if (selectedCategory && sortResult) {
+      sortResult = sortResult.map((s) =>
+        s.category === selectedCategory ? { ...s } : s
+      );
+    }
+
+    const updates: Partial<InspirationItem> = {
+      sortStatus: 'confirmed',
+      sortResult,
+      updatedAt: now,
+    };
+    // Optimistic update
+    set((s) => ({
+      items: s.items.map((i) => (i.id === id ? { ...i, ...updates } : i)),
+    }));
+    // Persist to Dexie async
+    db.inspirations.update(id, updates).catch(() => {
+      // Silent failure
+    });
+  },
+
+  batchUpdateSortStatus: (ids, status) => {
+    const now = new Date().toISOString();
+    const updates: Partial<InspirationItem> = {
+      sortStatus: status as InspirationItem['sortStatus'],
+      updatedAt: now,
+    };
+    // Optimistic update
+    set((s) => ({
+      items: s.items.map((i) => (ids.includes(i.id) ? { ...i, ...updates } : i)),
+    }));
+    // Persist to Dexie using transaction
+    db.transaction('rw', db.inspirations, async () => {
+      for (const id of ids) {
+        await db.inspirations.update(id, updates);
+      }
+    }).catch(() => {
       // Silent failure
     });
   },

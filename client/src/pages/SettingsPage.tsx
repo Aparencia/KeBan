@@ -1,13 +1,24 @@
+import { lazy, Suspense } from 'react';
 import { motion } from 'framer-motion';
 import ProfileSettings from './settings/ProfileSettings';
 import AppearanceSettings from './settings/AppearanceSettings';
 import SoundSettings from './settings/SoundSettings';
-import SyncSettings from './settings/SyncSettings';
-import AIProviderSettings from './settings/AIProviderSettings';
-import DataSettings from './settings/DataSettings';
 import ModeSettings from './settings/ModeSettings';
-import StoragePathSettings from './settings/StoragePathSettings';
-import AboutSettings from './settings/AboutSettings';
+
+// 延迟组：有网络/IPC/DB 操作的重组件
+const AIProviderSettings = lazy(() => import('./settings/AIProviderSettings'));
+const DataSettings = lazy(() => import('./settings/DataSettings'));
+const AboutSettings = lazy(() => import('./settings/AboutSettings'));
+
+/** 轻量骨架 fallback */
+function SettingsSectionSkeleton() {
+  return (
+    <div className="rounded-[var(--kb-radius-lg)] border border-border/30 bg-bg-elevated/50 p-4 animate-pulse">
+      <div className="h-4 w-24 bg-bg-tertiary rounded mb-3" />
+      <div className="h-3 w-full bg-bg-tertiary rounded" />
+    </div>
+  );
+}
 
 export default function SettingsPage() {
   return (
@@ -30,11 +41,11 @@ export default function SettingsPage() {
         <AppearanceSettings />
         <SoundSettings />
         <ModeSettings />
-        <SyncSettings />
-        <AIProviderSettings />
-        <DataSettings />
-        <StoragePathSettings />
-        <AboutSettings />
+        <Suspense fallback={<SettingsSectionSkeleton />}>
+          <AIProviderSettings />
+          <DataSettings />
+          <AboutSettings />
+        </Suspense>
       </div>
     </motion.div>
   );

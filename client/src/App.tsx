@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useLayoutEffect } from 'react';
 import { RouterProvider } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ToastProvider } from '@/components/ui/Toast';
@@ -29,6 +29,39 @@ const queryClient = new QueryClient({
 function App() {
   // Initialize theme on app mount
   useTheme();
+
+  // ── 启动缓冲带：接管 HTML 内联 splash，首次渲染完成后淡出 ──
+  useLayoutEffect(() => {
+    const splash = document.getElementById('app-splash');
+    if (!splash) return;
+
+    const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    if (prefersReduced) {
+      splash.remove();
+      return;
+    }
+
+    // 触发淡出过渡（CSS transition: opacity 0.5s ease）
+    requestAnimationFrame(() => {
+      splash.style.opacity = '0';
+      const onEnd = () => {
+        splash.remove();
+        splash.removeEventListener('transitionend', onEnd);
+      };
+      splash.addEventListener('transitionend', onEnd);
+      // 安全兑底：transitionend 未触发时强制移除
+      setTimeout(() => { if (splash.parentNode) splash.remove(); }, 800);
+    });
+
+    // 应用空闲时预检测 AI 网关健康状态（不阻塞首屏）
+    const idle = window.requestIdleCallback ?? ((cb: () => void) => setTimeout(cb, 1500));
+    idle(() => {
+      import('./hooks/useAIGatewayHealth').then(({ precheckGatewayHealth }) => {
+        precheckGatewayHealth();
+      });
+    });
+  }, []);
 
   const [consentGiven, setConsentGiven] = useState<boolean | null>(null);
 

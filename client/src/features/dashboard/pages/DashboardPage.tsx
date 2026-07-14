@@ -1,21 +1,35 @@
-﻿import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
+import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, useMotionValue, useTransform, useSpring } from 'framer-motion';
 import {
   Timer, FileText, Layers, Lightbulb, CheckCircle2,
-  Activity, PenLine, Brain, Flame, Sparkles, Shield,
+  Activity, PenLine, Brain, Sparkles, Clock,
 } from 'lucide-react';
-import { Card, Skeleton, EmptyState, RichTooltip, KnowledgeGalaxy } from '@/components/ui';
+import { Card, Skeleton } from '@/components/ui';
 import type { StarPoint } from '@/components/ui/KnowledgeGalaxy';
 import { cn } from '@/lib/utils';
-import { pomodoroSessionStore, flashcardStore, flashcardReviewStore } from '@/lib/storage';
+import { pomodoroSessionStore, flashcardStore, flashcardReviewStore, appSettingsStore } from '@/lib/storage';
 import { useFlashcardStore } from '@/features/flashcards/store/useFlashcardStore';
 import { useNoteStore } from '@/features/notes/store/useNoteStore';
 import { useFeynmanStore } from '@/features/feynman/store/useFeynmanStore';
 import { useCheckIn } from '@/lib/checkin/useCheckIn';
 import { useAuth } from '@/lib/auth/AuthContext';
-import AchievementPanel from '../components/AchievementPanel';
+import StartupRitual from '../components/StartupRitual';
+import { useLastSession } from '../hooks/useLastSession';
+import type { MicroGoal, RitualSettings } from '../types';
 import type { PomodoroSession, Flashcard, FlashcardReview, StudyCheckIn } from '@/types/models';
+import HeatmapChart from '../components/HeatmapChart';
+import { useLearningAnalytics } from '../hooks/useLearningAnalytics';
+// 深海组件
+import DeepSeaContainer from '../components/deep-sea/DeepSeaContainer';
+import BubbleStreak from '../components/deep-sea/creatures/BubbleStreak';
+import CoralReefCalendar from '../components/deep-sea/creatures/CoralReefCalendar';
+import AnglerfishAchievements from '../components/deep-sea/creatures/AnglerfishAchievements';
+import NeuronGalaxy from '../components/deep-sea/creatures/NeuronGalaxy';
+import JellyfishRadar from '../components/deep-sea/creatures/JellyfishRadar';
+import JellyfishTrend from '../components/deep-sea/creatures/JellyfishTrend';
+import PlanktonStream from '../components/deep-sea/creatures/PlanktonStream';
+import PearlGoal from '../components/deep-sea/creatures/PearlGoal';
 
 /* ── 工具函数 ── */
 const accentText: Record<string, string> = {
@@ -179,10 +193,10 @@ interface ActivityItem {
 
 /* ── 快速操作 ── */
 const quickActions = [
-  { label: '番茄钟', icon: Timer, path: '/pomodoro', accent: 'pomodoro' as const, gradient: 'from-brand-400/20 to-brand-600/10' },
-  { label: '智能笔记', icon: FileText, path: '/notes', accent: 'note' as const, gradient: 'from-note/20 to-note/5' },
-  { label: '闪卡', icon: Layers, path: '/flashcards', accent: 'flashcard' as const, gradient: 'from-flashcard/20 to-flashcard/5' },
-  { label: '费曼学习', icon: Lightbulb, path: '/feynman', accent: 'feynman' as const, gradient: 'from-feynman/20 to-feynman/5' },
+  { label: '深潜', icon: Timer, path: '/pomodoro', accent: 'pomodoro' as const, gradient: 'from-brand-400/20 to-brand-600/10' },
+  { label: '结礁', icon: FileText, path: '/notes', accent: 'note' as const, gradient: 'from-note/20 to-note/5' },
+  { label: '反衰减呼吸', icon: Layers, path: '/flashcards', accent: 'flashcard' as const, gradient: 'from-flashcard/20 to-flashcard/5' },
+  { label: '浮出水面', icon: Lightbulb, path: '/feynman', accent: 'feynman' as const, gradient: 'from-feynman/20 to-feynman/5' },
 ];
 
 /* ── 容器动画 ── */
@@ -306,44 +320,66 @@ function useElasticPageTransition() {
   return { offset, currentPage, headerOffset: headerOffset.current, containerHeight, progress: containerHeight > 0 ? Math.min(1, Math.max(0, -offset / containerHeight)) : 0 };
 }
 
-/* ── 3D 浮动卡片组件 ── */
-function FloatCard3D({ children, className, depth = 1 }: { children: React.ReactNode; className?: string; depth?: number }) {
-  const cardRef = useRef<HTMLDivElement>(null);
-  const [transform, setTransform] = useState('perspective(800px) rotateX(0deg) rotateY(0deg) translateZ(0px)');
-
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!cardRef.current) return;
-    const rect = cardRef.current.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width - 0.5;
-    const y = (e.clientY - rect.top) / rect.height - 0.5;
-    const rotX = -y * 12 * depth;
-    const rotY = x * 12 * depth;
-    setTransform(`perspective(800px) rotateX(${rotX}deg) rotateY(${rotY}deg) translateZ(${8 * depth}px)`);
-  }, [depth]);
-
-  const handleMouseLeave = useCallback(() => {
-    setTransform('perspective(800px) rotateX(0deg) rotateY(0deg) translateZ(0px)');
-  }, []);
-
-  return (
-    <div
-      ref={cardRef}
-      className={className}
-      style={{ transform, transition: 'transform 0.15s ease-out', transformStyle: 'preserve-3d' }}
-      onMouseMove={handleMouseMove}
-      onMouseLeave={handleMouseLeave}
-    >
-      {children}
-    </div>
-  );
-}
-
 /* ══════════════════════════════════════════
    Dashboard 页面组件
    ══════════════════════════════════════════ */
+/* ── 工具：获取今天日期字符串 YYYY-MM-DD ── */
+function getTodayStr(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 export default function DashboardPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
+
+  /* ── 学习启动仪式状态 ── */
+  const [showRitual, setShowRitual] = useState(false);
+  const lastSession = useLastSession();
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const settings = await appSettingsStore.getAll();
+        const ritualRow = settings.find((s) => s.key === 'startupRitual');
+        const ritual: RitualSettings | undefined = ritualRow
+          ? JSON.parse(ritualRow.value)
+          : undefined;
+        if (ritual?.enabled === false) return;
+        if (ritual?.skipToday && ritual?.lastRitualDate === getTodayStr()) return;
+        if (ritual?.lastRitualDate === getTodayStr()) return;
+        setShowRitual(true);
+      } catch {
+        // 首次使用，无设置记录，显示仪式
+        setShowRitual(true);
+      }
+    })();
+  }, []);
+
+  const handleRitualComplete = useCallback(async (goal?: MicroGoal) => {
+    const today = getTodayStr();
+    const ritualValue: RitualSettings = { enabled: true, lastRitualDate: today, skipToday: false };
+    try {
+      const settings = await appSettingsStore.getAll();
+      const ritualRow = settings.find((s) => s.key === 'startupRitual');
+      if (ritualRow) {
+        await appSettingsStore.update(ritualRow.id, { value: JSON.stringify(ritualValue), updatedAt: new Date() });
+      } else {
+        await appSettingsStore.create({
+          id: `startupRitual-${Date.now()}`,
+          key: 'startupRitual',
+          value: JSON.stringify(ritualValue),
+          updatedAt: new Date(),
+        });
+      }
+    } catch { /* 静默 */ }
+    void goal; // 微目标暂不持久化，留给后续扩展
+    setShowRitual(false);
+  }, []);
+
+  const handleRitualSkip = useCallback(async () => {
+    setShowRitual(false);
+  }, []);
 
   const userName = user?.user_metadata?.display_name || user?.email?.split('@')[0];
   const greetingText = useMemo(() => {
@@ -383,6 +419,7 @@ export default function DashboardPage() {
   const loadFeynmanNotes = useFeynmanStore((s) => s.loadNotes);
 
   const [isLoading, setIsLoading] = useState(true);
+  const [analyticsDays, setAnalyticsDays] = useState(30);
   const [pomodoroSessions, setPomodoroSessions] = useState<PomodoroSession[]>([]);
   const [allCards, setAllCards] = useState<Flashcard[]>([]);
   const [flashcardReviews, setFlashcardReviews] = useState<FlashcardReview[]>([]);
@@ -406,10 +443,10 @@ export default function DashboardPage() {
   const feynmanInProgressCount = useMemo(() => feynmanNotes.filter((n) => n.status === 'in_progress').length, [feynmanNotes]);
 
   const overviewCards = [
-    { label: '今日番茄', value: todayPomodoroCount, unit: '个', icon: Timer, accent: 'pomodoro' as const },
-    { label: '笔记总数', value: noteTotal, unit: '篇', icon: FileText, accent: 'note' as const },
-    { label: '待复习闪卡', value: dueFlashcardCount, unit: '张', icon: Layers, accent: 'flashcard' as const },
-    { label: '费曼进行中', value: feynmanInProgressCount, unit: '个', icon: Lightbulb, accent: 'feynman' as const },
+    { label: '今日深潜', value: todayPomodoroCount, unit: '个', icon: Timer, accent: 'pomodoro' as const },
+    { label: '结礁总数', value: noteTotal, unit: '篇', icon: FileText, accent: 'note' as const },
+    { label: '反衰减呼吸', value: dueFlashcardCount, unit: '张', icon: Layers, accent: 'flashcard' as const },
+    { label: '浮出水面进行中', value: feynmanInProgressCount, unit: '个', icon: Lightbulb, accent: 'feynman' as const },
   ];
 
   const starPoints = useMemo<StarPoint[]>(() => {
@@ -430,20 +467,20 @@ export default function DashboardPage() {
     const activities: ActivityItem[] = [];
     pomodoroSessions.forEach((s) => {
       const d = new Date(s.completedAt);
-      activities.push({ icon: CheckCircle2, text: `完成了 ${Math.round(s.actualDuration / 60)} 分钟番茄钟`, time: formatRelativeTime(d), accent: 'pomodoro', timestamp: d.getTime() });
+      activities.push({ icon: CheckCircle2, text: `完成了 ${Math.round(s.actualDuration / 60)} 分钟深潜`, time: formatRelativeTime(d), accent: 'pomodoro', timestamp: d.getTime() });
     });
     notes.forEach((n) => {
       const d = new Date(n.updatedAt);
-      activities.push({ icon: PenLine, text: `笔记「${n.title || '无标题'}」`, time: formatRelativeTime(d), accent: 'note', timestamp: d.getTime() });
+      activities.push({ icon: PenLine, text: `结礁「${n.title || '无标题'}」`, time: formatRelativeTime(d), accent: 'note', timestamp: d.getTime() });
     });
     feynmanNotes.forEach((fn) => {
       const d = new Date(fn.updatedAt);
-      activities.push({ icon: Brain, text: `费曼学习「${fn.concept}」`, time: formatRelativeTime(d), accent: 'feynman', timestamp: d.getTime() });
+      activities.push({ icon: Brain, text: `浮出水面「${fn.concept}」`, time: formatRelativeTime(d), accent: 'feynman', timestamp: d.getTime() });
     });
     flashcardReviews.slice(0, 20).forEach((review) => {
       const d = new Date(review.reviewedAt);
       const ratingLabel = ['Again', 'Hard', 'Good', 'Easy'][review.rating - 1] ?? '';
-      activities.push({ icon: Layers, text: `复习了闪卡（${ratingLabel}）`, time: formatRelativeTime(d), accent: 'flashcard', timestamp: d.getTime() });
+      activities.push({ icon: Layers, text: `复习了反衰减呼吸（${ratingLabel}）`, time: formatRelativeTime(d), accent: 'flashcard', timestamp: d.getTime() });
     });
     activities.sort((a, b) => b.timestamp - a.timestamp);
     return activities.slice(0, 4);
@@ -454,10 +491,10 @@ export default function DashboardPage() {
   const countNotes = useCountUp(noteTotal);
   const countFlashcards = useCountUp(dueFlashcardCount);
   const countFeynman = useCountUp(feynmanInProgressCount);
-  const countStreak = useCountUp(streakDays);
   const counters = [countPomodoro, countNotes, countFlashcards, countFeynman];
 
   const { offset, currentPage, headerOffset, containerHeight, progress } = useElasticPageTransition();
+  const { data: analytics, loading: analyticsLoading } = useLearningAnalytics(analyticsDays);
 
   // 鼠标视差追踪（用于页2 3D 效果）
   const mouseParallax = useRef({ x: 0, y: 0 });
@@ -473,6 +510,22 @@ export default function DashboardPage() {
     window.addEventListener('mousemove', handleMouseMove);
     return () => window.removeEventListener('mousemove', handleMouseMove);
   }, []);
+
+  // 页2 内部滚动：允许分析区域独立滚动，阻止弹性翻页拦截
+  useEffect(() => {
+    const el = document.querySelector('[data-dashboard-scroll]') as HTMLElement | null;
+    if (!el) return;
+    const handler = (e: WheelEvent) => {
+      const page2 = currentPage === 1;
+      const canDown = el.scrollTop < el.scrollHeight - el.clientHeight - 2;
+      const canUp = el.scrollTop > 2;
+      if (page2 && ((e.deltaY > 0 && canDown) || (e.deltaY < 0 && canUp))) {
+        e.stopPropagation();
+      }
+    };
+    el.addEventListener('wheel', handler, { passive: false, capture: true });
+    return () => el.removeEventListener('wheel', handler, true);
+  }, [currentPage]);
 
   return (
     <div
@@ -582,9 +635,9 @@ export default function DashboardPage() {
       </div>{/* end page-1 content wrapper */}
       </motion.div>{/* end page 1 */}
 
-      {/* ════ 第二页：详细内容 ════ */}
+      {/* ════ 第二页：深海认知景深层 ════ */}
       <motion.div
-        className="absolute inset-0 px-6 py-3 overflow-hidden"
+        className="absolute inset-0 overflow-hidden"
         style={{
           y: offset + containerHeight,
           scale: 0.88 + progress * 0.12,
@@ -592,185 +645,142 @@ export default function DashboardPage() {
           rotateX: `${-6 + progress * 6}deg`,
         }}
       >
-      <div className="max-w-[1100px] mx-auto flex flex-col gap-2.5 h-full overflow-hidden" style={{ transform: `translate(${parallaxStyle.x}px, ${parallaxStyle.y}px)`, transition: 'transform 0.3s ease-out' }}>
-
-      {/* Row 1: Check-in + Calendar */}
-      <div className="grid grid-cols-[180px_1fr] gap-2.5">
-        {/* Check-in streak */}
-        <FloatCard3D depth={1.5}>
-        <motion.div variants={itemVariants} className="relative rounded-[var(--kb-radius-lg)] overflow-hidden group">
-          <div className="absolute inset-0 bg-gradient-to-br from-accent-400/10 via-transparent to-brand-400/10 pointer-events-none" />
-          <div className="relative flex flex-col items-center justify-center gap-0.5 p-3 border border-border/30 rounded-[var(--kb-radius-lg)] bg-bg-elevated/50 backdrop-blur-sm transition-all duration-300 group-hover:border-accent-400/30 group-hover:shadow-[0_0_20px_rgba(251,146,60,0.08)]">
-            {checkInLoading ? (
-              <Skeleton variant="circular" width={48} height={48} />
-            ) : (
-              <>
-                <motion.div
-                  animate={{ scale: [1, 1.1, 1] }}
-                  transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-                >
-                  <Flame className="w-5 h-5 text-accent-400" strokeWidth={1.5} />
-                </motion.div>
-                <RichTooltip content="连续打卡天数，断签后重置为 1" position="bottom" delay={200}>
-                  <span className="text-[24px] font-bold text-accent-400 tabular-nums cursor-help kb-count-animate">
-                    {countStreak}
-                  </span>
-                </RichTooltip>
-                <span className="text-[10px] text-text-tertiary">天连续打卡</span>
-                <div className={cn(
-                  'text-[9px] font-medium px-2 py-0.5 rounded-full flex items-center gap-1',
-                  todayCheckIn
-                    ? 'bg-brand-500/10 text-brand-500'
-                    : 'bg-bg-tertiary/50 text-text-tertiary',
-                )}>
-                  {todayCheckIn ? <><CheckCircle2 className="w-2.5 h-2.5" /> 今日已打卡</> : '今日未打卡'}
-                </div>
-                <div className="flex items-center gap-1 text-[8px] text-text-tertiary/60 mt-0.5">
-                  <Shield className="w-2.5 h-2.5" strokeWidth={1.2} />
-                  <span>2 冻结卡可用</span>
-                </div>
-              </>
-            )}
-          </div>
-        </motion.div>
-        </FloatCard3D>
-
-        {/* Calendar */}
-        <FloatCard3D depth={1}>
-        <motion.div variants={cardVariants} className="rounded-[var(--kb-radius-lg)] border border-border/30 bg-bg-elevated/50 backdrop-blur-sm p-2.5">
-          <h3 className="text-[10px] font-medium text-text-primary mb-1">
-            {new Date().getFullYear()}年{new Date().getMonth() + 1}月 打卡日历
-          </h3>
-          <div className="grid grid-cols-7 gap-0.5 mb-0.5">
-            {['一', '二', '三', '四', '五', '六', '日'].map((w) => (
-              <div key={w} className="text-center text-[7px] text-text-tertiary font-medium">{w}</div>
-            ))}
-          </div>
-          <div className="grid grid-cols-7 gap-0.5">
-            {calendarDays.map((cell, i) => (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: i * 0.005, duration: 0.15 }}
-                className={cn(
-                  'h-[22px] flex items-center justify-center rounded-[var(--kb-radius-sm)] text-[8px] transition-all duration-200',
-                  cell.day === null && 'invisible',
-                  cell.day !== null && cell.checked && 'bg-brand-500 text-white font-semibold shadow-[0_0_8px_rgba(91,138,114,0.3)]',
-                  cell.day !== null && !cell.checked && 'bg-bg-tertiary/30 text-text-tertiary hover:bg-bg-tertiary/60',
-                  cell.isToday && !cell.checked && 'ring-1 ring-brand-400/50 ring-offset-1 ring-offset-bg-primary',
-                )}
-              >
-                {cell.day ?? ''}
-              </motion.div>
-            ))}
-          </div>
-        </motion.div>
-        </FloatCard3D>
-      </div>{/* end row 1 */}
-
-      {/* Row 2: Achievement + Knowledge Galaxy */}
-      <div className="grid grid-cols-2 gap-2.5">
-        <FloatCard3D depth={0.8}>
-        <motion.div variants={cardVariants} className="rounded-[var(--kb-radius-lg)] border border-border/30 bg-bg-elevated/50 backdrop-blur-sm overflow-hidden">
-          <AchievementPanel />
-        </motion.div>
-        </FloatCard3D>
-
-        <FloatCard3D depth={1.2}>
-        <motion.div variants={cardVariants} className="rounded-[var(--kb-radius-lg)] border border-border/30 overflow-hidden bg-bg-elevated/50 backdrop-blur-sm">
-          <KnowledgeGalaxy points={starPoints} />
-        </motion.div>
-        </FloatCard3D>
-      </div>{/* end row 2 */}
-
-      {/* Row 3: Quick start + Recent activity */}
-      <div className="grid grid-cols-[200px_1fr] gap-2.5">
-        {/* Quick start */}
-        <FloatCard3D depth={0.8}>
-        <motion.section className="flex flex-col gap-1.5" variants={itemVariants}>
-          <h2 className="text-[11px] font-semibold text-text-primary">快速开始</h2>
-          <div className="grid grid-cols-2 gap-2">
-            {quickActions.map((action) => {
-              const Icon = action.icon;
-              return (
-                <motion.button
-                  key={action.path}
-                  onClick={() => navigate(action.path)}
-                  whileHover={{ y: -3, scale: 1.03 }}
-                  whileTap={{ scale: 0.96 }}
-                  className={cn(
-                    'group flex flex-col items-center gap-2 rounded-[var(--kb-radius-lg)]',
-                    'border border-border/30 bg-bg-elevated/60 backdrop-blur-sm',
-                    'p-2 transition-all duration-300',
-                    'hover:border-brand-300/40 hover:shadow-[0_8px_24px_-8px_rgba(91,138,114,0.15)]',
-                    'active:scale-[0.97]',
-                  )}
-                >
-                  <div className={cn(
-                    'p-1.5 rounded-[var(--kb-radius-md)] bg-gradient-to-br transition-all duration-300',
-                    'group-hover:shadow-[0_0_12px_rgba(91,138,114,0.2)]',
-                    action.gradient,
-                  )}>
-                    <Icon className="w-4 h-4" strokeWidth={1.5} />
+        <DeepSeaContainer
+          elasticProgress={progress}
+          layers={[
+            {
+              zone: 'surface' as const,
+              label: '海面 -- 今日核心',
+              children: (
+                <div className="flex flex-col gap-2.5">
+                  {/* Row 1: 气泡柱 + 珊瑚礁日历 */}
+                  <div className="grid grid-cols-[160px_1fr] gap-2.5">
+                    <BubbleStreak streakDays={streakDays} todayChecked={todayCheckIn} loading={checkInLoading} />
+                    <CoralReefCalendar days={calendarDays} month={new Date().getMonth()} year={new Date().getFullYear()} />
                   </div>
-                  <span className="text-[10px] font-medium text-text-primary">{action.label}</span>
-                </motion.button>
-              );
-            })}
-          </div>
-        </motion.section>
-        </FloatCard3D>
-
-        {/* Recent activity */}
-        <FloatCard3D depth={0.6}>
-        <motion.section className="flex flex-col gap-1.5" variants={itemVariants}>
-          <h2 className="text-[11px] font-semibold text-text-primary">最近活动</h2>
-          {isLoading ? (
-            <div className="rounded-[var(--kb-radius-lg)] border border-border/30 bg-bg-elevated/40 p-3">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className="flex items-center gap-3 py-2">
-                  <Skeleton variant="circular" width={28} height={28} />
-                  <Skeleton variant="text" className="flex-1" />
-                  <Skeleton variant="text" width="60px" />
-                </div>
-              ))}
-            </div>
-          ) : recentActivities.length === 0 ? (
-            <div className="rounded-[var(--kb-radius-lg)] border border-border/30 bg-bg-elevated/40 overflow-hidden">
-              <EmptyState
-                icon={<Activity className="w-10 h-10" strokeWidth={1.2} />}
-                title="暂无活动记录"
-                description="开始学习后，你的活动记录将显示在这里"
-              />
-            </div>
-          ) : (
-            <div className="rounded-[var(--kb-radius-lg)] border border-border/30 bg-bg-elevated/50 backdrop-blur-sm overflow-hidden divide-y divide-border/20">
-              {recentActivities.map((item, i) => {
-                const Icon = item.icon;
-                return (
-                  <motion.div
-                    key={i}
-                    initial={{ opacity: 0, x: -8 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: i * 0.05, duration: 0.25 }}
-                    className="flex items-center gap-3 px-3 py-1.5 hover:bg-bg-secondary/40 transition-colors duration-200 group"
-                  >
-                    <div className={cn('p-1.5 rounded-[var(--kb-radius-sm)] shrink-0', accentBg[item.accent], 'group-hover:shadow-[0_0_8px_rgba(91,138,114,0.1)] transition-shadow duration-200')}>
-                      <Icon className={cn('w-3.5 h-3.5', accentText[item.accent])} strokeWidth={1.5} />
+                  {/* Row 2: 快速开始 */}
+                  <motion.section className="flex flex-col gap-1.5" variants={itemVariants}>
+                    <h2 className="text-[11px] font-semibold text-cyan-200/70">快速开始</h2>
+                    <div className="grid grid-cols-4 gap-2">
+                      {quickActions.map((action) => {
+                        const Icon = action.icon;
+                        return (
+                          <motion.button
+                            key={action.path}
+                            onClick={() => navigate(action.path)}
+                            whileHover={{ y: -2, scale: 1.03 }}
+                            whileTap={{ scale: 0.96 }}
+                            className={cn(
+                              'group flex flex-col items-center gap-1.5 rounded-[var(--kb-radius-lg)]',
+                              'border border-cyan-400/15 bg-bg-elevated/30 backdrop-blur-sm',
+                              'p-2 transition-all duration-300',
+                              'hover:border-cyan-400/30 hover:shadow-[0_0_16px_rgba(34,211,238,0.08)]',
+                            )}
+                          >
+                            <div className={cn('p-1.5 rounded-[var(--kb-radius-sm)] bg-gradient-to-br transition-all duration-300', action.gradient)}>
+                              <Icon className="w-4 h-4" strokeWidth={1.5} />
+                            </div>
+                            <span className="text-[10px] font-medium text-cyan-200/70">{action.label}</span>
+                          </motion.button>
+                        );
+                      })}
                     </div>
-                    <span className="text-[12px] text-text-primary flex-1 truncate">{item.text}</span>
-                    <span className="text-[10px] text-text-tertiary shrink-0 tabular-nums">{item.time}</span>
-                  </motion.div>
-                );
-              })}
-            </div>
-          )}
-        </motion.section>
-        </FloatCard3D>
-      </div>{/* end bottom row */}
-      </div>{/* end page-2 content wrapper */}
+                  </motion.section>
+                </div>
+              ),
+            },
+            {
+              zone: 'sunlight' as const,
+              label: '透光层 -- 近期活跃',
+              children: (
+                <div className="grid grid-cols-2 gap-2.5">
+                  <JellyfishRadar data={analytics?.radar ?? []} loading={analyticsLoading} />
+                  <JellyfishTrend data={analytics?.trend ?? []} loading={analyticsLoading} />
+                </div>
+              ),
+            },
+            {
+              zone: 'twilight' as const,
+              label: '中层 -- 知识结构',
+              children: (
+                <div className="flex flex-col gap-2.5">
+                  {/* 学习分析 -- 时间范围控制 */}
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-[11px] font-semibold text-cyan-200/70 flex items-center gap-1.5">
+                      <Activity className="w-3.5 h-3.5 text-cyan-400/60" strokeWidth={1.5} />
+                      学习分析
+                    </h2>
+                    <div className="flex gap-0.5 rounded-[8px] bg-bg-tertiary/20 p-0.5">
+                      {[{ l: '7天', d: 7 }, { l: '30天', d: 30 }, { l: '全部', d: 3650 }].map((r) => (
+                        <button
+                          key={r.d}
+                          onClick={() => setAnalyticsDays(r.d)}
+                          className={cn(
+                            'px-2 py-0.5 rounded-[6px] text-[9px] font-medium transition-all duration-200',
+                            analyticsDays === r.d
+                              ? 'bg-cyan-400/20 text-cyan-200'
+                              : 'text-text-tertiary/60 hover:text-cyan-200/60',
+                          )}
+                        >
+                          {r.l}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <NeuronGalaxy points={starPoints} />
+                  <div className="rounded-[var(--kb-radius-lg)] border border-cyan-400/15 bg-bg-elevated/20 backdrop-blur-sm p-3">
+                    <h3 className="text-[10px] font-medium text-cyan-200/60 mb-2">学习热力图</h3>
+                    <HeatmapChart data={analytics?.heatmap ?? []} loading={analyticsLoading} />
+                  </div>
+                  {/* 智能时段推荐 */}
+                  {analytics?.recommendations?.length ? (
+                    <div className="grid grid-cols-3 gap-2">
+                      {analytics.recommendations.map((rec, i) => (
+                        <div key={i} className="rounded-[var(--kb-radius-lg)] border border-cyan-400/10 bg-bg-elevated/20 backdrop-blur-sm p-2.5 transition-all duration-300 hover:border-cyan-400/25">
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <Clock className="w-3 h-3 text-cyan-400/60" strokeWidth={1.5} />
+                            <span className="text-[9px] font-semibold text-cyan-300/60">推荐时段</span>
+                            <span className="text-[8px] text-text-tertiary/40">{rec.score}%</span>
+                          </div>
+                          <p className="text-[10px] text-text-primary/70 leading-relaxed">{rec.reason}</p>
+                          <div className="mt-1.5 h-1 rounded-full bg-bg-tertiary/20 overflow-hidden">
+                            <div className="h-full rounded-full bg-cyan-400/40 transition-all duration-500" style={{ width: `${rec.score}%` }} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ),
+            },
+            {
+              zone: 'midnight' as const,
+              label: '深渊 -- 长期沉淀',
+              children: (
+                <div className="flex flex-col gap-2.5">
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <AnglerfishAchievements />
+                    <PlanktonStream
+                      activities={recentActivities.map((a) => ({ icon: a.icon, text: a.text, time: a.time, accent: a.accent, timestamp: a.timestamp }))}
+                      loading={isLoading}
+                    />
+                  </div>
+                  <PearlGoal goals={analytics?.goals ?? []} loading={analyticsLoading} />
+                </div>
+              ),
+            },
+          ]}
+        />
       </motion.div>{/* end page 2 */}
+
+      {/* ══ 学习启动仪式模态层 ══ */}
+      {showRitual && (
+        <StartupRitual
+          onComplete={handleRitualComplete}
+          onSkip={handleRitualSkip}
+          lastSession={lastSession}
+        />
+      )}
     </div>
   );
 }

@@ -481,6 +481,7 @@ export function CaptureSidebar({ onInsertText }: CaptureSidebarProps) {
   const [segments, setSegments] = useState<ExtractedSegment[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [stats, setStats] = useState({ frames: 0, extracted: 0 });
+  const [extractionError, setExtractionError] = useState<string | null>(null);
   const [config, setConfig] = useState<CaptureSidebarConfig>({
     screenshotInterval: 5000,
     language: 'zh',
@@ -491,8 +492,39 @@ export function CaptureSidebar({ onInsertText }: CaptureSidebarProps) {
   // 渲染端音频资源引用（getUserMedia stream + AudioContext）
   const audioCleanupRef = useRef<(() => void) | null>(null);
 
-  // CaptureManager 单例
-  const captureManager = useMemo(() => new CaptureManager(), []);
+  // 帧超时保底重启回调引用（供 CaptureManager 调用）
+  const frameRestartRef = useRef<(() => void) | null>(null);
+
+  // 保持 restart ref 为最新闭包
+  useEffect(() => {
+    if (!window.electronAPI || !selectedWindow) {
+      frameRestartRef.current = null;
+      return;
+    }
+    const api = window.electronAPI;
+    const winId = selectedWindow.id;
+    const interval = config.screenshotInterval;
+    frameRestartRef.current = async () => {
+      try {
+        // eslint-disable-next-line no-console -- 保底重启警告
+        console.warn('[CaptureSidebar] 帧超时，自动重启截图采集');
+        await api.invoke('screen_capture_stop');
+        await new Promise((r) => setTimeout(r, 200));
+        await api.invoke('screen_capture_start', { windowId: winId, interval });
+      } catch (err) {
+        // eslint-disable-next-line no-console -- 保底重启失败
+        console.error('[CaptureSidebar] 保底重启失败:', err);
+      }
+    };
+  }, [selectedWindow, config.screenshotInterval]);
+
+  // CaptureManager 单例，传入帧超时回调
+  const captureManager = useMemo(
+    () => new CaptureManager({
+      onFrameWatchdogTimeout: () => frameRestartRef.current?.(),
+    }),
+    [],
+  );
 
   // 组件卸载时释放 CaptureManager
   useEffect(() => {
@@ -505,7 +537,7 @@ export function CaptureSidebar({ onInsertText }: CaptureSidebarProps) {
   // 监听 captureEventBus 提取结果事件，更新 UI 片段列表
   // ----------------------------------------------------------------
   useEffect(() => {
-    const off = captureEventBus.on<{
+    const offCompleted = captureEventBus.on<{
       sessionId: string | null;
       result: { text: string; confidence: number; source: 'vision' | 'audio' | 'ui_automation' };
       segment: { id: string; timestamp: Date };
@@ -520,8 +552,19 @@ export function CaptureSidebar({ onInsertText }: CaptureSidebarProps) {
       };
       setSegments((prev) => [...prev, uiSegment]);
       setStats((prev) => ({ ...prev, extracted: data.extractedCount }));
+      setExtractionError(null);
     });
-    return off;
+
+    const offError = captureEventBus.on<{
+      message: string;
+    }>('extraction:error', (data) => {
+      setExtractionError(data.message);
+    });
+
+    return () => {
+      offCompleted();
+      offError();
+    };
   }, []);
 
   // ----------------------------------------------------------------
@@ -727,6 +770,9 @@ export function CaptureSidebar({ onInsertText }: CaptureSidebarProps) {
     if (!window.electronAPI) return;
 
     try {
+      // 最先清除重启回调，防止 watchdog 在停止过程中触发
+      frameRestartRef.current = null;
+
       // 停止主进程截图和音频
       await window.electronAPI.invoke('screen_capture_stop');
       await window.electronAPI.invoke('audio_capture_stop');
@@ -820,7 +866,7 @@ export function CaptureSidebar({ onInsertText }: CaptureSidebarProps) {
           'text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary',
           'transition-all duration-kb-fast shadow-kb-sm',
         )}
-        title={collapsed ? '展开课堂助手' : '收起课堂助手'}
+        title={collapsed ? '展开回声定位' : '收起回声定位'}
       >
         {collapsed ? (
           <PanelRightOpen className="w-3.5 h-3.5" strokeWidth={1.5} />
@@ -843,7 +889,7 @@ export function CaptureSidebar({ onInsertText }: CaptureSidebarProps) {
           {/* 标题栏 */}
           <div className="flex items-center gap-2 px-3 py-3 border-b border-border/30">
             <Monitor className="w-icon-md h-icon-md text-brand-500" strokeWidth={1.5} />
-            <span className="text-b2 font-semibold text-text-primary flex-1">课堂助手</span>
+            <span className="text-b2 font-semibold text-text-primary flex-1">回声定位</span>
             {status === 'capturing' && (
               <span className="w-2 h-2 rounded-kb-full bg-semantic-error animate-pulse" />
             )}
@@ -869,6 +915,32 @@ export function CaptureSidebar({ onInsertText }: CaptureSidebarProps) {
             onModeChange={handleModeChange}
             disabled={!canStart}
           />
+
+          {/* 提取错误提示 */}
+          {extractionError && (
+            <div
+              className={cn(
+                'mx-3 my-2 p-3 rounded-kb-lg',
+                'bg-semantic-error/5 backdrop-blur-xl border border-semantic-error/10',
+                'shadow-kb-md',
+              )}
+            >
+              <div className="flex items-start gap-2">
+                <XCircle
+                  className="w-4 h-4 mt-0.5 flex-shrink-0 text-semantic-error"
+                  strokeWidth={1.5}
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="text-b3 text-semantic-error font-medium leading-snug">
+                    {extractionError}
+                  </p>
+                  <p className="text-b3 text-text-tertiary mt-1">
+                    请在设置中检查AI网关配置
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* 实时提取结果 */}
           <SegmentList

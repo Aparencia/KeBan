@@ -1,4 +1,5 @@
 import { StorageAdapter } from './StorageAdapter';
+import { IpcStorageAdapter } from './IpcStorageAdapter';
 import type { IRepository } from './interfaces';
 import { db } from './database';
 import type {
@@ -32,18 +33,14 @@ export function getRuntimeEnvironment(): 'pwa' | 'electron' {
  * 存储工厂
  * 根据运行环境返回对应的存储实现
  * PWA 环境：使用 Dexie.js (IndexedDB)
- * Electron 环境：预留 SQLite 实现（当前仍使用 Dexie）
+ * Electron 环境：通过 IPC 调用主进程 SQLite
  */
 export function createStorage<T extends { id: string }>(tableName: string): IRepository<T> {
   const env = getRuntimeEnvironment();
 
   switch (env) {
     case 'electron':
-      // Electron 环境下 IndexedDB 可用，初期复用 Dexie
-      if (import.meta.env.DEV) {
-        console.debug(`[StorageFactory] Electron SQLite not yet implemented, falling back to Dexie for ${tableName}`);
-      }
-      return new StorageAdapter<T>(db.table(tableName) as any, tableName);
+      return new IpcStorageAdapter<T>(tableName);
 
     case 'pwa':
     default:

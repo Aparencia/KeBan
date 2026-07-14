@@ -75,11 +75,11 @@ export default function PomodoroPage() {
       const m = Math.floor(remainingSeconds / 60);
       const s = remainingSeconds % 60;
       const phaseLabel = phase === 'work' ? '专注' : phase === 'short_break' ? '短休' : '长休';
-      document.title = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')} - ${phaseLabel} | 番茄钟`;
+      document.title = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')} - ${phaseLabel} | 深潜`;
     } else {
-      document.title = '番茄钟 - 课伴';
+      document.title = '深潜 - 熵减';
     }
-    return () => { document.title = '课伴 KeBan'; };
+    return () => { document.title = '熵减'; };
   }, [remainingSeconds, phase, isRunning, isPaused]);
 
   const handleMainButton = () => {

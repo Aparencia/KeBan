@@ -13,6 +13,7 @@ import {
 } from '@/lib/storage';
 import type { StorageInfo } from '@/lib/storage';
 import { encryptBackup, decryptBackup, type EncryptedBackup } from '@/lib/crypto/backupCrypto';
+import { syncEngine } from '@/lib/sync/SyncEngine';
 
 export default function DataSettings() {
   const { toast } = useToast();
@@ -20,7 +21,10 @@ export default function DataSettings() {
   const [storageInfo, setStorageInfo] = useState<StorageInfo | null>(null);
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
-  const [currentPath, setCurrentPath] = useState<string>('');
+  const [currentPath, setCurrentPath] = useState<string>(
+    isElectron() ? '正在获取…' : '浏览器存储（IndexedDB）'
+  );
+  const [defaultPath, setDefaultPath] = useState<string>('');
   const [isChanging, setIsChanging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -32,11 +36,48 @@ export default function DataSettings() {
   const backupFileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    let mounted = true;
+
     getStorageInfo().then((info) => {
-      if (info) setStorageInfo(info);
+      if (mounted && info) setStorageInfo(info);
     });
     const savedPath = localStorage.getItem('keban-data-path');
-    setCurrentPath(savedPath || '默认位置');
+    // 先获取 Electron 实际默认路径，再决定显示内容
+    if (window.electronAPI) {
+      // 设置超时：若 IPC 5 秒未响应，显示 fallback
+      const timeoutId = setTimeout(() => {
+        if (!savedPath) {
+          setCurrentPath((prev) =>
+            prev === '正在获取…' ? '未知路径（IPC 超时）' : prev
+          );
+        }
+      }, 5000);
+
+      Promise.all([
+        window.electronAPI.invoke('get-default-storage-path'),
+        window.electronAPI.storage?.getActivePath() ?? Promise.resolve(null),
+      ]).then(([defaultP, activeP]) => {
+        clearTimeout(timeoutId);
+        if (!mounted) return;
+        setDefaultPath(defaultP as string);
+        // activeP 为 null 时（storage API 不可用），回退到 localStorage 或默认路径
+        setCurrentPath((activeP as string) || savedPath || (defaultP as string));
+      }).catch(() => {
+        clearTimeout(timeoutId);
+        if (!mounted) return;
+        setCurrentPath(savedPath || '默认路径');
+      });
+
+      return () => {
+        mounted = false;
+        clearTimeout(timeoutId);
+      };
+    } else if (!savedPath) {
+      // 非 Electron 环境且无自定义路径
+      setCurrentPath('浏览器存储（IndexedDB）');
+    }
+    // Electron 路径通过 Promise.all 获取（见上方）
+    return () => { mounted = false; };
   }, []);
 
   const handleExport = async () => {
@@ -179,19 +220,39 @@ export default function DataSettings() {
       if (!result.canceled && result.path) {
         const confirmed = window.confirm(
           `确定要将数据存储路径更改为：\n${result.path}\n\n` +
-          `注意：当前数据不会自动迁移。\n` +
-          `建议先导出所有数据，更改路径后再导入。`,
+          `数据将自动迁移到新路径，迁移期间请等待。`,
         );
 
         if (confirmed) {
-          localStorage.setItem('keban-data-path', result.path);
-          setCurrentPath(result.path);
-          toast({ type: 'success', message: '存储路径已更新' });
+          // 暂停同步引擎，防止切换过程中触发同步
+          syncEngine.pause();
+
+          try {
+            if (!window.electronAPI.storage) {
+              toast({ type: 'error', message: '存储 API 不可用，请重启应用后重试' });
+              syncEngine.resume();
+              return;
+            }
+            const migrationResult = await window.electronAPI.storage.changePath(result.path);
+
+            if (migrationResult.success) {
+              setCurrentPath(migrationResult.newPath!);
+              toast({ type: 'success', message: '存储路径已切换，数据迁移完成' });
+            } else {
+              toast({ type: 'error', message: migrationResult.error || '路径切换失败' });
+            }
+          } finally {
+            // 无论成功失败，恢复同步引擎
+            syncEngine.resume();
+            syncEngine.sync(); // 触发一次同步，fire-and-forget
+          }
         }
       }
     } catch (error) {
       console.error('Failed to select directory:', error);
       toast({ type: 'error', message: '选择目录失败，请重试' });
+      // 确保异常时也恢复同步
+      syncEngine.resume();
     } finally {
       setIsChanging(false);
     }
@@ -228,30 +289,37 @@ export default function DataSettings() {
 
       {/* 存储路径选择 */}
       <div className={cn(
-        'flex items-start gap-3 p-3 rounded-kb-md',
+        'flex flex-col gap-2 p-3 rounded-kb-md',
         'bg-bg-secondary border border-border/40',
       )}>
-        <div className={cn(
-          'w-9 h-9 rounded-kb-md flex items-center justify-center flex-shrink-0',
-          'bg-brand-50 text-brand-500',
-        )}>
-          <FolderOpen className="w-5 h-5" strokeWidth={1.5} />
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-b2 font-medium text-text-primary">数据存储路径</p>
-          <p className="text-c1 text-text-tertiary font-mono truncate mt-0.5">
-            {currentPath}
-          </p>
+        <div className="flex items-start gap-3">
+          <div className={cn(
+            'w-9 h-9 rounded-kb-md flex items-center justify-center flex-shrink-0',
+            'bg-brand-50 text-brand-500',
+          )}>
+            <FolderOpen className="w-5 h-5" strokeWidth={1.5} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-b2 font-medium text-text-primary">数据存储路径</p>
+            <p className="text-c1 text-text-tertiary font-mono truncate mt-0.5">
+              {currentPath}
+            </p>
+            {defaultPath && currentPath === defaultPath && (
+              <p className="text-c2 text-text-tertiary/70 mt-0.5">
+                当前使用默认路径
+              </p>
+            )}
+          </div>
         </div>
       </div>
 
       <div className={cn(
         'flex items-center gap-2 px-3 py-2 rounded-kb-md',
-        'bg-semantic-warning/10 border border-semantic-warning/20',
+        'bg-brand-50 border border-brand-200/40',
       )}>
-        <AlertTriangle className="w-4 h-4 text-semantic-warning flex-shrink-0" strokeWidth={1.5} />
+        <AlertTriangle className="w-4 h-4 text-brand-500 flex-shrink-0" strokeWidth={1.5} />
         <p className="text-c1 text-text-secondary leading-relaxed">
-          更改路径后，现有数据不会自动迁移。请先导出所有数据，更改路径后再导入。
+          切换路径后，数据将自动迁移到新位置。请确保目标磁盘有足够空间。
         </p>
       </div>
 

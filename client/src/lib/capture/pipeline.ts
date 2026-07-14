@@ -24,6 +24,7 @@ export class Pipeline {
   private queue: PipelineMessage[] = [];
   private readonly options: PipelineOptions;
   private isProcessing = false;
+  private pendingProcess = false;
   private messageId = 0;
 
   constructor(options: Partial<PipelineOptions> = {}) {
@@ -61,7 +62,12 @@ export class Pipeline {
       return false;
     }
     this.queue.push(message);
-    this.processNext();
+    if (this.isProcessing) {
+      // 当前正在处理，标记待处理，等 finally 块调度下一轮
+      this.pendingProcess = true;
+    } else {
+      this.processNext();
+    }
     return true;
   }
 
@@ -96,8 +102,9 @@ export class Pipeline {
       await Promise.allSettled(promises);
     } finally {
       this.isProcessing = false;
-      // 如果队列中还有消息，继续处理
-      if (this.queue.length > 0) {
+      // 如果队列中还有消息，或有新消息在期间被标记为 pending，继续处理
+      if (this.queue.length > 0 || this.pendingProcess) {
+        this.pendingProcess = false;
         // 使用 setTimeout 避免同步递归
         setTimeout(() => this.processNext(), 0);
       }

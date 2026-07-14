@@ -23,6 +23,7 @@ const ALLOWED_CHANNELS = [
   'audio_capture_stop',
   'get-app-version',
   'dialog:selectDirectory',
+  'get-default-storage-path',
   'update:check',
   'update:download',
   'update:install',
@@ -35,6 +36,20 @@ const ALLOWED_CHANNELS = [
   // v0.9.0: 备份相关 IPC channel
   'backup:save',
   'backup:open',
+  // v1.0.0: 数据访问 IPC channel
+  'db:query',
+  'db:insert',
+  'db:update',
+  'db:delete',
+  'db:search',
+  'db:batch',
+  // v1.0.0: 数据迁移 IPC channel
+  'migration:check',
+  'migration:import-table',
+  'migration:complete',
+  // v1.1.0: 存储路径切换 IPC channel
+  'storage:change-path',
+  'storage:get-active-path',
 ] as const;
 
 /** 允许渲染进程监听的事件 channel 白名单（主进程 → 渲染进程推送） */
@@ -112,4 +127,33 @@ contextBridge.exposeInMainWorld('electronAPI', {
   backupSave: (data: string, defaultName?: string) => ipcRenderer.invoke('backup:save', data, defaultName),
   /** 打开备份文件（显示系统打开对话框，返回文件内容） */
   backupOpen: () => ipcRenderer.invoke('backup:open'),
+  // ---- v1.0.0: 数据访问 API ----
+  db: {
+    query: (table: string, method: string, args?: unknown[]) =>
+      ipcRenderer.invoke('db:query', { table, method, args }),
+    insert: (table: string, item: unknown) =>
+      ipcRenderer.invoke('db:insert', { table, item }),
+    update: (table: string, id: string, changes: unknown) =>
+      ipcRenderer.invoke('db:update', { table, id, changes }),
+    delete: (table: string, id: string) =>
+      ipcRenderer.invoke('db:delete', { table, id }),
+    search: (table: string, query: string) =>
+      ipcRenderer.invoke('db:search', { table, query }),
+    batch: (operations: unknown[]) =>
+      ipcRenderer.invoke('db:batch', { operations }),
+  },
+  // ---- v1.0.0: 数据迁移 API ----
+  migration: {
+    check: () => ipcRenderer.invoke('migration:check'),
+    importTable: (table: string, rows: unknown[]) =>
+      ipcRenderer.invoke('migration:import-table', { table, rows }),
+    complete: () => ipcRenderer.invoke('migration:complete'),
+  },
+  // ---- v1.1.0: 存储路径管理 API ----
+  storage: {
+    changePath: (newPath: string) =>
+      ipcRenderer.invoke('storage:change-path', { newPath }),
+    getActivePath: () =>
+      ipcRenderer.invoke('storage:get-active-path'),
+  },
 });

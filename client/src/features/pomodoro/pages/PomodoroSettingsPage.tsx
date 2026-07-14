@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { Timer, Zap, Bell, Save, RotateCcw, GraduationCap, Sparkles, Loader2, CheckCircle2, Music, Volume2 } from 'lucide-react';
+import { Timer, Zap, Bell, Save, RotateCcw, GraduationCap, Sparkles, CheckCircle2, Music, Volume2, Brain } from 'lucide-react';
+import { AIThinkingIndicator } from '@/components/ui/AIThinkingIndicator';
 import { Button, Card, Input, useToast } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { usePomodoroStore } from '../store/usePomodoroStore';
@@ -83,7 +84,7 @@ function SettingRow({
 }
 
 export default function PomodoroSettingsPage() {
-  const { settings, updateSettings, initialize, mode: _mode } = usePomodoroStore(useShallow(s => s));
+  const { settings, updateSettings, initialize, mode: _mode, aiRecommendedDuration, aiReasoning, setAIRecommendation } = usePomodoroStore(useShallow(s => s));
 
   // Local form state (mirrors store settings)
   const [localSettings, setLocalSettings] = useState({ ...settings });
@@ -103,6 +104,7 @@ export default function PomodoroSettingsPage() {
     recommend: aiRecommend,
   } = useAIDuration();
   const [aiRecApplied, setAIRecApplied] = useState(false);
+  const [fineTuneValue, setFineTuneValue] = useState<number | null>(null);
   const { toast } = useToast();
 
   // Load persisted settings on mount
@@ -163,7 +165,7 @@ export default function PomodoroSettingsPage() {
       <motion.h1
         className="text-h1 font-semibold text-text-primary mb-kb-lg"
         variants={{ hidden: { opacity: 0, y: -12, filter: 'blur(3px)' }, visible: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.35 } } }}
-      >番茄钟设置</motion.h1>
+      >深潜设置</motion.h1>
 
       {/* Duration settings */}
       <motion.div variants={{ hidden: { opacity: 0, y: 16, filter: 'blur(3px)' }, visible: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.35 } } }}>
@@ -174,6 +176,16 @@ export default function PomodoroSettingsPage() {
         </div>
 
         <div className="space-y-kb-md">
+          {/* AI 推荐时长提示 */}
+          {aiRecommendedDuration != null && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-kb-md bg-brand-50 border border-brand-200/30">
+              <Brain className="w-4 h-4 flex-shrink-0" strokeWidth={1.5} style={{ color: 'var(--kb-focus-blue)' }} />
+              <p className="text-c1 text-text-secondary">
+                <span className="font-medium" style={{ color: 'var(--kb-focus-blue)' }}>AI 推荐 {aiRecommendedDuration} 分钟</span>
+                {aiReasoning && <span className="ml-1 text-text-tertiary">— {aiReasoning}</span>}
+              </p>
+            </div>
+          )}
           <Input
             label="工作时长（自习模式）"
             type="number"
@@ -305,7 +317,7 @@ export default function PomodoroSettingsPage() {
         <Button
           variant="secondary"
           size="md"
-          icon={aiRecLoading ? <Loader2 className="w-icon-sm h-icon-sm animate-spin" /> : <Sparkles className="w-icon-sm h-icon-sm" />}
+          icon={aiRecLoading ? <AIThinkingIndicator size={4} gap={3} /> : <Sparkles className="w-icon-sm h-icon-sm" />}
           disabled={aiRecLoading}
           onClick={async () => {
             try {
@@ -349,7 +361,7 @@ export default function PomodoroSettingsPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-b1 font-semibold text-text-primary">
-                  推荐时长：{aiRecData.recommendedDuration} 分钟
+                  AI 推荐：{fineTuneValue ?? aiRecData.recommendedDuration} 分钟
                 </p>
                 <p className="text-b2 text-text-secondary mt-0.5">{aiRecData.reasoning}</p>
               </div>
@@ -364,6 +376,30 @@ export default function PomodoroSettingsPage() {
                 {aiRecData.confidence === 'high' ? '高置信度' : aiRecData.confidence === 'medium' ? '中等' : '低'}
               </span>
             </div>
+
+            {/* 手动微调滑块 */}
+            <div className="mt-1">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-c1 text-text-tertiary">手动微调</span>
+                <span className="text-c1 font-medium" style={{ color: 'var(--kb-focus-blue)' }}>
+                  {fineTuneValue ?? aiRecData.recommendedDuration} 分钟
+                </span>
+              </div>
+              <input
+                type="range"
+                min={Math.max(10, aiRecData.recommendedDuration - 5)}
+                max={Math.min(60, aiRecData.recommendedDuration + 5)}
+                value={fineTuneValue ?? aiRecData.recommendedDuration}
+                onChange={(e) => setFineTuneValue(parseInt(e.target.value, 10))}
+                className="w-full h-1.5 rounded-kb-full cursor-pointer"
+                style={{ accentColor: 'var(--kb-focus-blue)' }}
+              />
+              <div className="flex justify-between text-c2 text-text-tertiary/60 mt-0.5">
+                <span>{Math.max(10, aiRecData.recommendedDuration - 5)}分钟</span>
+                <span>{Math.min(60, aiRecData.recommendedDuration + 5)}分钟</span>
+              </div>
+            </div>
+
             {aiRecFallback && (
               <p className="text-c1 text-semantic-warning flex items-center gap-1">
                 <span>⚠</span> 当前基于本地规则引擎分析（无网络）
@@ -374,10 +410,12 @@ export default function PomodoroSettingsPage() {
               icon={aiRecApplied ? <CheckCircle2 className="w-icon-sm h-icon-sm" /> : undefined}
               disabled={aiRecApplied}
               onClick={() => {
-                setLocalSettings((prev) => ({ ...prev, workDuration: aiRecData.recommendedDuration }));
-                updateSettings({ workDuration: aiRecData.recommendedDuration });
+                const finalDuration = fineTuneValue ?? aiRecData.recommendedDuration;
+                setLocalSettings((prev) => ({ ...prev, workDuration: finalDuration }));
+                updateSettings({ workDuration: finalDuration });
+                setAIRecommendation(finalDuration, aiRecData.reasoning);
                 setAIRecApplied(true);
-                toast({ type: 'success', message: `已应用推荐时长：${aiRecData.recommendedDuration} 分钟` });
+                toast({ type: 'success', message: `已应用推荐时长：${finalDuration} 分钟` });
               }}
               className="self-start"
             >

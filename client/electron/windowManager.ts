@@ -7,7 +7,7 @@
 
 import { BrowserWindow, app } from 'electron';
 import * as path from 'path';
-import * as fs from 'fs';
+import { access, readFile, writeFile } from 'fs/promises';
 import { logger } from './logger.js';
 import { createTray } from './trayManager.js';
 
@@ -23,23 +23,31 @@ const WINDOW_MIN_WIDTH = 600;
 // 关闭偏好持久化
 // ================================================================
 
+/** 缓存的关闭选择，避免在同步事件处理器中执行异步 I/O */
+let cachedCloseChoice: string | null = null;
+
 /** 读取保存的关闭选择 */
-function getCloseChoice(): string | null {
+export async function getCloseChoice(): Promise<string | null> {
   try {
     const configPath = path.join(app.getPath('userData'), 'close-preference.json');
-    if (fs.existsSync(configPath)) {
-      const data = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-      return data.choice || null;
+    try {
+      await access(configPath);
+    } catch {
+      return null;
     }
+    const data = JSON.parse(await readFile(configPath, 'utf-8'));
+    cachedCloseChoice = data.choice || null;
+    return cachedCloseChoice;
   } catch { /* ignore */ }
   return null;
 }
 
 /** 保存关闭选择到配置文件 */
-export function saveCloseChoice(choice: string): void {
+export async function saveCloseChoice(choice: string): Promise<void> {
   try {
     const configPath = path.join(app.getPath('userData'), 'close-preference.json');
-    fs.writeFileSync(configPath, JSON.stringify({ choice }), 'utf-8');
+    await writeFile(configPath, JSON.stringify({ choice }), 'utf-8');
+    cachedCloseChoice = choice;
   } catch { /* ignore */ }
 }
 
@@ -63,14 +71,24 @@ export function createMainWindow(
     height: WINDOW_DEFAULT_HEIGHT,
     minWidth: 800,
     minHeight: WINDOW_MIN_WIDTH,
-    title: '课伴',
+    title: '熵减',
     frame: false,
-    icon: path.join(__dirname, '..', 'app-icon.png'),
+    show: false, // 启动缓冲带：等待渲染就绪后再显示
+    backgroundColor: '#0C1524', // 深海底色，防止白闪
+    icon: path.join(app.getAppPath(), 'app-icon.png'),
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true,
       preload: path.join(__dirname, 'preload.js'),
     },
+  });
+
+  // 启动缓冲带：渲染进程首次绘制完成后显示窗口
+  win.once('ready-to-show', () => {
+    win.show();
+    win.focus();
+    logger.info('[Window] Window shown (ready-to-show)');
   });
 
   // 窗口最大化状态变化时通知前端
@@ -90,7 +108,7 @@ export function createMainWindow(
     win.webContents.openDevTools();
   } else {
     // 生产模式：加载打包后的 index.html
-    win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
+    win.loadFile(path.join(app.getAppPath(), 'dist', 'index.html'));
 
     // 生产环境禁用 DevTools（防止用户打开开发人员工具）
     win.webContents.on('devtools-opened', () => {
@@ -108,11 +126,14 @@ export function createMainWindow(
     });
   }
 
+  // 预加载关闭偏好（异步加载，同步事件处理器使用缓存值）
+  getCloseChoice(); // fire-and-forget：加载结果写入 cachedCloseChoice
+
   // 关闭窗口时根据用户偏好决定行为
   win.on('close', (event) => {
     if (!isQuittingRef.value) {
       event.preventDefault();
-      const savedChoice = getCloseChoice();
+      const savedChoice = cachedCloseChoice;
       if (savedChoice === 'quit') {
         isQuittingRef.value = true;
         onQuit();

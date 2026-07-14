@@ -1,3 +1,7 @@
+/* 霞鹜文楷 Lite - 品牌衬线体 (Regular + Bold) */
+@import 'lxgw-wenkai-lite-webfont/lxgwwenkailite-regular.css';
+@import 'lxgw-wenkai-lite-webfont/lxgwwenkailite-bold.css';
+
 @import './styles/tokens.css';
 
 @tailwind base;
@@ -21,7 +25,7 @@ body {
   stroke-width: var(--kb-icon-stroke-width);
 }
 
-/* ── 超细滚动条 — 4px ultra thin ── */
+/* ── 超细滚动条 — 4px 极细 ── */
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.12); border-radius: 4px; }
@@ -274,19 +278,28 @@ body {
 /* 按钮涟漪光晕 */
 @keyframes kb-ripple {
   0%   { transform: scale(0); opacity: 0.5; }
-  100% { transform: scale(3); opacity: 0; }
+  100% { transform: scale(5); opacity: 0; }
 }
 
+/* 默认琥珀色涟漪，可通过 data-ripple-color 切换 */
 .kb-ripple-effect {
+  --ripple-color: rgba(245, 158, 11, 0.25);
   position: absolute;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.5);
+  background: radial-gradient(circle, var(--ripple-color) 0%, transparent 70%);
+  filter: blur(2px);
   width: 40px;
   height: 40px;
   margin-top: -20px;
   margin-left: -20px;
   pointer-events: none;
-  animation: kb-ripple 600ms ease-out forwards;
+  animation: kb-ripple 800ms ease-out forwards;
+}
+.kb-ripple-effect[data-ripple-color="mint"] {
+  --ripple-color: rgba(91, 138, 114, 0.25);
+}
+.kb-ripple-effect[data-ripple-color="cyan"] {
+  --ripple-color: rgba(6, 182, 212, 0.25);
 }
 
 /* AI 结果区 blur→clear 淡入 */
@@ -335,10 +348,10 @@ body {
 }
 
 /* ═══════════════════════════════════════════
-   高级视觉效果系统 — Premium UI Effects
+   高级视觉效果系统
    ═══════════════════════════════════════════ */
 
-/* ── Glassmorphism 毛玻璃卡片 ── */
+/* ── 毛玻璃卡片 ── */
 .kb-glass {
   background: rgba(255, 255, 255, 0.6);
   backdrop-filter: blur(20px) saturate(1.4);
@@ -364,7 +377,7 @@ body {
   transform: translateZ(12px);
 }
 
-/* ── Shimmer 微光扫描效果 ── */
+/* ── 微光扫描效果 ── */
 @keyframes kb-shimmer-sweep {
   0%   { transform: translateX(-100%); }
   100% { transform: translateX(100%); }
@@ -545,4 +558,78 @@ body {
 }
 [data-elastic-container]::-webkit-scrollbar {
   display: none;
+}
+
+/* ═══════════════════════════════════════════
+   质感细节系统
+   ═══════════════════════════════════════════ */
+
+/* 微纸质噪点基底 — 模拟手工纸质感 */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 256px 256px;
+  mix-blend-mode: overlay;
+}
+
+[data-theme="dark"] body::before {
+  opacity: 0.02;
+}
+
+/* 羽化渐隐线 — 替代硬边框的暧昧边缘 */
+.kb-feather-border {
+  position: relative;
+  border: none;
+}
+.kb-feather-border::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    135deg,
+    rgba(var(--kb-border-default-rgb, 221, 213, 202), 0.4),
+    rgba(var(--kb-border-default-rgb, 221, 213, 202), 0.1) 40%,
+    transparent 70%,
+    rgba(var(--kb-border-default-rgb, 221, 213, 202), 0.05) 90%
+  );
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  pointer-events: none;
+}
+
+/* 深海浮力粒子动画 */
+@keyframes kb-float-up {
+  0% {
+    transform: translateY(100vh) translateX(0);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-20px) translateX(10px);
+    opacity: 0;
+  }
+}
+
+/* 超级椭圆圆角近似 */
+.kb-squircle {
+  border-radius: 20px;
+  border-top-left-radius: 20% 15%;
+  border-top-right-radius: 20% 15%;
+  border-bottom-right-radius: 20% 15%;
+  border-bottom-left-radius: 20% 15%;
 }

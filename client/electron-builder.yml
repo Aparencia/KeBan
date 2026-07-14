@@ -1,13 +1,15 @@
-# Electron Builder 打包配置 - 课伴桌面端
-appId: com.keban.app
-productName: "KeBan"
-# publish 配置用于自动更新发布，待部署更新服务器后启用
-# publish:
-#   provider: generic
-#   url: ${env.PUBLISH_URL}
+# Electron Builder 打包配置 - 熵减桌面端
+appId: com.entropydecrease.app
+productName: "Entropy decrease"
+publish:
+  provider: github
+  owner: YourGitHubUsername
+  repo: KeBan
 directories:
   output: release
   buildResources: build
+asarUnpack:
+  - "**/*.node"
 files:
   - dist/**/*
   - dist-electron/**/*
@@ -34,6 +36,6 @@ nsis:
   # installerIcon/uninstallerIcon/installerHeaderIcon 省略
   # electron-builder 会自动从 win.icon 派生 NSIS 所需的 .ico 文件
   createDesktopShortcut: true
-  shortcutName: "课伴"
+  shortcutName: "Entropy decrease"
   perMachine: false
   language: "2052"

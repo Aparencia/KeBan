@@ -79,6 +79,10 @@ MODEL_ROUTING: dict[str, tuple[str, str]] = {
     "predict": ("qwen", "predict"),
     "rescue": ("qwen", "rescue"),
     "inspiration_draft": ("qwen", "inspiration_draft"),
+    # FEAT-022: 苏格拉底式学习
+    "socratic_brainstorm": ("qwen", "socratic"),
+    "socratic_evaluate":   ("qwen", "socratic"),
+    "socratic_deepening":  ("qwen", "socratic"),
 }
 
 # ============================================================
@@ -141,6 +145,10 @@ PROVIDER_FALLBACK_CHAIN: dict[str, list[str]] = {
     "predict":            ["qwen", "glm", "fallback"],   # Qwen 为主，GLM 备选
     "rescue":             ["qwen", "deepseek", "fallback"], # Qwen 为主，DeepSeek 备选
     "inspiration_draft":  ["qwen", "glm", "fallback"],   # Qwen 为主，GLM 备选
+    # FEAT-022: 苏格拉底式学习
+    "socratic_brainstorm": ["qwen", "deepseek", "fallback"],
+    "socratic_evaluate":   ["qwen", "deepseek", "fallback"],
+    "socratic_deepening":  ["qwen", "deepseek", "fallback"],
 }
 
 
@@ -228,6 +236,10 @@ TIMEOUT_CONFIG: dict[str, int] = {
     "predict": 15,
     "rescue": 30,             # 三级救援内容较多
     "inspiration_draft": 15,
+    # FEAT-022: 苏格拉底式学习
+    "socratic_brainstorm": 20,
+    "socratic_evaluate": 15,
+    "socratic_deepening": 15,
 }
 
 # ============================================================
@@ -253,6 +265,10 @@ RATE_LIMITS: dict[str, int] = {
     "predict": 15,
     "rescue": 10,             # 救援场景，适度限制
     "inspiration_draft": 15,
+    # FEAT-022: 苏格拉底式学习
+    "socratic_brainstorm": 15,
+    "socratic_evaluate": 20,
+    "socratic_deepening": 15,
 }
 
 # ============================================================

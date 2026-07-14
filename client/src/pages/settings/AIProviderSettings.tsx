@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { Card, Button } from '@/components/ui';
 import { useToast } from '@/components/ui/Toast';
-import { Eye, EyeOff, Cpu, Key, Shield, ChevronDown, Loader2, CheckCircle, XCircle, Zap, Sparkles } from 'lucide-react';
+import { Eye, EyeOff, Shield, ChevronDown, CheckCircle, Zap, Sparkles, BookOpen, Timer, Layers, Brain, Wand2, Lock, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { AIConfig } from '@/lib/ai/config';
 import { useSettingsStore } from '@/stores/useSettingsStore';
 import { useShallow } from 'zustand/react/shallow';
+import { useAIGatewayHealth } from '@/hooks/useAIGatewayHealth';
 
 /** 模式预设方案 */
 const modeOptions = [
@@ -25,11 +26,49 @@ const modeOptions = [
   },
 ] as const;
 
-/** 用户自配 Key 输入框配置 */
-const userKeyFields = [
-  { key: 'glm' as const, label: 'GLM（智谱）API Key', placeholder: '请输入智谱 API Key' },
-  { key: 'qwen' as const, label: 'Qwen（通义千问）API Key', placeholder: '请输入通义千问 API Key' },
-  { key: 'deepseek' as const, label: 'DeepSeek API Key', placeholder: '请输入 DeepSeek API Key' },
+/** AI 能力一览数据 */
+const aiCapabilities = [
+  {
+    module: '结礁',
+    icon: BookOpen,
+    features: [
+      { name: 'AI 摘要', desc: '一键提炼结礁核心要点' },
+      { name: 'AI 反衰减呼吸生成', desc: '从结礁自动生成记忆卡片' },
+    ],
+  },
+  {
+    module: '深潜',
+    icon: Timer,
+    features: [
+      { name: 'AI 时长预测', desc: '根据内容智能预估所需时间' },
+      { name: 'AI 锚点', desc: '专注过程中的智能节点标记' },
+      { name: 'AI 救援', desc: '分心时智能提醒拉回注意力' },
+    ],
+  },
+  {
+    module: '反衰减呼吸',
+    icon: Layers,
+    features: [
+      { name: 'AI 优化卡片', desc: '自动优化问答内容与表述' },
+    ],
+  },
+  {
+    module: '浮出水面',
+    icon: Brain,
+    features: [
+      { name: 'AI 提问', desc: '苏格拉底式引导深度思考' },
+      { name: 'AI 评估回答', desc: '智能评估理解程度并给出反馈' },
+    ],
+  },
+  {
+    module: '通用增强',
+    icon: Wand2,
+    features: [
+      { name: '内容智能分类', desc: '自动为笔记和灵感打标签' },
+      { name: '排序灵感', desc: 'AI 推荐最优学习顺序' },
+      { name: '学习评估', desc: '阶段性学习效果智能分析' },
+    ],
+  },
 ];
 
 type TestStatus = 'idle' | 'testing' | 'success' | 'error';
@@ -40,18 +79,15 @@ export default function AIProviderSettings() {
   const {
     aiConfig,
     showApiKey,
-    userKeys,
-    showUserKey,
     setAIConfig,
     toggleShowApiKey,
-    setUserKeys,
-    toggleUserKeyVisibility,
     saveAIConfigAction,
-    saveUserKeysAction,
-    clearUserKeysAction,
   } = useSettingsStore(useShallow(s => s));
 
-  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const { status: healthStatus, latency, recheck } = useAIGatewayHealth();
+
+  const [capabilitiesOpen, setCapabilitiesOpen] = useState(false);
+  const [showApiModal, setShowApiModal] = useState(false);
   const [testStatus, setTestStatus] = useState<TestStatus>('idle');
   const [testMessage, setTestMessage] = useState('');
 
@@ -61,21 +97,36 @@ export default function AIProviderSettings() {
   /** 切换模式 */
   const handleModeChange = (modeKey: string) => {
     const mode = modeOptions.find((m) => m.key === modeKey);
-    if (mode) {
-      setAIConfig({ ...aiConfig, provider: mode.provider });
+    if (!mode) return;
+    setAIConfig({ ...aiConfig, provider: mode.provider });
+    // 选择高级模式时弹出 API Key 配置窗口
+    if (modeKey === 'advanced') {
+      setTestStatus('idle');
+      setTestMessage('');
+      setShowApiModal(true);
     }
   };
 
-  /** 测试连接 */
-  const handleTestConnection = async () => {
+  /** 模态窗口取消：回退到标准模式 */
+  const handleModalCancel = () => {
+    setShowApiModal(false);
+    setAIConfig({ ...aiConfig, provider: 'glm' });
+  };
+
+  /** 模态窗口保存：保存 + 自动测试连接 */
+  const handleModalSave = async () => {
     setTestStatus('testing');
-    setTestMessage('');
+    setTestMessage('正在测试连接...');
+
+    // 先保存配置
+    saveAIConfigAction();
 
     try {
       const gatewayUrl = aiConfig.gatewayUrl || '';
       if (!gatewayUrl) {
-        setTestStatus('error');
-        setTestMessage('请先配置 AI 网关地址');
+        setTestStatus('idle');
+        setTestMessage('');
+        toast({ type: 'error', message: '请先配置 AI 网关地址' });
         return;
       }
       const response = await fetch(`${gatewayUrl}/docs`, {
@@ -87,12 +138,22 @@ export default function AIProviderSettings() {
         setTestStatus('success');
         setTestMessage('连接成功，AI 服务可用');
       } else {
-        setTestStatus('error');
-        setTestMessage(`服务返回异常状态码：${response.status}`);
+        setTestStatus('idle');
+        setTestMessage('');
+        toast({ type: 'error', message: `服务返回异常状态码：${response.status}` });
       }
     } catch (err) {
-      setTestStatus('error');
-      setTestMessage(err instanceof Error ? err.message : '连接失败，请检查网络或 Gateway URL');
+      setTestStatus('idle');
+      setTestMessage('');
+      let msg = '连接失败，请检查网络或网关地址';
+      if (err instanceof Error) {
+        if (err.name === 'AbortError' || err.message.includes('aborted')) {
+          msg = '连接超时，请检查网关地址是否正确';
+        } else if (err.message.includes('Failed to fetch')) {
+          msg = '无法连接到网关，请检查网络或网关地址';
+        }
+      }
+      toast({ type: 'error', message: msg });
     }
   };
 
@@ -100,7 +161,56 @@ export default function AIProviderSettings() {
     <>
       {/* ── AI 服务配置（简化版） ── */}
       <Card padding="md" className="flex flex-col gap-kb-md">
-        <h2 className="text-b1 font-semibold text-text-primary">AI 服务配置</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-b1 font-semibold text-text-primary">AI 服务配置</h2>
+
+          {/* 网关健康状态指示器 */}
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
+              {/* 状态圆点 */}
+              <span
+                className={cn(
+                  'w-2 h-2 rounded-full flex-shrink-0',
+                  healthStatus === 'online' && 'bg-semantic-success',
+                  healthStatus === 'offline' && 'bg-semantic-error',
+                  healthStatus === 'checking' && 'bg-text-quaternary animate-pulse',
+                )}
+              />
+              {/* 状态文字 */}
+              <span
+                className={cn(
+                  'text-c1',
+                  healthStatus === 'online' && 'text-semantic-success',
+                  healthStatus === 'offline' && 'text-semantic-error',
+                  healthStatus === 'checking' && 'text-text-quaternary',
+                )}
+              >
+                {healthStatus === 'online' && '已连接'}
+                {healthStatus === 'offline' && '未连接'}
+                {healthStatus === 'checking' && '检测中...'}
+              </span>
+              {/* 延迟显示 */}
+              {healthStatus === 'online' && latency !== undefined && (
+                <span className="text-c1 text-text-quaternary">{latency}ms</span>
+              )}
+            </div>
+            {/* 重新检测按钮 */}
+            <button
+              type="button"
+              onClick={recheck}
+              disabled={healthStatus === 'checking'}
+              className={cn(
+                'p-1 rounded-kb-sm text-text-tertiary hover:text-text-secondary hover:bg-bg-elevated',
+                'transition-colors duration-kb-fast',
+                'disabled:opacity-50 disabled:cursor-not-allowed',
+                healthStatus === 'checking' && 'animate-spin',
+              )}
+              title="重新检测"
+            >
+              <RefreshCw className="w-3.5 h-3.5" strokeWidth={1.5} />
+            </button>
+          </div>
+        </div>
 
         {/* 模式选择 */}
         <div className="flex flex-col gap-kb-sm">
@@ -143,208 +253,176 @@ export default function AIProviderSettings() {
           </div>
         </div>
 
-        {/* API Key — 显眼位置 */}
-        <div className="flex flex-col gap-kb-sm">
-          <label className="text-b2 font-medium text-text-secondary">API Key</label>
-          <div className="relative">
-            <input
-              type={showApiKey ? 'text' : 'password'}
-              value={aiConfig.apiKey}
-              onChange={(e) => setAIConfig({ ...aiConfig, apiKey: e.target.value })}
-              placeholder="请输入 API Key"
+        {/* AI 能力一览 */}
+        <div className="flex flex-col">
+          <button
+            type="button"
+            onClick={() => setCapabilitiesOpen((v) => !v)}
+            className="flex items-center justify-between w-full py-1"
+          >
+            <span className="text-b2 font-medium text-text-secondary">AI 能力一览</span>
+            <ChevronDown
               className={cn(
-                'w-full px-3 py-2.5 pr-10 rounded-kb-md text-b2',
-                'bg-bg-elevated border-2 border-border/50 text-text-primary',
-                'placeholder:text-text-quaternary',
-                'focus:outline-none focus:border-brand-500',
-                'transition-colors duration-kb-fast',
+                'w-4 h-4 text-text-tertiary transition-transform duration-200',
+                capabilitiesOpen && 'rotate-180',
               )}
+              strokeWidth={1.5}
             />
-            <button
-              type="button"
-              onClick={toggleShowApiKey}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-tertiary hover:text-text-secondary transition-colors"
-              tabIndex={-1}
-            >
-              {showApiKey
-                ? <EyeOff className="w-icon-sm h-icon-sm" strokeWidth={1.5} />
-                : <Eye className="w-icon-sm h-icon-sm" strokeWidth={1.5} />}
-            </button>
+          </button>
+
+          <div
+            className={cn(
+              'grid transition-all duration-300 ease-in-out',
+              capabilitiesOpen ? 'grid-rows-[1fr] opacity-100 mt-kb-sm' : 'grid-rows-[0fr] opacity-0',
+            )}
+          >
+            <div className="overflow-hidden">
+              <div className="space-y-3">
+                {aiCapabilities.map(({ module, icon: Icon, features }) => (
+                  <div key={module} className="flex gap-3">
+                    <div className="w-7 h-7 rounded-kb-sm bg-brand-50 dark:bg-brand-900/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <Icon className="w-3.5 h-3.5 text-brand-500" strokeWidth={1.5} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-b3 font-medium text-text-primary">{module}</p>
+                      <div className="mt-0.5 space-y-0.5">
+                        {features.map((f) => (
+                          <p key={f.name} className="text-c1 text-text-tertiary leading-relaxed">
+                            <span className="text-text-secondary font-medium">{f.name}</span>
+                            <span className="mx-1">·</span>
+                            {f.desc}
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* 保存 + 测试连接 */}
-        <div className="flex gap-3">
-          <Button
-            variant="primary"
-            size="md"
-            icon={<Cpu className="w-icon-sm h-icon-sm" strokeWidth={1.5} />}
-            className="flex-1"
-            onClick={() => {
-              saveAIConfigAction();
-              toast({ type: 'success', message: 'AI 配置已保存' });
-            }}
-          >
-            保存配置
-          </Button>
-          <Button
-            variant="secondary"
-            size="md"
-            loading={testStatus === 'testing'}
-            onClick={handleTestConnection}
-          >
-            测试连接
-          </Button>
-        </div>
-
-        {/* 测试结果提示 */}
-        {testStatus === 'success' && (
-          <div className={cn(
-            'flex items-center gap-2 p-2.5 rounded-kb-md',
-            'bg-semantic-success/5 border border-semantic-success/20',
-          )}>
-            <CheckCircle className="w-icon-sm h-icon-sm text-semantic-success flex-shrink-0" strokeWidth={1.5} />
-            <span className="text-b3 text-semantic-success">{testMessage}</span>
-          </div>
-        )}
-        {testStatus === 'error' && (
-          <div className={cn(
-            'flex items-center gap-2 p-2.5 rounded-kb-md',
-            'bg-semantic-error/5 border border-semantic-error/20',
-          )}>
-            <XCircle className="w-icon-sm h-icon-sm text-semantic-error flex-shrink-0" strokeWidth={1.5} />
-            <span className="text-b3 text-semantic-error">{testMessage}</span>
-          </div>
-        )}
       </Card>
 
-      {/* ── 高级设置（折叠面板） ── */}
-      <Card padding="md" className="flex flex-col">
-        <button
-          type="button"
-          onClick={() => setAdvancedOpen((v) => !v)}
-          className="flex items-center justify-between w-full"
-        >
-          <h2 className="text-b1 font-semibold text-text-primary">高级设置</h2>
-          <ChevronDown
-            className={cn(
-              'w-icon-sm h-icon-sm text-text-tertiary transition-transform duration-300',
-              advancedOpen && 'rotate-180',
-            )}
-            strokeWidth={1.5}
-          />
-        </button>
-
+      {/* ── 高级模式 API Key 配置模态窗口 ── */}
+      {showApiModal && (
         <div
-          className={cn(
-            'grid transition-all duration-300 ease-in-out',
-            advancedOpen ? 'grid-rows-[1fr] opacity-100 mt-kb-md' : 'grid-rows-[0fr] opacity-0',
-          )}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+          onClick={(e) => e.stopPropagation()}
         >
-          <div className="overflow-hidden">
-            <div className="flex flex-col gap-kb-md">
-              {/* Gateway URL */}
-              <div className="flex flex-col gap-kb-sm">
-                <label className="text-b2 font-medium text-text-secondary">自定义 Base URL</label>
+          <div className="w-full max-w-md mx-4 p-6 rounded-kb-lg bg-bg-card border border-border/50 shadow-2xl flex flex-col gap-kb-md">
+            {/* 标题 */}
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-kb-md bg-brand-50 dark:bg-brand-900/20 flex items-center justify-center">
+                <Lock className="w-5 h-5 text-brand-500" strokeWidth={1.5} />
+              </div>
+              <div>
+                <h3 className="text-b1 font-semibold text-text-primary">高级模式配置</h3>
+                <p className="text-c1 text-text-tertiary">请输入 API Key 以使用高级模型</p>
+              </div>
+            </div>
+
+            {/* API Key 输入 */}
+            <div className="flex flex-col gap-kb-sm">
+              <label className="text-b2 font-medium text-text-secondary">API Key</label>
+              <div className="relative">
                 <input
-                  type="text"
-                  value={aiConfig.gatewayUrl}
-                  onChange={(e) => setAIConfig({ ...aiConfig, gatewayUrl: e.target.value })}
-                  placeholder="http://localhost:8000"
+                  type={showApiKey ? 'text' : 'password'}
+                  value={aiConfig.apiKey}
+                  onChange={(e) => setAIConfig({ ...aiConfig, apiKey: e.target.value })}
+                  placeholder="请输入 API Key"
+                  autoFocus
                   className={cn(
-                    'w-full px-3 py-2 rounded-kb-md text-b2',
+                    'w-full px-3 py-2.5 pr-10 rounded-kb-md text-b2',
                     'bg-bg-elevated border-2 border-border/50 text-text-primary',
                     'placeholder:text-text-quaternary',
                     'focus:outline-none focus:border-brand-500',
                     'transition-colors duration-kb-fast',
                   )}
                 />
-                <span className="text-c1 text-text-quaternary">修改后需点击"保存配置"生效</span>
+                <button
+                  type="button"
+                  onClick={toggleShowApiKey}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-tertiary hover:text-text-secondary transition-colors"
+                  tabIndex={-1}
+                >
+                  {showApiKey
+                    ? <EyeOff className="w-icon-sm h-icon-sm" strokeWidth={1.5} />
+                    : <Eye className="w-icon-sm h-icon-sm" strokeWidth={1.5} />}
+                </button>
               </div>
+            </div>
 
-              {/* AI 模型配置（用户自配 Key） */}
-              <div className="flex flex-col gap-kb-sm">
-                <div className="flex items-center gap-2">
-                  <Key className="w-icon-sm h-icon-sm text-amber-500" strokeWidth={1.5} />
-                  <span className="text-b2 font-medium text-text-secondary">自定义模型 API Key</span>
-                </div>
-                <p className="text-c1 text-text-tertiary leading-relaxed">
-                  配置自己的 API Key 以使用更多模型。系统默认模型由后端代理转发，无需担心安全问题。
-                </p>
-              </div>
+            {/* 安全提示 */}
+            <div className={cn(
+              'flex items-start gap-2 p-2.5 rounded-kb-md',
+              'bg-semantic-success/5 border border-semantic-success/20',
+            )}>
+              <Shield className="w-3.5 h-3.5 text-semantic-success flex-shrink-0 mt-0.5" strokeWidth={1.5} />
+              <p className="text-c1 text-text-secondary leading-relaxed">
+                API Key 仅保存在本地，不会上传到任何服务器。
+              </p>
+            </div>
 
-              {userKeyFields.map(({ key, label, placeholder }) => (
-                <div key={key} className="flex flex-col gap-kb-sm">
-                  <label className="text-b2 font-medium text-text-secondary">{label}</label>
-                  <div className="relative">
-                    <input
-                      type={showUserKey[key] ? 'text' : 'password'}
-                      value={userKeys[key] ?? ''}
-                      onChange={(e) => setUserKeys((prev) => ({ ...prev, [key]: e.target.value }))}
-                      placeholder={placeholder}
-                      className={cn(
-                        'w-full px-3 py-2 pr-10 rounded-kb-md text-b2',
-                        'bg-bg-elevated border-2 border-border/50 text-text-primary',
-                        'placeholder:text-text-quaternary',
-                        'focus:outline-none focus:border-brand-500',
-                        'transition-colors duration-kb-fast',
-                      )}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => toggleUserKeyVisibility(key)}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-tertiary hover:text-text-secondary transition-colors"
-                      tabIndex={-1}
-                    >
-                      {showUserKey[key]
-                        ? <EyeOff className="w-icon-sm h-icon-sm" strokeWidth={1.5} />
-                        : <Eye className="w-icon-sm h-icon-sm" strokeWidth={1.5} />}
-                    </button>
-                  </div>
-                </div>
-              ))}
-
-              {/* 操作按钮 */}
-              <div className="flex gap-3 pt-kb-sm">
+            {/* 操作按钮 */}
+            {testStatus === 'idle' && (
+              <>
+                <Button
+                  variant="secondary"
+                  size="md"
+                  className="flex-1"
+                  onClick={handleModalCancel}
+                >
+                  取消
+                </Button>
                 <Button
                   variant="primary"
                   size="md"
                   className="flex-1"
-                  onClick={() => {
-                    saveUserKeysAction();
-                    toast({ type: 'success', message: 'API Key 配置已保存' });
-                  }}
+                  onClick={handleModalSave}
                 >
-                  保存 Key
+                  保存配置
                 </Button>
+              </>
+            )}
+            {testStatus === 'testing' && (
+              <Button
+                variant="primary"
+                size="md"
+                className="w-full"
+                loading
+                disabled
+              >
+                正在测试连接...
+              </Button>
+            )}
+            {testStatus === 'success' && (
+              <>
+                <div className={cn(
+                  'flex items-center gap-2 p-2.5 rounded-kb-md',
+                  'bg-semantic-success/5 border border-semantic-success/20',
+                )}>
+                  <CheckCircle className="w-icon-sm h-icon-sm text-semantic-success flex-shrink-0" strokeWidth={1.5} />
+                  <span className="text-b3 text-semantic-success">{testMessage}</span>
+                </div>
                 <Button
-                  variant="secondary"
+                  variant="primary"
                   size="md"
-                  className="flex-shrink-0"
+                  className="w-full"
                   onClick={() => {
-                    clearUserKeysAction();
-                    toast({ type: 'success', message: 'API Key 已清除' });
+                    setShowApiModal(false);
+                    setTestStatus('idle');
+                    setTestMessage('');
+                    toast({ type: 'success', message: '高级模式配置已保存' });
                   }}
                 >
-                  清除
+                  完成
                 </Button>
-              </div>
-
-              {/* 安全提示 */}
-              <div className={cn(
-                'flex items-start gap-2.5 p-3 rounded-kb-md',
-                'bg-semantic-success/5 border border-semantic-success/20',
-              )}>
-                <Shield className="w-icon-sm h-icon-sm text-semantic-success flex-shrink-0 mt-0.5" strokeWidth={1.5} />
-                <p className="text-c1 text-text-secondary leading-relaxed">
-                  <span className="font-medium text-semantic-success">安全说明：</span>
-                  API Key 仅保存在您的本地浏览器中，不会上传到任何服务器。
-                </p>
-              </div>
-            </div>
+              </>
+            )}
           </div>
         </div>
-      </Card>
+      )}
     </>
   );
 }

@@ -35,13 +35,24 @@ class RecommendChain:
             self._prompt_template = PROMPT_TEMPLATE_PATH.read_text(encoding="utf-8")
         return self._prompt_template
 
-    def _format_history(self, history: list[dict[str, Any]]) -> str:
+    def _format_history(self, history: list[dict[str, Any]], mode: str | None = None) -> str:
         """将专注历史记录格式化为可读文本"""
         if not history:
             return "暂无历史记录（首次使用）"
 
-        # 只取最近 20 条
-        recent = history[-20:]
+        # pomodoro 模式取最近14天数据，其他取最近20条
+        if mode == "pomodoro":
+            from datetime import datetime, timedelta
+            cutoff = datetime.now() - timedelta(days=14)
+            recent = [
+                s for s in history
+                if self._parse_date(s.get("date", "")) >= cutoff
+            ] if history else []
+            if not recent:
+                recent = history[-20:]
+        else:
+            recent = history[-20:]
+
         lines = []
         for i, session in enumerate(recent, 1):
             duration = session.get("duration_minutes", session.get("duration", 25))
@@ -50,10 +61,26 @@ class RecommendChain:
             line = f"  {i}. {duration}分钟 [{completed}]"
             if subject:
                 line += f" - {subject}"
+            # pomodoro 模式额外展示中断次数
+            if mode == "pomodoro":
+                interruptions = session.get("interruptions", 0)
+                if interruptions:
+                    line += f" (中断{interruptions}次)"
             lines.append(line)
         return "\n".join(lines)
 
-    def _preprocess_history(self, history: list[dict[str, Any]]) -> dict[str, Any]:
+    @staticmethod
+    def _parse_date(date_str: str):
+        """安全解析日期字符串"""
+        from datetime import datetime
+        for fmt in ("%Y-%m-%dT%H:%M:%S.%fZ", "%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%d"):
+            try:
+                return datetime.strptime(date_str, fmt)
+            except (ValueError, TypeError):
+                continue
+        return datetime.min
+
+    def _preprocess_history(self, history: list[dict[str, Any]], mode: str | None = None) -> dict[str, Any]:
         """预处理历史数据，计算统计指标"""
         if not history:
             return {"total": 0, "completed": 0, "avg_duration": 0, "completion_rate": 0}
@@ -69,12 +96,26 @@ class RecommendChain:
         avg_duration = sum(durations) / len(durations) if durations else 0
         completion_rate = completed / total if total > 0 else 0
 
-        return {
+        stats: dict[str, Any] = {
             "total": total,
             "completed": completed,
             "avg_duration": round(avg_duration, 1),
             "completion_rate": round(completion_rate, 2),
         }
+
+        # pomodoro 模式额外计算科目分布和中断统计
+        if mode == "pomodoro":
+            subjects: dict[str, int] = {}
+            total_interruptions = 0
+            for s in history:
+                subj = s.get("subject", "")
+                if subj:
+                    subjects[subj] = subjects.get(subj, 0) + 1
+                total_interruptions += s.get("interruptions", 0)
+            stats["subject_distribution"] = subjects
+            stats["total_interruptions"] = total_interruptions
+
+        return stats
 
     def _parse_recommendation(self, content: str) -> dict[str, Any]:
         """解析推荐结果 JSON"""
@@ -126,25 +167,38 @@ class RecommendChain:
     async def run(
         self,
         history: list[dict[str, Any]],
+        mode: str | None = None,
     ) -> dict[str, Any]:
         """
         执行番茄钟推荐
 
         Args:
             history: 历史专注记录列表
+            mode: 推荐模式，'pomodoro' 为增强模式（14天历史+科目分布）
 
         Returns:
             dict: 推荐的番茄钟配置
         """
-        logger.info("RecommendChain.run: history_count=%d", len(history))
+        logger.info("RecommendChain.run: history_count=%d, mode=%s", len(history), mode)
 
         # 1. 预处理历史数据
-        stats = self._preprocess_history(history)
-        history_text = self._format_history(history)
+        stats = self._preprocess_history(history, mode=mode)
+        history_text = self._format_history(history, mode=mode)
 
         # 2. 加载 prompt 模板并填充
         template = self._load_prompt_template()
         prompt = template.format(history=history_text)
+
+        # pomodoro 模式追加额外上下文
+        if mode == "pomodoro" and "subject_distribution" in stats:
+            subj_info = ", ".join(
+                f"{k}({v}次)" for k, v in stats["subject_distribution"].items()
+            )
+            prompt += (
+                f"\n\n科目分布: {subj_info}"
+                f"\n总中断次数: {stats.get('total_interruptions', 0)}"
+                f"\n请综合考虑14天内的完成率、中断频率和科目分布来推荐时长。"
+            )
 
         # 3. 调用 provider
         try:

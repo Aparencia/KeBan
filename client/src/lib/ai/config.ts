@@ -14,7 +14,7 @@ export const AI_CONFIG_STORAGE_KEY = 'kb_ai_config';
 const DEFAULT_AI_CONFIG: AIConfig = {
   provider: 'qwen',
   apiKey: '',
-  gatewayUrl: '',
+  gatewayUrl: import.meta.env.VITE_AI_GATEWAY_URL || 'https://entropydecrease.com',
 };
 
 /** 从 localStorage 读取 AI 配置，不存在则返回默认值 */
@@ -38,9 +38,13 @@ export function saveAIConfig(config: AIConfig): void {
 
 /** 获取 AI 网关 URL，未配置时抛出明确错误 */
 export function requireGatewayUrl(): string {
-  const url = getAIConfig().gatewayUrl;
+  const config = getAIConfig();
+  // 优先使用用户配置，为空则回退到环境变量
+  const url = config.gatewayUrl || import.meta.env.VITE_AI_GATEWAY_URL as string | undefined;
   if (!url) {
-    throw new Error('[KeBan] AI Gateway URL not configured. Please set the gateway URL in AI settings or VITE_AI_GATEWAY_URL in .env');
+    throw new Error(
+      '[熵减] AI Gateway URL 未配置。请在 AI 设置中填写网关地址，或在 .env 中设置 VITE_AI_GATEWAY_URL'
+    );
   }
   return url;
 }

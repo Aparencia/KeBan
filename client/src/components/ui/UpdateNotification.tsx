@@ -6,6 +6,7 @@
  * 发现新版本时额外展示 releaseNotes 折叠面板。
  */
 import { useState, useEffect } from 'react';
+import DOMPurify from 'dompurify';
 import { Download, RefreshCw, X, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -92,7 +93,7 @@ export default function UpdateNotification() {
                   {notesOpen && (
                     <div
                       className="mt-1.5 p-2.5 rounded-kb-md bg-bg-card text-text-secondary text-b3 leading-relaxed max-h-48 overflow-y-auto"
-                      dangerouslySetInnerHTML={{ __html: renderReleaseNotes(String(updateStatus.releaseNotes)) }}
+                      dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(renderReleaseNotes(String(updateStatus.releaseNotes))) }}
                     />
                   )}
                 </div>

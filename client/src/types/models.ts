@@ -40,7 +40,8 @@ export interface SortSuggestion {
   category: string;
   confidence: number;
   reason: string;
-  suggestedAction: 'tag' | 'move' | 'transform' | 'archive';
+  /** AI 推荐的后续操作描述 */
+  suggestedAction: string;
 }
 
 // 番茄钟会话记录

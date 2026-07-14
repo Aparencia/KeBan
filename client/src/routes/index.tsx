@@ -17,6 +17,7 @@ const StudySessionPage = lazy(() => import('@/features/flashcards/pages/StudySes
 const GenerativeReviewPage = lazy(() => import('@/features/flashcards/pages/GenerativeReviewPage'));
 const FeynmanPage = lazy(() => import('@/features/feynman/pages/FeynmanPage'));
 const FeynmanSessionPage = lazy(() => import('@/features/feynman/pages/FeynmanSessionPage'));
+const SocraticSessionPage = lazy(() => import('@/features/feynman/pages/SocraticSessionPage'));
 const SettingsPage = lazy(() => import('@/pages/SettingsPage'));
 const AnalyticsPage = lazy(() => import('@/features/dashboard/pages/AnalyticsPage'));
 const InspirationPage = lazy(() => import('@/features/inspiration/pages/InspirationPage'));
@@ -64,6 +65,7 @@ const routes: RouteObject[] = [
       { path: '/flashcards/:deckId/generative-review', element: <SuspenseWrapper><GenerativeReviewPage /></SuspenseWrapper> },
       { path: '/feynman', element: <SuspenseWrapper><FeynmanPage /></SuspenseWrapper> },
       { path: '/feynman/:sessionId', element: <SuspenseWrapper><FeynmanSessionPage /></SuspenseWrapper> },
+      { path: '/socratic', element: <SuspenseWrapper><SocraticSessionPage /></SuspenseWrapper> },
       { path: '/settings', element: <SuspenseWrapper><SettingsPage /></SuspenseWrapper> },
       { path: '/analytics', element: <SuspenseWrapper><AnalyticsPage /></SuspenseWrapper> },
       { path: '/inspiration', element: <SuspenseWrapper><InspirationPage /></SuspenseWrapper> },

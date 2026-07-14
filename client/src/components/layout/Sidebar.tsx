@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback, useRef } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
   Home, Timer, FileText, Layers, Lightbulb, Settings,
@@ -19,27 +19,27 @@ const navSection1 = [
 ];
 
 const navSection2 = [
-  { to: '/pomodoro', label: '番茄钟', icon: Timer, shortcut: '⌘ 2', dotColor: 'bg-brand-500' },
-  { to: '/notes', label: '笔记', icon: FileText, shortcut: '⌘ 3', dotColor: 'bg-note' },
-  { to: '/flashcards', label: '闪卡', icon: Layers, shortcut: '⌘ 4', dotColor: 'bg-flashcard' },
-  { to: '/feynman', label: '费曼技巧', icon: Lightbulb, shortcut: '⌘ 5', dotColor: 'bg-feynman' },
+  { to: '/pomodoro', label: '深潜', icon: Timer, shortcut: '⌘ 2', dotColor: 'bg-brand-500' },
+  { to: '/notes', label: '结礁', icon: FileText, shortcut: '⌘ 3', dotColor: 'bg-note' },
+  { to: '/flashcards', label: '反衰减呼吸', icon: Layers, shortcut: '⌘ 4', dotColor: 'bg-flashcard' },
+  { to: '/feynman', label: '浮出水面', icon: Lightbulb, shortcut: '⌘ 5', dotColor: 'bg-feynman' },
 ];
 
 const navSection3 = [
   { to: '/analytics', label: '数据分析', icon: BarChart3, shortcut: '⌘ 6' },
-  { to: '/inspiration', label: '灵感', icon: Sparkles, shortcut: '⌘ 7' },
+  { to: '/inspiration', label: '萤火海沟', icon: Sparkles, shortcut: '⌘ 7' },
 ];
 
 /* ── 蔡格尼克效应：待继续任务提示池 ── */
 const ghostTaskPool = [
-  '上次的笔记还没整理完…',
+  '上次的结礁还没整理完…',
   '今天开始学习了吗？',
-  '还有几组卡片在等你复习…',
+  '还有几组反衰减呼吸在等你复习…',
   '昨天标记的错题可以回顾一下了…',
   '上次学到哪了？继续吧…',
-  '今天的第一个番茄钟还没开始…',
+  '今天的第一个深潜还没开始…',
   '知识脉络还差一点就理清了…',
-  '灵感一闪而过，记下来了吗…',
+  '萤火海沟一闪而过，记下来了吗…',
 ];
 
 // 从池中随机取 N 条
@@ -71,6 +71,15 @@ export default function Sidebar() {
   // TODO: 接入真实学习进度数据
   const progressItems: { subject: string; progress: number }[] = [];
   const ghostTasks = useMemo<string[]>(() => pickRandom(ghostTaskPool, 2), []);
+
+  // 设置页 chunk 预加载：hover/focus 时提前下载，导航时瞬间渲染
+  const settingsPrefetched = useRef(false);
+  const prefetchSettings = useCallback(() => {
+    if (!settingsPrefetched.current) {
+      settingsPrefetched.current = true;
+      import('@/pages/SettingsPage');
+    }
+  }, []);
 
   const isOnNotes = location.pathname.startsWith('/notes');
 
@@ -178,14 +187,14 @@ export default function Sidebar() {
             />
           ))}
 
-          {/* 课堂助手 */}
+          {/* 回声定位 */}
           <motion.button
             custom={5}
             variants={sidebarItemVariants}
             initial="hidden"
             animate="visible"
             onClick={handleCaptureClick}
-            title={collapsed ? '课堂助手' : undefined}
+            title={collapsed ? '回声定位' : undefined}
             className={cn(
               'flex items-center gap-2 w-full rounded-[var(--kb-radius-sm)] transition-all duration-200',
               collapsed ? 'justify-center px-0 py-1.5 mx-0' : 'px-2.5 py-[7px]',
@@ -195,7 +204,7 @@ export default function Sidebar() {
             )}
           >
             <Clapperboard className="w-[18px] h-[18px] flex-shrink-0 opacity-60" strokeWidth={1.5} />
-            {!collapsed && <span className="text-[13px] flex-1 text-left">课堂助手</span>}
+            {!collapsed && <span className="text-[13px] flex-1 text-left">回声定位</span>}
           </motion.button>
 
           {/* Section: 更多 */}
@@ -277,6 +286,8 @@ export default function Sidebar() {
               </button>
               <NavLink
                 to="/settings"
+                onMouseEnter={prefetchSettings}
+                onFocus={prefetchSettings}
                 className={({ isActive }) => cn(
                   'flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-[4px] transition-all duration-200 ml-auto active:scale-95 whitespace-nowrap',
                   isActive

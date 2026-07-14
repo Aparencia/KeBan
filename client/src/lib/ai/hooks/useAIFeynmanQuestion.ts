@@ -1,0 +1,30 @@
+import { useState, useCallback } from 'react';
+import { aiPluginLoader } from '../AIPluginLoader';
+import { type AIState, INITIAL_STATE, resolveAIErrorState } from './types';
+import type { FeynmanQuestionResult } from '../types';
+
+/**
+ * AI 费曼反问 hook — 生成追问
+ */
+export function useAIFeynmanQuestion() {
+  const [state, setState] = useState<AIState<FeynmanQuestionResult>>({
+    ...INITIAL_STATE,
+  });
+
+  const generateQuestions = useCallback(async (concept: string, explanation: string) => {
+    setState(prev => ({ ...prev, loading: true, error: null, needsConfig: false }));
+    try {
+      const result = await aiPluginLoader.generateFeynmanQuestions(concept, explanation);
+      setState({ data: result, loading: false, error: null, isFallback: false, needsConfig: false });
+      return result;
+    } catch (error: unknown) {
+      setState(resolveAIErrorState(error, {
+        message: 'AI 追问生成服务暂时不可用',
+        suggestion: '您可以尝试自问"这个概念的核心是什么"来深入理解',
+      }));
+      return null;
+    }
+  }, []);
+
+  return { ...state, generateQuestions };
+}
