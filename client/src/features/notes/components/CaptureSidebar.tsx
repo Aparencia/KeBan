@@ -18,7 +18,17 @@ import type {
   SessionStatus,
   ScreenshotData,
   AudioChunkData,
+  CapturePath,
+  SessionBundle,
+  KeyFrame,
+  RecordingStatus,
+  VideoRecording,
 } from '@/lib/capture';
+import { SmartCapturePanel } from './SmartCapturePanel';
+import { AnalysisPreview } from './AnalysisPreview';
+import { VideoRecordPanel } from './VideoRecordPanel';
+import { analyzeSession, analyzeVideo } from '@/lib/ai/sessionAnalyzer';
+import type { AnalyzeResult } from '@/lib/ai/sessionAnalyzer';
 
 // ================================================================
 // 子组件接口
@@ -489,6 +499,17 @@ export function CaptureSidebar({ onInsertText }: CaptureSidebarProps) {
     mode: 'mixed',
   });
 
+  // @ai-context Path B 智能模式状态：路径选择、数据汇总、分析结果
+  const [capturePath, setCapturePath] = useState<CapturePath>('fine');
+  const [smartBundle, setSmartBundle] = useState<Partial<SessionBundle>>({});
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisResult, setAnalysisResult] = useState<AnalyzeResult | null>(null);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+
+  // @ai-context Path C 全程录制状态：录制实时状态 + 产出视频文件路径
+  const [recordingStatus, setRecordingStatus] = useState<RecordingStatus | null>(null);
+  const [videoFilePath, setVideoFilePath] = useState<string | null>(null);
+
   // 渲染端音频资源引用（getUserMedia stream + AudioContext）
   const audioCleanupRef = useRef<(() => void) | null>(null);
 
@@ -526,10 +547,13 @@ export function CaptureSidebar({ onInsertText }: CaptureSidebarProps) {
     [],
   );
 
-  // 组件卸载时释放 CaptureManager
+  // 组件卸载时停止采集会话
+  // 注意：不能调用 captureManager.dispose()，因为 React StrictMode 开发模式下
+  // effect cleanup 会先执行（清空 workers），但 useMemo 不会重建实例，
+  // 导致 remount 后 pipeline 无 Worker 可用。仅停止会话即可。
   useEffect(() => {
     return () => {
-      captureManager.dispose();
+      captureManager.stopSession().catch(() => {});
     };
   }, [captureManager]);
 
@@ -566,6 +590,62 @@ export function CaptureSidebar({ onInsertText }: CaptureSidebarProps) {
       offError();
     };
   }, []);
+
+  // ----------------------------------------------------------------
+  // @ai-context Path B：监听智能模式关键帧和 bundle 就绪事件
+  // ----------------------------------------------------------------
+  useEffect(() => {
+    const offKeyframe = captureEventBus.on<{ sessionId: string; keyframe: KeyFrame }>(
+      'smart:keyframe',
+      (data) => {
+        setSmartBundle((prev) => ({
+          ...prev,
+          keyframes: [...(prev.keyframes ?? []), data.keyframe],
+        }));
+      },
+    );
+
+    const offBundleReady = captureEventBus.on<{
+      sessionId: string;
+      bundle: SessionBundle;
+    }>('smart:bundle_ready', (data) => {
+      setSmartBundle(data.bundle);
+    });
+
+    return () => {
+      offKeyframe();
+      offBundleReady();
+    };
+  }, []);
+
+  // ----------------------------------------------------------------
+  // @ai-context Path C：监听录制视频就绪事件 + 轮询录制状态
+  // ----------------------------------------------------------------
+  useEffect(() => {
+    const offVideoReady = captureEventBus.on<{
+      sessionId: string;
+      videoRecording: VideoRecording;
+    }>('record:video_ready', (data) => {
+      if (data.videoRecording.filePath) {
+        setVideoFilePath(data.videoRecording.filePath);
+      }
+    });
+    return () => { offVideoReady(); };
+  }, []);
+
+  // Path C 录制中定期轮询状态（每 2 秒通过 IPC 获取最新录制指标）
+  useEffect(() => {
+    if (capturePath !== 'full_record' || status !== 'capturing') return;
+    const poll = async () => {
+      try {
+        const result = await window.electronAPI?.invoke('video_record_status') as RecordingStatus | undefined;
+        if (result) setRecordingStatus(result);
+      } catch { /* 轮询失败静默跳过 */ }
+    };
+    poll();
+    const timer = setInterval(poll, 2000);
+    return () => clearInterval(timer);
+  }, [capturePath, status]);
 
   // ----------------------------------------------------------------
   // 监听截图帧（主进程 → 渲染进程）
@@ -705,6 +785,26 @@ export function CaptureSidebar({ onInsertText }: CaptureSidebarProps) {
       setSegments([]);
       setSelectedIds(new Set());
 
+      // @ai-context Path C 全程录制：走独立 IPC 通道，不启动截图/音频流水线
+      if (capturePath === 'full_record') {
+        await captureManager.startSession({
+          windowId: selectedWindow.id,
+          windowTitle: selectedWindow.title,
+          screenshotInterval: config.screenshotInterval,
+          audioEnabled: false,
+          language: config.language,
+          autoInsert: false,
+          path: 'full_record',
+        });
+        setRecordingStatus(null);
+        setVideoFilePath(null);
+        await window.electronAPI.invoke('video_record_start', {
+          windowId: selectedWindow.id,
+        });
+        soundPlayer.play('capture_start');
+        return;
+      }
+
       const audioEnabled = mode === 'audio' || mode === 'mixed';
 
       // 通过 IPC 启动主进程截图采集
@@ -721,6 +821,7 @@ export function CaptureSidebar({ onInsertText }: CaptureSidebarProps) {
         audioEnabled,
         language: config.language,
         autoInsert: config.autoInsert,
+        path: capturePath,
       });
 
       soundPlayer.play('capture_start');
@@ -748,7 +849,7 @@ export function CaptureSidebar({ onInsertText }: CaptureSidebarProps) {
       // eslint-disable-next-line no-console -- 采集启动失败
       console.error('[CaptureSidebar] Start capture failed:', err);
     }
-  }, [selectedWindow, config, mode, captureManager]);
+  }, [selectedWindow, config, mode, capturePath, captureManager]);
 
   // ----------------------------------------------------------------
   // 暂停采集（停止推送帧到流水线，主进程继续截图）
@@ -773,6 +874,31 @@ export function CaptureSidebar({ onInsertText }: CaptureSidebarProps) {
       // 最先清除重启回调，防止 watchdog 在停止过程中触发
       frameRestartRef.current = null;
 
+      // @ai-context Path C 全程录制：通过 IPC 停止录制并获取视频文件路径
+      if (capturePath === 'full_record') {
+        const stopResult = await window.electronAPI.invoke('video_record_stop') as {
+          success: boolean;
+          filePath?: string;
+          fileSizeBytes?: number;
+        };
+        if (stopResult.filePath) {
+          setVideoFilePath(stopResult.filePath);
+        }
+        await captureManager.stopSession();
+        soundPlayer.play('capture_stop');
+        setStatus('idle');
+        setRecordingStatus(null);
+
+        // 录制完成后提示是否生成 AI 笔记
+        if (stopResult.filePath) {
+          const confirmed = window.confirm('全程录制已完成，是否生成课堂笔记？');
+          if (confirmed) {
+            handleVideoAnalyze(stopResult.filePath);
+          }
+        }
+        return;
+      }
+
       // 停止主进程截图和音频
       await window.electronAPI.invoke('screen_capture_stop');
       await window.electronAPI.invoke('audio_capture_stop');
@@ -786,12 +912,20 @@ export function CaptureSidebar({ onInsertText }: CaptureSidebarProps) {
 
       soundPlayer.play('capture_stop');
       setStatus('idle');
+
+      // @ai-context Path B 智能模式：停止后提示是否生成完整笔记
+      if (capturePath === 'smart' && smartBundle.keyframes && smartBundle.keyframes.length > 0) {
+        const confirmed = window.confirm('智能采集已完成，是否生成完整笔记？');
+        if (confirmed) {
+          handleAnalyze();
+        }
+      }
     } catch (err) {
       setStatus('error');
       // eslint-disable-next-line no-console -- 采集停止失败
       console.error('[CaptureSidebar] Stop capture failed:', err);
     }
-  }, [captureManager]);
+  }, [captureManager, capturePath, smartBundle]);
 
   // ----------------------------------------------------------------
   // 模式切换
@@ -844,6 +978,58 @@ export function CaptureSidebar({ onInsertText }: CaptureSidebarProps) {
   // ----------------------------------------------------------------
   const handleConfigChange = useCallback((patch: Partial<CaptureSidebarConfig>) => {
     setConfig((prev) => ({ ...prev, ...patch }));
+  }, []);
+
+  // ----------------------------------------------------------------
+  // @ai-context Path B：调用多模态分析接口，生成结构化课堂笔记
+  // ----------------------------------------------------------------
+  const handleAnalyze = useCallback(async () => {
+    if (!smartBundle.keyframes || smartBundle.keyframes.length === 0) return;
+    setIsAnalyzing(true);
+    setAnalysisError(null);
+    setAnalysisResult(null);
+    try {
+      const fullBundle: SessionBundle = {
+        keyframes: smartBundle.keyframes,
+        audioSegments: smartBundle.audioSegments ?? [],
+        timeline: smartBundle.timeline ?? [],
+        duration: smartBundle.duration ?? 0,
+      };
+      const result = await analyzeSession(fullBundle, { language: config.language });
+      setAnalysisResult(result);
+    } catch (err) {
+      setAnalysisError(err instanceof Error ? err.message : '未知分析错误');
+    } finally {
+      setIsAnalyzing(false);
+    }
+  }, [smartBundle, config.language]);
+
+  // ----------------------------------------------------------------
+  // @ai-context Path C：调用视频多模态分析接口，生成结构化课堂笔记
+  // ----------------------------------------------------------------
+  const handleVideoAnalyze = useCallback(async (filePath?: string) => {
+    const targetPath = filePath ?? videoFilePath;
+    if (!targetPath) return;
+    setIsAnalyzing(true);
+    setAnalysisError(null);
+    setAnalysisResult(null);
+    try {
+      const result = await analyzeVideo(targetPath, {
+        duration: recordingStatus?.duration,
+        language: config.language,
+      });
+      setAnalysisResult(result);
+    } catch (err) {
+      setAnalysisError(err instanceof Error ? err.message : '未知分析错误');
+    } finally {
+      setIsAnalyzing(false);
+    }
+  }, [videoFilePath, recordingStatus?.duration, config.language]);
+
+  const handleDismissAnalysis = useCallback(() => {
+    setAnalysisResult(null);
+    setAnalysisError(null);
+    setIsAnalyzing(false);
   }, []);
 
   const canStart = !!selectedWindow;
@@ -904,6 +1090,36 @@ export function CaptureSidebar({ onInsertText }: CaptureSidebarProps) {
             loading={windowsLoading}
           />
 
+          {/* @ai-context Path 路径选择器：精细 / 智能 / 录制（三模式） */}
+          {([
+            { value: 'fine' as CapturePath, label: '精细' },
+            { value: 'smart' as CapturePath, label: '智能' },
+            { value: 'full_record' as CapturePath, label: '录制' },
+          ] as const).length > 0 && (
+            <div className="flex items-center gap-1 px-3 py-2 border-b border-border/20">
+              {[
+                { value: 'fine' as CapturePath, label: '精细' },
+                { value: 'smart' as CapturePath, label: '智能' },
+                { value: 'full_record' as CapturePath, label: '录制' },
+              ].map(({ value, label }) => (
+                <button
+                  key={value}
+                  onClick={() => setCapturePath(value)}
+                  disabled={status === 'capturing' || status === 'processing'}
+                  className={cn(
+                    'flex-1 py-1.5 rounded-kb-sm text-b3 font-medium transition-all duration-kb-fast',
+                    capturePath === value
+                      ? 'bg-brand-50 text-brand-600 ring-1 ring-brand-200/50'
+                      : 'text-text-tertiary hover:text-text-secondary hover:bg-bg-tertiary/50',
+                    (status === 'capturing' || status === 'processing') && 'opacity-50 cursor-not-allowed',
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+
           {/* 采集控制栏 */}
           <ControlBar
             status={status}
@@ -942,14 +1158,45 @@ export function CaptureSidebar({ onInsertText }: CaptureSidebarProps) {
             </div>
           )}
 
-          {/* 实时提取结果 */}
-          <SegmentList
-            segments={segments}
-            selectedIds={selectedIds}
-            onToggleSelect={handleToggleSelect}
-            onInsertSelected={handleInsertSelected}
-            onInsertAll={handleInsertAll}
-          />
+          {/* 条件渲染内容区域：fine=逐帧结果 / smart=智能时间轴 / full_record=预留 */}
+          {capturePath === 'fine' && (
+            <SegmentList
+              segments={segments}
+              selectedIds={selectedIds}
+              onToggleSelect={handleToggleSelect}
+              onInsertSelected={handleInsertSelected}
+              onInsertAll={handleInsertAll}
+            />
+          )}
+
+          {capturePath === 'smart' && (
+            <SmartCapturePanel
+              bundle={smartBundle}
+              isRecording={status === 'capturing'}
+            />
+          )}
+
+          {capturePath === 'full_record' && (
+            <VideoRecordPanel
+              recordingStatus={recordingStatus}
+              isRecording={status === 'capturing'}
+            />
+          )}
+
+          {/* Path B 分析预览面板 */}
+          {(isAnalyzing || analysisResult || analysisError) && (
+            <AnalysisPreview
+              result={analysisResult}
+              isAnalyzing={isAnalyzing}
+              error={analysisError}
+              onInsert={(content) => {
+                onInsertText?.(content);
+                handleDismissAnalysis();
+              }}
+              onDismiss={handleDismissAnalysis}
+              onRetry={handleAnalyze}
+            />
+          )}
 
           {/* 设置区 */}
           <SettingsPanel config={config} onChange={handleConfigChange} />

@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
+import { useEffect, useLayoutEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, useMotionValue, useTransform, useSpring } from 'framer-motion';
 import {
@@ -226,7 +226,8 @@ function useElasticPageTransition() {
   const containerHeightRef = useRef(0);
 
   // 计算自适应阈值 + header 偏移 + 可用高度
-  useEffect(() => {
+  // 使用 useLayoutEffect 确保在浏览器绘制前完成测量，避免首帧内容跳动
+  useLayoutEffect(() => {
     const update = () => {
       thresholdRef.current = window.innerHeight * 0.15;
       const el = document.querySelector('[data-elastic-container]');

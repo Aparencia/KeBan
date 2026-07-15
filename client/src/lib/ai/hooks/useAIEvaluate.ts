@@ -22,6 +22,7 @@ export function useAIEvaluate() {
       return result;
     } catch (error: unknown) {
       setState(resolveAIErrorState(error, getLocalFallbackMessage('evaluate')));
+      throw error;
     }
   }, []);
 

@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { Modal } from '@/components/ui';
-import { List, Layout, GitBranch, PenTool, FileText } from 'lucide-react';
+import { List, Layout, GitBranch, PenTool, FileText, ListTodo } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-export type NoteTemplate = 'outline' | 'cornell' | 'mindmap' | 'free' | 'blank';
+export type NoteTemplate = 'outline' | 'cornell' | 'mindmap' | 'free' | 'blank' | 'todo';
 
 interface TemplateOption {
   id: NoteTemplate;
@@ -18,6 +18,7 @@ const templates: TemplateOption[] = [
   { id: 'mindmap', name: '思维导图', description: '发散式可视化知识图谱', icon: GitBranch },
   { id: 'free', name: '自由笔记', description: '无拘束的自由书写空间', icon: PenTool },
   { id: 'blank', name: '空白笔记', description: '从零开始的纯净画布', icon: FileText },
+  { id: 'todo', name: '待办笔记', description: '可勾选的任务清单笔记', icon: ListTodo },
 ];
 
 interface TemplateSelectorProps {

@@ -18,7 +18,7 @@ import { aiClient } from '../http/apiClient';
 export class RemoteAIPlugin implements AIPlugin {
   private timeout: number;
 
-  constructor(timeout: number = 30000) {
+  constructor(timeout: number = 60000) {
     this.timeout = timeout;
   }
 
@@ -33,7 +33,6 @@ export class RemoteAIPlugin implements AIPlugin {
 
   // ── POST /api/v1/ai/summarize ──────────────────────────────
   async summarizeNote(noteContent: string, options?: SummarizeOptions): Promise<SummarizeResult> {
-    this.checkOnline();
     try {
       // 构建后端 SummarizeRequest: { text, options: { max_length, style, language } }
       const backendOptions: Record<string, unknown> = {};
@@ -63,7 +62,6 @@ export class RemoteAIPlugin implements AIPlugin {
 
   // ── POST /api/v1/ai/generate-cards ─────────────────────────
   async generateFlashcards(noteContent: string, options?: FlashcardOptions): Promise<FlashcardResult> {
-    this.checkOnline();
     try {
       // 构建后端 CardGenRequest: { note, options: { max_cards, difficulty, card_type } }
       const backendOptions: Record<string, unknown> = {};
@@ -98,7 +96,6 @@ export class RemoteAIPlugin implements AIPlugin {
 
   // ── POST /api/v1/ai/evaluate-explanation ───────────────────
   async evaluateExplanation(concept: string, explanation: string, _options?: EvaluateOptions): Promise<EvaluateResult> {
-    this.checkOnline();
     try {
       // 构建后端 EvaluateRequest: { concept, explanation }
       const result = await aiClient.post<{
@@ -138,7 +135,6 @@ export class RemoteAIPlugin implements AIPlugin {
 
   // ── POST /api/v1/ai/recommend-duration ─────────────────────
   async recommendDuration(historyData: DurationHistoryData, _options?: DurationOptions): Promise<DurationResult> {
-    this.checkOnline();
     try {
       // 构建后端 RecommendRequest: { history: [{ duration_minutes, completed, subject, timestamp }] }
       const history = (historyData.sessions || []).map(s => ({
@@ -179,7 +175,6 @@ export class RemoteAIPlugin implements AIPlugin {
 
   // ── POST /api/v1/ai/feynman-question ───────────────────
   async generateFeynmanQuestions(concept: string, explanation: string): Promise<FeynmanQuestionResult> {
-    this.checkOnline();
     try {
       const result = await aiClient.post<{
         questions: Array<{ question: string; focus: string }>;
@@ -211,7 +206,6 @@ export class RemoteAIPlugin implements AIPlugin {
     questions: string[],
     answers: string[],
   ): Promise<FeynmanAnswerEvalResult> {
-    this.checkOnline();
     try {
       const result = await aiClient.post<{
         understanding_score: number;
@@ -242,7 +236,6 @@ export class RemoteAIPlugin implements AIPlugin {
 
   // ── POST /api/v1/ai/optimize-card ──────────────────────────
   async optimizeCard(front: string, back: string): Promise<OptimizeCardResult> {
-    this.checkOnline();
     try {
       const result = await aiClient.post<{
         suggested_front: string;
@@ -271,7 +264,6 @@ export class RemoteAIPlugin implements AIPlugin {
 
   // ── POST /api/v1/ai/tag-content ──────────────────────────────
   async tagContent(content: string): Promise<TagContentResult> {
-    this.checkOnline();
     try {
       const result = await aiClient.post<{
         content_nature: string;
@@ -300,7 +292,6 @@ export class RemoteAIPlugin implements AIPlugin {
 
   // ── POST /api/v1/ai/sort-inspiration ─────────────────────────
   async sortInspiration(content: string, existingTags?: Record<string, string>): Promise<SortResult> {
-    this.checkOnline();
     try {
       const result = await aiClient.post<{
         suggestions: Array<{ category: string; reason: string; confidence: number; suggested_action?: string }>;
@@ -330,7 +321,6 @@ export class RemoteAIPlugin implements AIPlugin {
 
   // ── POST /api/v1/ai/anchor-point ─────────────────────────────
   async generateAnchorPoint(noteId: string, content: string): Promise<{ anchorPoints: AnchorPoint[] }> {
-    this.checkOnline();
     try {
       const result = await aiClient.post<{
         anchor_points: Array<{
@@ -357,7 +347,6 @@ export class RemoteAIPlugin implements AIPlugin {
 
   // ── POST /api/v1/ai/socratic (brainstorm) ───────────────────
   async socraticBrainstorm(topic: string, context?: string): Promise<{ ideas: BrainstormIdea[] }> {
-    this.checkOnline();
     try {
       const result = await aiClient.post<{
         question: string; hint: string; thinking_direction: string;
@@ -391,7 +380,6 @@ export class RemoteAIPlugin implements AIPlugin {
     topic: string,
     history: ChatMessage[],
   ): Promise<{ question: string; hints: string[] }> {
-    this.checkOnline();
     try {
       const backendHistory = history.map(h => ({
         role: h.role === 'assistant' ? 'tutor' : 'learner',
@@ -423,7 +411,6 @@ export class RemoteAIPlugin implements AIPlugin {
     answer: string,
     history: ChatMessage[],
   ): Promise<SocraticEvaluateResult> {
-    this.checkOnline();
     try {
       const backendHistory = history.map(h => ({
         role: h.role === 'assistant' ? 'tutor' : 'learner',
@@ -462,7 +449,6 @@ export class RemoteAIPlugin implements AIPlugin {
     dialogueSummary: string,
     history: ChatMessage[],
   ): Promise<SocraticDeepeningResult> {
-    this.checkOnline();
     try {
       const backendHistory = history.map(h => ({
         role: h.role === 'assistant' ? 'tutor' : 'learner',
@@ -494,7 +480,6 @@ export class RemoteAIPlugin implements AIPlugin {
 
   // ── POST /api/v1/ai/predict ─────────────────────────────────
   async predictQuestion(noteId: string, content: string): Promise<{ predictions: PredictionPrompt[] }> {
-    this.checkOnline();
     try {
       const result = await aiClient.post<{
         predictions: Array<{
@@ -521,7 +506,6 @@ export class RemoteAIPlugin implements AIPlugin {
 
   // ── POST /api/v1/ai/rescue ──────────────────────────────────
   async rescue(context: RescueContext): Promise<{ hints: string[]; resources: ResourceLink[]; alternativeApproach?: string }> {
-    this.checkOnline();
     try {
       const result = await aiClient.post<{
         rescue_levels: Array<{

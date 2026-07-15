@@ -75,7 +75,7 @@ export interface Note {
   id: string;
   title: string;
   content: string;               // TipTap JSON 内容
-  template: 'outline' | 'cornell' | 'mindmap' | 'free' | 'qa' | 'blank' | 'video';
+  template: 'outline' | 'cornell' | 'mindmap' | 'free' | 'qa' | 'blank' | 'video' | 'todo';
   folderId?: string;
   tags: string[];
   createdAt: Date;

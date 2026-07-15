@@ -1,536 +1,27 @@
-﻿import { useEffect, useState, useCallback, useRef, forwardRef } from 'react';
+﻿import { useEffect, useState, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, Send, Trash2, ChevronDown, ChevronUp, X, Check, Wand2, ArrowRight, Pencil, Layers, Loader2, CheckCircle2 } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
+import { Sparkles, Send, X, Wand2, Layers } from 'lucide-react';
 import { AIThinkingIndicator } from '@/components/ui/AIThinkingIndicator';
 import { EmptyState, useToast } from '@/components/ui';
 import { cn } from '@/lib/utils';
-import { useInspirationStore, type InspirationItem, type InspirationTags } from '../store/inspirationStore';
+import { useInspirationStore, type InspirationTags } from '../store/inspirationStore';
 import { useShallow } from 'zustand/react/shallow';
-import { useAITagContent, useAISortInspiration } from '@/lib/ai/useAI';
-import type { SortSuggestion } from '@/lib/ai/types';
+import { useAITagContent } from '@/lib/ai/useAI';
 import { useBatchSort } from '../hooks/useBatchSort';
-
-// ─────────────────────────────────────────────────────────────
-// Constants
-// ─────────────────────────────────────────────────────────────
-
-const CONTENT_NATURE_OPTIONS: { value: InspirationTags['content_nature']; label: string; color: string; bg: string }[] = [
-  { value: 'concept',     label: '概念', color: 'text-accent-600',   bg: 'bg-accent-50 border-accent-200 dark:bg-accent-900/20 dark:border-accent-700' },
-  { value: 'question',    label: '疑问', color: 'text-orange-600', bg: 'bg-orange-50 border-orange-200 dark:bg-orange-900/20 dark:border-orange-700' },
-  { value: 'inspiration', label: '萤火', color: 'text-purple-600', bg: 'bg-purple-50 border-purple-200 dark:bg-purple-900/20 dark:border-purple-700' },
-  { value: 'todo',        label: '待办', color: 'text-green-600',  bg: 'bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-700' },
-];
-
-const COGNITIVE_DEPTH_OPTIONS: { value: InspirationTags['cognitive_depth']; label: string; color: string; bg: string }[] = [
-  { value: 'shallow',      label: '浅层',   color: 'text-slate-500',  bg: 'bg-slate-50 border-slate-200 dark:bg-slate-800/30 dark:border-slate-600' },
-  { value: 'understanding', label: '理解层', color: 'text-indigo-600', bg: 'bg-indigo-50 border-indigo-200 dark:bg-indigo-900/20 dark:border-indigo-700' },
-  { value: 'application',   label: '应用层', color: 'text-rose-600',   bg: 'bg-rose-50 border-rose-200 dark:bg-rose-900/20 dark:border-rose-700' },
-];
-
-const NATURE_MAP = Object.fromEntries(CONTENT_NATURE_OPTIONS.map(o => [o.value, o])) as Record<string, typeof CONTENT_NATURE_OPTIONS[0]>;
-const DEPTH_MAP  = Object.fromEntries(COGNITIVE_DEPTH_OPTIONS.map(o => [o.value, o])) as Record<string, typeof COGNITIVE_DEPTH_OPTIONS[0]>;
-
-// ─────────────────────────────────────────────────────────────
-// Animation variants
-// ─────────────────────────────────────────────────────────────
-
-const pageVariants = {
-  hidden: {},
-  visible: { transition: { staggerChildren: 0.05, delayChildren: 0.06 } },
-};
-const headerVariants = {
-  hidden: { opacity: 0, y: -16, filter: 'blur(4px)' },
-  visible: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.45, ease: [0.25, 0.1, 0.25, 1] as const } },
-};
-const inputVariants = {
-  hidden: { opacity: 0, y: 12, filter: 'blur(3px)' },
-  visible: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.4, ease: [0.25, 0.1, 0.25, 1] as const, delay: 0.1 } },
-};
-const filterVariants = {
-  hidden: { opacity: 0, y: 8 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.3, delay: 0.15 } },
-};
-const listVariants = {
-  hidden: {},
-  visible: { transition: { staggerChildren: 0.05, delayChildren: 0.1 } },
-};
-const cardVariants = {
-  hidden: { opacity: 0, y: 16, scale: 0.96, filter: 'blur(4px)' },
-  visible: { opacity: 1, y: 0, scale: 1, filter: 'blur(0px)', transition: { duration: 0.35, ease: [0.22, 0.61, 0.36, 1] as const } },
-  exit: { opacity: 0, x: -20, scale: 0.95, filter: 'blur(3px)', transition: { duration: 0.2 } },
-};
-
-// ─────────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────────
-
-function formatTime(iso: string): string {
-  const d = new Date(iso);
-  const now = new Date();
-  const diffMin = Math.floor((now.getTime() - d.getTime()) / 60_000);
-  if (diffMin < 1) return '刚刚';
-  if (diffMin < 60) return `${diffMin} 分钟前`;
-  const diffHour = Math.floor(diffMin / 60);
-  if (diffHour < 24) return `${diffHour} 小时前`;
-  const diffDay = Math.floor(diffHour / 24);
-  if (diffDay < 7) return `${diffDay} 天前`;
-  return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
-}
-
-// ─────────────────────────────────────────────────────────────
-// Tag chip component
-// ─────────────────────────────────────────────────────────────
-
-interface TagChipProps { label: string; color: string; bg: string; onClick?: () => void; }
-
-function TagChip({ label, color, bg, onClick }: TagChipProps) {
-  return (
-    <motion.button
-      type="button"
-      onClick={onClick}
-      whileHover={{ scale: 1.05 }}
-      whileTap={{ scale: 0.95 }}
-      className={cn('px-2 py-0.5 rounded-full text-xs font-medium border transition-colors cursor-pointer select-none', color, bg)}
-    >
-      {label}
-    </motion.button>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────
-// Tag edit popover
-// ─────────────────────────────────────────────────────────────
-
-interface TagEditPopoverProps { item: InspirationItem; onClose: () => void; }
-
-function TagEditPopover({ item, onClose }: TagEditPopoverProps) {
-  const { updateTags } = useInspirationStore(useShallow(s => s));
-  const [nature, setNature] = useState(item.tags.content_nature);
-  const [depth, setDepth] = useState(item.tags.cognitive_depth);
-  const [subject, setSubject] = useState(item.tags.subject);
-  const panelRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (panelRef.current && !panelRef.current.contains(e.target as Node)) onClose();
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [onClose]);
-
-  const handleSave = () => {
-    updateTags(item.id, { content_nature: nature, cognitive_depth: depth, subject });
-    onClose();
-  };
-
-  return (
-    <motion.div
-      ref={panelRef}
-      initial={{ opacity: 0, y: -6, scale: 0.95 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, y: -6, scale: 0.95 }}
-      transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] as const }}
-      className={cn(
-        'absolute left-0 top-full mt-1 z-30',
-        'bg-bg-elevated/90 backdrop-blur-xl border border-border/60 rounded-kb-lg shadow-xl',
-        'p-3 w-64 space-y-3',
-      )}
-    >
-      <div>
-        <div className="text-c1 text-text-tertiary mb-1">内容性质</div>
-        <div className="flex flex-wrap gap-1">
-          {CONTENT_NATURE_OPTIONS.map(opt => (
-            <motion.button key={opt.value} whileTap={{ scale: 0.9 }}
-              onClick={() => setNature(opt.value)}
-              className={cn('px-2 py-0.5 rounded-full text-xs font-medium border transition-colors',
-                nature === opt.value ? cn(opt.color, opt.bg, 'ring-1 ring-brand-300') : 'text-text-tertiary bg-bg-secondary border-border/40 hover:text-text-secondary')}>
-              {opt.label}
-            </motion.button>
-          ))}
-        </div>
-      </div>
-      <div>
-        <div className="text-c1 text-text-tertiary mb-1">认知深度</div>
-        <div className="flex flex-wrap gap-1">
-          {COGNITIVE_DEPTH_OPTIONS.map(opt => (
-            <motion.button key={opt.value} whileTap={{ scale: 0.9 }}
-              onClick={() => setDepth(opt.value)}
-              className={cn('px-2 py-0.5 rounded-full text-xs font-medium border transition-colors',
-                depth === opt.value ? cn(opt.color, opt.bg, 'ring-1 ring-brand-300') : 'text-text-tertiary bg-bg-secondary border-border/40 hover:text-text-secondary')}>
-              {opt.label}
-            </motion.button>
-          ))}
-        </div>
-      </div>
-      <div>
-        <div className="text-c1 text-text-tertiary mb-1">学科领域</div>
-        <input value={subject} onChange={e => setSubject(e.target.value)}
-          className={cn('w-full px-2 py-1 rounded-kb-md text-xs bg-bg-secondary border border-border/40 text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-1 focus:ring-brand-300 focus:border-brand-300')}
-          placeholder="输入学科..." />
-      </div>
-      <div className="flex justify-end gap-2">
-        <motion.button whileTap={{ scale: 0.95 }} onClick={onClose}
-          className="px-2 py-1 rounded-kb-md text-xs text-text-secondary hover:text-text-primary hover:bg-bg-secondary transition-colors">取消</motion.button>
-        <motion.button whileTap={{ scale: 0.95 }} onClick={handleSave}
-          className="px-2 py-1 rounded-kb-md text-xs bg-brand-600 text-text-inverse hover:bg-brand-700 transition-colors">保存</motion.button>
-      </div>
-    </motion.div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────
-// Sort suggestion type labels & colors
-// ─────────────────────────────────────────────────────────────
-
-const SORT_TYPE_MAP: Record<string, { label: string; color: string; bg: string }> = {
-  feynman:  { label: '浮出水面讲解', color: 'text-amber-700',   bg: 'bg-amber-50 border-amber-200 dark:bg-amber-900/20 dark:border-amber-700' },
-  flashcard: { label: '反衰减呼吸',    color: 'text-cyan-700',    bg: 'bg-cyan-50 border-cyan-200 dark:bg-cyan-900/20 dark:border-cyan-700' },
-  note:     { label: '结礁',     color: 'text-indigo-700',  bg: 'bg-indigo-50 border-indigo-200 dark:bg-indigo-900/20 dark:border-indigo-700' },
-  todo:     { label: '待办',     color: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-200 dark:bg-emerald-900/20 dark:border-emerald-700' },
-  action_item: { label: '立即执行', color: 'text-red-700 dark:text-red-400', bg: 'bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-700' },
-};
-
-/** 分拣状态视觉配置映射 */
-const SORT_STATUS_CONFIG = {
-  sorting: { label: '分拣中...', icon: Loader2, color: 'text-cyan-500', bg: 'bg-cyan-50 border-cyan-200 dark:bg-cyan-900/20 dark:border-cyan-700', animate: true },
-  sorted: { label: '已分拣', icon: null, color: 'text-amber-700 dark:text-amber-400', bg: 'bg-amber-50 border-amber-200 dark:bg-amber-900/20 dark:border-amber-700', animate: false },
-  confirmed: { label: '已确认', icon: CheckCircle2, color: 'text-emerald-700 dark:text-emerald-400', bg: 'bg-emerald-50 border-emerald-200 dark:bg-emerald-900/20 dark:border-emerald-700', animate: false },
-  transformed: { label: '已转化', icon: CheckCircle2, color: 'text-emerald-700 dark:text-emerald-400', bg: 'bg-emerald-50 border-emerald-200 dark:bg-emerald-900/20 dark:border-emerald-700', animate: false },
-} as const satisfies Record<string, { label: string; icon: LucideIcon | null; color: string; bg: string; animate: boolean }>;
-
-// ─────────────────────────────────────────────────────────────
-// AI Sort Panel
-// ─────────────────────────────────────────────────────────────
-
-interface AISortPanelProps { suggestions: SortSuggestion[]; item: InspirationItem; onClose: () => void; }
-
-const SORT_TYPE_ENTRIES = Object.entries(SORT_TYPE_MAP) as [string, { label: string; color: string; bg: string }][];
-
-function AISortPanel({ suggestions, item, onClose }: AISortPanelProps) {
-  const { toast } = useToast();
-  const { confirmSort } = useInspirationStore(useShallow(s => s));
-  const [localSuggestions, setLocalSuggestions] = useState<SortSuggestion[]>(suggestions);
-  const [openDropdownIdx, setOpenDropdownIdx] = useState<number | null>(null);
-  const [overriddenSet, setOverriddenSet] = useState<Set<number>>(new Set());
-  const dropdownRef = useRef<HTMLDivElement>(null);
-
-  // 点击外部关闭下拉
-  useEffect(() => {
-    if (openDropdownIdx === null) return;
-    const handler = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setOpenDropdownIdx(null);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [openDropdownIdx]);
-
-  const handleSelectCategory = useCallback((idx: number, newCategory: string) => {
-    // 更新本地建议列表
-    setLocalSuggestions(prev => prev.map((s, i) => i === idx ? { ...s, category: newCategory as SortSuggestion['category'] } : s));
-    // 标记为已手动覆盖
-    setOverriddenSet(prev => new Set(prev).add(idx));
-    // 调用 store 的 confirmSort 持久化
-    confirmSort(item.id, newCategory);
-    setOpenDropdownIdx(null);
-    toast({ type: 'success', message: `已更改分类为「${SORT_TYPE_MAP[newCategory]?.label ?? newCategory}」` });
-  }, [item.id, confirmSort, toast]);
-
-  const handleConvert = useCallback((type: string) => {
-    const label = SORT_TYPE_MAP[type]?.label ?? type;
-    const text = `[${label}] ${item.content}`;
-    navigator.clipboard.writeText(text).then(() => {
-      toast({ type: 'success', message: `已复制为「${label}」格式到剪贴板` });
-    }).catch(() => { toast({ type: 'error', message: '复制失败' }); });
-  }, [item.content, toast]);
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, height: 0 }}
-      animate={{ opacity: 1, height: 'auto' }}
-      exit={{ opacity: 0, height: 0 }}
-      transition={{ duration: 0.3, ease: [0.25, 0.1, 0.25, 1] as const }}
-      className="overflow-hidden"
-    >
-      <div className="mt-3 pt-3 border-t border-border/30 space-y-2">
-        <div className="flex items-center justify-between">
-          <span className="text-c1 font-medium text-text-secondary">AI 归类建议</span>
-          <motion.button whileTap={{ scale: 0.9 }} onClick={onClose} className="text-text-tertiary hover:text-text-secondary transition-colors">
-            <X className="w-3.5 h-3.5" />
-          </motion.button>
-        </div>
-        <motion.div initial="hidden" animate="visible" variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.06 } } }}>
-          {localSuggestions.map((s, idx) => {
-            const typeInfo = SORT_TYPE_MAP[s.category] ?? { label: s.category, color: 'text-text-secondary', bg: 'bg-bg-secondary border-border' };
-            const isOverridden = overriddenSet.has(idx);
-            const isDropdownOpen = openDropdownIdx === idx;
-            return (
-              <motion.div key={idx}
-                variants={{ hidden: { opacity: 0, x: -10 }, visible: { opacity: 1, x: 0, transition: { duration: 0.25 } } }}
-                className={cn('flex items-center gap-2 p-kb-sm rounded-kb-lg border bg-bg-secondary/50', typeInfo.bg)}>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap relative" ref={isDropdownOpen ? dropdownRef : undefined}>
-                    {/* ── 可交互分类标签 ── */}
-                    <motion.button
-                      whileTap={{ scale: 0.95 }}
-                      onClick={() => setOpenDropdownIdx(isDropdownOpen ? null : idx)}
-                      className={cn(
-                        'inline-flex items-center gap-1 text-xs font-semibold rounded-md px-1.5 py-0.5 border transition-all cursor-pointer',
-                        typeInfo.color,
-                        isOverridden && 'border-dashed border-current',
-                        !isOverridden && 'border-transparent hover:border-current/30',
-                      )}
-                    >
-                      {isOverridden && <Pencil className="w-3 h-3" />}
-                      {typeInfo.label}
-                      <ChevronDown className={cn('w-3 h-3 transition-transform', isDropdownOpen && 'rotate-180')} />
-                    </motion.button>
-                    <span className="text-c1 text-text-tertiary">{Math.round(s.confidence * 100)}%</span>
-                    {s.confidence < 0.5 && <span className="text-c1 text-orange-500 font-medium">仅供参考</span>}
-                    {isOverridden && <span className="text-c1 text-brand-500 font-medium">已手动调整</span>}
-
-                    {/* ── 分类下拉面板 ── */}
-                    <AnimatePresence>
-                      {isDropdownOpen && (
-                        <motion.div
-                          initial={{ opacity: 0, y: -4, scale: 0.95 }}
-                          animate={{ opacity: 1, y: 0, scale: 1 }}
-                          exit={{ opacity: 0, y: -4, scale: 0.95 }}
-                          transition={{ duration: 0.15 }}
-                          className="absolute left-0 top-full mt-1 z-30 bg-bg-elevated/95 backdrop-blur-xl border border-border/60 rounded-kb-lg shadow-xl p-1.5 w-44"
-                        >
-                          {SORT_TYPE_ENTRIES.map(([key, opt]) => {
-                            const isSelected = s.category === key;
-                            return (
-                              <motion.button
-                                key={key}
-                                whileTap={{ scale: 0.97 }}
-                                onClick={() => handleSelectCategory(idx, key)}
-                                className={cn(
-                                  'w-full flex items-center gap-2 px-2 py-1.5 rounded-kb-md text-xs font-medium transition-colors text-left',
-                                  isSelected ? cn(opt.color, opt.bg) : 'text-text-secondary hover:bg-bg-secondary',
-                                )}
-                              >
-                                {isSelected && <Check className="w-3 h-3 flex-shrink-0" />}
-                                <span className={cn(!isSelected && 'ml-5')}>{opt.label}</span>
-                              </motion.button>
-                            );
-                          })}
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
-                  <p className="text-c1 text-text-secondary mt-0.5 truncate">{s.reason}</p>
-                </div>
-                <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-                  onClick={() => handleConvert(s.category)}
-                  className={cn('flex items-center gap-1 px-2 py-1 rounded-kb-md text-xs font-medium bg-bg-elevated border border-border/50 text-text-secondary hover:text-brand-600 hover:border-brand-300 transition-colors whitespace-nowrap')}>
-                  转化 <ArrowRight className="w-3 h-3" />
-                </motion.button>
-              </motion.div>
-            );
-          })}
-        </motion.div>
-      </div>
-    </motion.div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────
-// Inspiration Card
-// ─────────────────────────────────────────────────────────────
-
-interface InspirationCardProps { item: InspirationItem; batchMode?: boolean; selected?: boolean; onToggleSelect?: () => void; }
-
-const InspirationCard = forwardRef<HTMLDivElement, InspirationCardProps>(function InspirationCard({ item, batchMode, selected, onToggleSelect }, ref) {
-  const { deleteItem } = useInspirationStore(useShallow(s => s));
-  const [expanded, setExpanded] = useState(false);
-  const [editOpen, setEditOpen] = useState(false);
-  const [sortOpen, setSortOpen] = useState(false);
-  const [sortSuggestions, setSortSuggestions] = useState<SortSuggestion[]>([]);
-  const { sortInspiration, loading: sortLoading } = useAISortInspiration();
-  const { toast } = useToast();
-
-  const natureOpt = NATURE_MAP[item.tags.content_nature];
-  const depthOpt  = DEPTH_MAP[item.tags.cognitive_depth];
-
-  const handleDelete = () => { deleteItem(item.id); toast({ type: 'success', message: '已删除' }); };
-
-  const handleSort = async () => {
-    if (sortOpen && sortSuggestions.length > 0) { setSortOpen(false); return; }
-    setSortOpen(true);
-    const existingTags: Record<string, string> = {
-      content_nature: item.tags.content_nature, cognitive_depth: item.tags.cognitive_depth, subject: item.tags.subject,
-    };
-    const result = await sortInspiration(item.content, existingTags);
-    if (result) setSortSuggestions(result.suggestions);
-    else setSortOpen(false);
-  };
-
-  return (
-    <motion.div
-      ref={ref}
-      layout
-      variants={cardVariants}
-      whileHover={{ y: -2, transition: { duration: 0.15 } }}
-      exit={cardVariants.exit}
-      className="group relative"
-    >
-      <div className={cn(
-        'relative bg-bg-secondary/60 backdrop-blur-xl border border-border/30 rounded-[var(--kb-radius-xl)] p-kb-md',
-        'hover:border-purple-400/25 transition-colors duration-300 overflow-hidden',
-        batchMode && selected && 'ring-2 ring-purple-400 border-purple-400/40',
-      )}>
-        {/* ── 批量模式 checkbox ── */}
-        {batchMode && (
-          <div className="absolute top-3 left-3 z-20">
-            <input
-              type="checkbox"
-              checked={selected}
-              onChange={onToggleSelect}
-              className="w-4 h-4 rounded accent-purple-500 cursor-pointer"
-            />
-          </div>
-        )}
-        {/* ── 分拣状态指示器 ── */}
-        <AnimatePresence>
-          {item.sortStatus && item.sortStatus !== 'pending' && SORT_STATUS_CONFIG[item.sortStatus] && (() => {
-            const cfg = SORT_STATUS_CONFIG[item.sortStatus];
-            const Icon = cfg.icon;
-            return (
-              <motion.div
-                layout
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.8 }}
-                transition={{ duration: 0.4 }}
-                className={cn(
-                  'absolute top-2 right-2 z-20 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border',
-                  cfg.color, cfg.bg,
-                  cfg.animate && 'animate-pulse',
-                )}
-              >
-                {Icon && <Icon className={cn('w-3 h-3', cfg.animate && 'animate-spin')} />}
-                {cfg.label}
-              </motion.div>
-            );
-          })()}
-        </AnimatePresence>
-        {/* ── hover 光泽 ── */}
-        <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
-          style={{ background: 'linear-gradient(135deg, rgba(147,51,234,0.04) 0%, transparent 50%, rgba(147,51,234,0.02) 100%)' }} />
-
-        {/* ── Content ── */}
-        <div className={cn('relative z-10', batchMode && 'pl-6')}>
-          <p onClick={() => setExpanded(v => !v)}
-            className={cn('text-b2 text-text-primary leading-relaxed cursor-pointer', !expanded && 'line-clamp-3')}>
-            {item.content}
-          </p>
-          {item.content.length > 150 && (
-            <motion.button
-              onClick={() => setExpanded(v => !v)}
-              className="flex items-center gap-0.5 mt-1 text-c1 text-text-tertiary hover:text-text-secondary transition-colors"
-              whileHover={{ x: 2 }}
-            >
-              {expanded ? <>收起 <ChevronUp className="w-3 h-3" /></> : <>展开 <ChevronDown className="w-3 h-3" /></>}
-            </motion.button>
-          )}
-        </div>
-
-        {/* ── Tags row ── */}
-        <div className="flex items-center gap-2 mt-3 flex-wrap relative z-10">
-          <TagChip label={natureOpt?.label ?? item.tags.content_nature} color={natureOpt?.color ?? 'text-text-secondary'}
-            bg={natureOpt?.bg ?? 'bg-bg-secondary border-border'} onClick={() => setEditOpen(v => !v)} />
-          <TagChip label={depthOpt?.label ?? item.tags.cognitive_depth} color={depthOpt?.color ?? 'text-text-secondary'}
-            bg={depthOpt?.bg ?? 'bg-bg-secondary border-border'} onClick={() => setEditOpen(v => !v)} />
-          <TagChip label={item.tags.subject} color="text-slate-500"
-            bg="bg-slate-50 border-slate-200 dark:bg-slate-800/30 dark:border-slate-600" onClick={() => setEditOpen(v => !v)} />
-          {item.tagsManuallyEdited && (
-            <span className="text-c1 text-text-tertiary" title="已手动修正标签"><Check className="w-3 h-3 inline mr-0.5" />已修正</span>
-          )}
-          <AnimatePresence>{editOpen && <TagEditPopover item={item} onClose={() => setEditOpen(false)} />}</AnimatePresence>
-        </div>
-
-        {/* ── Footer ── */}
-        <div className="flex items-center justify-between mt-3 pt-2 border-t border-border/20 relative z-10">
-          <span className="text-c1 text-text-tertiary">{formatTime(item.createdAt)}</span>
-          <div className="flex items-center gap-1.5">
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.92 }}
-              onClick={handleSort}
-              disabled={sortLoading}
-              className={cn(
-                'flex items-center gap-1 px-2 py-0.5 rounded-kb-md text-xs font-medium',
-                'bg-gradient-to-r from-purple-500 to-cyan-500 text-text-inverse',
-                'hover:from-purple-600 hover:to-cyan-600 shadow-sm shadow-purple-500/20',
-                'disabled:opacity-60 disabled:cursor-not-allowed',
-              )}
-            >
-              {sortLoading ? (<><AIThinkingIndicator size={3} gap={2} />分析中...</>) : (<><Wand2 className="w-3 h-3" />AI 整理</>)}
-            </motion.button>
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.92 }}
-              onClick={handleDelete}
-              className="flex items-center gap-1 px-2 py-0.5 rounded-kb-md text-xs text-text-tertiary hover:text-semantic-error hover:bg-semantic-error/10 dark:hover:bg-red-900/10 transition-colors"
-            >
-              <Trash2 className="w-3 h-3" /> 删除
-            </motion.button>
-          </div>
-        </div>
-
-        {/* ── AI Sort panel ── */}
-        <AnimatePresence>
-          {sortOpen && sortSuggestions.length > 0 && (
-            <AISortPanel suggestions={sortSuggestions} item={item} onClose={() => setSortOpen(false)} />
-          )}
-        </AnimatePresence>
-      </div>
-    </motion.div>
-  );
-});
-
-// ─────────────────────────────────────────────────────────────
-// Filter Bar
-// ─────────────────────────────────────────────────────────────
-
-interface FilterState {
-  content_nature: InspirationTags['content_nature'] | null;
-  cognitive_depth: InspirationTags['cognitive_depth'] | null;
-  subject: string | null;
-}
-
-function FilterBar({ filters, onChange }: { filters: FilterState; onChange: (f: FilterState) => void }) {
-  return (
-    <motion.div variants={filterVariants} className="space-y-2">
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-c1 text-text-tertiary min-w-[4em]">性质:</span>
-        {CONTENT_NATURE_OPTIONS.map(opt => (
-          <motion.button key={opt.value} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-            onClick={() => onChange({ ...filters, content_nature: filters.content_nature === opt.value ? null : opt.value })}
-            className={cn('px-2 py-0.5 rounded-full text-xs font-medium border transition-colors',
-              filters.content_nature === opt.value ? cn(opt.color, opt.bg) : 'text-text-tertiary bg-bg-secondary border-border/40 hover:text-text-secondary')}>
-            {opt.label}
-          </motion.button>
-        ))}
-      </div>
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-c1 text-text-tertiary min-w-[4em]">深度:</span>
-        {COGNITIVE_DEPTH_OPTIONS.map(opt => (
-          <motion.button key={opt.value} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-            onClick={() => onChange({ ...filters, cognitive_depth: filters.cognitive_depth === opt.value ? null : opt.value })}
-            className={cn('px-2 py-0.5 rounded-full text-xs font-medium border transition-colors',
-              filters.cognitive_depth === opt.value ? cn(opt.color, opt.bg) : 'text-text-tertiary bg-bg-secondary border-border/40 hover:text-text-secondary')}>
-            {opt.label}
-          </motion.button>
-        ))}
-      </div>
-    </motion.div>
-  );
-}
+import { useSortPendingReminder } from '../hooks/useSortPendingReminder';
+import { useImmersiveState } from '../hooks/useImmersiveState';
+import FilterBar from '../components/FilterBar';
+import InspirationCard from '../components/InspirationCard';
+import ImmersiveCanvas from '../components/ImmersiveCanvas';
+import GlassInspirationCard from '../components/GlassInspirationCard';
+import SortPendingBanner from '../components/SortPendingBanner';
+import { CONTENT_NATURE_OPTIONS, COGNITIVE_DEPTH_OPTIONS, NATURE_MAP } from '../constants';
+import { groupInspirationsByNature } from '../lib/orbLayout';
+import type { FilterState } from '../types';
+import {
+  pageVariants, headerVariants, inputVariants, filterVariants,
+  listVariants,
+} from '../constants';
 
 // ─────────────────────────────────────────────────────────────
 // Main Page
@@ -541,8 +32,17 @@ export default function InspirationPage() {
   const { tagContent, loading: aiLoading } = useAITagContent();
   const { toast } = useToast();
   const { progress, total, isProcessing: batchProcessing, batchSort } = useBatchSort();
+  const { pendingCount, showReminder, dismissReminder, handleSortAll } = useSortPendingReminder();
+  const {
+    phase, degradation, clickPoint, curveSeed,
+    enter, click, dismiss, exit,
+    enteringComplete, synapseComplete, convergeComplete, cardComplete,
+  } = useImmersiveState();
+
   const [input, setInput] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [selectedNature, setSelectedNature] = useState<string>('inspiration');
+  const [selectedDepth, setSelectedDepth] = useState<string>('shallow');
   const [filters, setFilters] = useState<FilterState>({ content_nature: null, cognitive_depth: null, subject: null });
   const [batchMode, setBatchMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -607,6 +107,28 @@ export default function InspirationPage() {
     await batchSort(selected);
   };
 
+  // 沉浸式卡片提交处理
+  const handleImmersiveSubmit = useCallback(async (content: string) => {
+    const defaultTags: InspirationTags = { content_nature: selectedNature as InspirationTags['content_nature'], cognitive_depth: selectedDepth as InspirationTags['cognitive_depth'], subject: '未分类' };
+    addItem(content, defaultTags);
+    const addedId = useInspirationStore.getState().items[0]?.id;
+    try {
+      const result = await tagContent(content);
+      if (result && addedId) {
+        const currentItems = useInspirationStore.getState().items;
+        const target = currentItems.find(i => i.id === addedId);
+        if (target && !target.tagsManuallyEdited) {
+          useInspirationStore.getState().updateTags(addedId, {
+            content_nature: (result.contentNature as InspirationTags['content_nature']) ?? 'inspiration',
+            cognitive_depth: (result.cognitiveDepth as InspirationTags['cognitive_depth']) ?? 'shallow',
+            subject: result.subject ?? '通用',
+          });
+        }
+      }
+    } catch { /* silent */ }
+    finally { dismiss(); setSelectedNature('inspiration'); setSelectedDepth('shallow'); }
+  }, [addItem, tagContent, dismiss, selectedNature, selectedDepth]);
+
   return (
     <motion.div
       className="max-w-2xl mx-auto px-kb-lg py-kb-xl space-y-6 relative"
@@ -643,6 +165,16 @@ export default function InspirationPage() {
           <h1 className="text-h2 font-bold text-text-primary">萤火海沟</h1>
           <p className="text-c1 text-text-tertiary">随手捕捉萤火海沟，AI 自动整理分类</p>
         </div>
+        {/* 沉浸式入口按钮 */}
+        <motion.button
+          onClick={enter}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-gradient-to-r from-purple-500 to-cyan-500 text-text-inverse hover:from-purple-600 hover:to-cyan-600 shadow-sm shadow-purple-500/20"
+        >
+          <Sparkles className="w-3.5 h-3.5" />
+          沉浸
+        </motion.button>
       </motion.div>
 
       {/* ── Quick input area ── */}
@@ -696,6 +228,10 @@ export default function InspirationPage() {
             variants={filterVariants}
           >
             <FilterBar filters={filters} onChange={setFilters} />
+            {/* ── 灵感沉淀提醒条 ── */}
+            <AnimatePresence>
+              {showReminder && <SortPendingBanner pendingCount={pendingCount} onSortAll={handleSortAll} onDismiss={dismissReminder} />}
+            </AnimatePresence>
             {/* ── 批量模式入口 ── */}
             <div className="flex items-center justify-between mt-1">
               <motion.button
@@ -792,18 +328,33 @@ export default function InspirationPage() {
         )}
       </AnimatePresence>
 
-      {/* ── Inspiration list ── */}
+      {/* ── Inspiration orb groups ── */}
       {filteredItems.length > 0 ? (
-        <motion.div className="space-y-3 relative z-10" variants={listVariants}>
+        <motion.div className="space-y-6 relative z-10" variants={listVariants}>
           <AnimatePresence mode="popLayout">
-            {filteredItems.map(item => (
-              <InspirationCard
-                key={item.id}
-                item={item}
-                batchMode={batchMode}
-                selected={selectedIds.has(item.id)}
-                onToggleSelect={() => toggleSelect(item.id)}
-              />
+            {Object.entries(groupInspirationsByNature(filteredItems)).map(([nature, groupItems]) => (
+              <div key={nature}>
+                {/* 分组分隔线 + 类别名 */}
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="h-px bg-border/20 flex-1" />
+                  <span className="text-xs text-text-tertiary opacity-30">
+                    {NATURE_MAP[nature]?.label ?? nature}
+                  </span>
+                  <div className="h-px bg-border/20 flex-1" />
+                </div>
+                {/* 球群容器 */}
+                <div className="flex flex-wrap gap-4 justify-center">
+                  {groupItems.map(item => (
+                    <InspirationCard
+                      key={item.id}
+                      item={item}
+                      batchMode={batchMode}
+                      selected={selectedIds.has(item.id)}
+                      onToggleSelect={() => toggleSelect(item.id)}
+                    />
+                  ))}
+                </div>
+              </div>
             ))}
           </AnimatePresence>
         </motion.div>
@@ -827,6 +378,65 @@ export default function InspirationPage() {
           />
         </motion.div>
       )}
+
+      {/* ── 沉浸式视图入口 ── */}
+      <ImmersiveCanvas
+        phase={phase}
+        clickPoint={clickPoint}
+        curveSeed={curveSeed}
+        degradation={degradation}
+        inspirations={filteredItems}
+        onCanvasClick={click}
+        onEnteringComplete={enteringComplete}
+        onSynapseComplete={synapseComplete}
+        onConvergeComplete={convergeComplete}
+        onCardComplete={cardComplete}
+        onExit={exit}
+      >
+        {/* 标签选择药丸组 — 卡片上方 */}
+        <div className="w-full max-w-md space-y-1.5 mb-2">
+          <div className="flex items-center gap-1.5">
+            <span className="text-c1 text-text-tertiary shrink-0">性质:</span>
+            <div className="flex flex-wrap gap-1">
+              {CONTENT_NATURE_OPTIONS.map(opt => (
+                <button key={opt.value}
+                  onClick={() => setSelectedNature(opt.value)}
+                  className={cn(
+                    'rounded-full text-xs font-medium px-2.5 py-0.5 cursor-pointer transition-colors border',
+                    selectedNature === opt.value
+                      ? cn(opt.color, opt.bg, 'ring-1 ring-brand-300')
+                      : 'text-text-tertiary bg-bg-secondary/50 border-border/30 hover:text-text-secondary',
+                  )}>
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-c1 text-text-tertiary shrink-0">深度:</span>
+            <div className="flex flex-wrap gap-1">
+              {COGNITIVE_DEPTH_OPTIONS.map(opt => (
+                <button key={opt.value}
+                  onClick={() => setSelectedDepth(opt.value)}
+                  className={cn(
+                    'rounded-full text-xs font-medium px-2.5 py-0.5 cursor-pointer transition-colors border',
+                    selectedDepth === opt.value
+                      ? cn(opt.color, opt.bg, 'ring-1 ring-brand-300')
+                      : 'text-text-tertiary bg-bg-secondary/50 border-border/30 hover:text-text-secondary',
+                  )}>
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <GlassInspirationCard
+          onSubmit={handleImmersiveSubmit}
+          onClose={dismiss}
+          submitting={submitting}
+        />
+      </ImmersiveCanvas>
     </motion.div>
   );
 }

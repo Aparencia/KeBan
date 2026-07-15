@@ -2,9 +2,9 @@
  * Electron 主进程系统音频捕获模块
  *
  * 架构：
- * 1. 主进程使用 desktopCapturer.getSources({ audio: true }) 枚举系统音频源
+ * 1. 主进程使用 desktopCapturer.getSources({ types: ['screen'] }) 枚举屏幕源作为音频环回候选
  * 2. 将音频 sourceId 传递给渲染进程
- * 3. 渲染进程通过 getUserMedia + chromeMediaSource 获取 MediaStream
+ * 3. 渲染进程通过 getUserMedia + chromeMediaSource: 'desktop' 获取 MediaStream
  * 4. 渲染进程使用 Web Audio API (AudioContext + ScriptProcessor) 切片
  * 5. PCM 数据块通过 IPC 回传主进程，添加单调时间戳后推送给消费者
  */
@@ -70,18 +70,20 @@ function monotonicTimestamp(): number {
 
 /**
  * 列出所有可用的系统音频源
- * 使用 desktopCapturer.getSources({ audio: true })
+ *
+ * Electron 中系统音频环回（WASAPI Loopback）通过桌面捕获源实现：
+ * 任意 screen/window 源均可配合 getUserMedia({ chromeMediaSource: 'desktop' })
+ * 捕获系统音频。因此这里枚举 screen 类型源作为音频采集候选。
  */
 export async function listAudioSources(): Promise<AudioSourceInfo[]> {
-  // Electron 39+ 支持 { audio: true } 直接获取系统音频源（WASAPI Loopback）
-  // 当前类型定义可能未包含此选项，使用扩展类型兼容
   const sources: DesktopCapturerSource[] = await desktopCapturer.getSources({
-    audio: true,
-  } as Electron.SourcesOptions & { audio: boolean });
+    types: ['screen'],
+    thumbnailSize: { width: 1, height: 1 }, // 枚举不需要缩略图
+  });
 
   return sources.map((src) => ({
     id: src.id,
-    name: src.name,
+    name: `系统音频 - ${src.name}`,
   }));
 }
 

@@ -11,49 +11,51 @@ import type { SyncConflict } from '../../types/models';
  */
 export class SyncEngine {
   private syncInProgress = false;
-  private autoSyncInterval: ReturnType<typeof setInterval> | null = null;
+  private networkRecoveryCleanup: (() => void) | null = null;
   private listeners: Set<(event: SyncEvent) => void> = new Set();
 
   // Sync API base path (apiClient prepends VITE_API_BASE_URL automatically)
   private syncBasePath = '/api/v1/sync';
 
   /**
-   * 启动自动同步
+   * 注册网络恢复时的自动同步监听
+   * 不再使用定时器，仅在网络恢复时触发一次同步
    */
-  startAutoSync(intervalMs: number = 60000): void {
-    this.stopAutoSync();
-    this.autoSyncInterval = setInterval(() => { this.sync(); }, intervalMs);
-    // 监听网络恢复，立即触发同步
-    networkManager.subscribe((state) => {
+  registerNetworkRecoverySync(): void {
+    // 先清理旧的监听器
+    this.unregisterNetworkRecoverySync();
+    const cleanup = networkManager.subscribe((state) => {
       if (state.status === 'online') {
         this.sync();
       }
     });
+    this.networkRecoveryCleanup = cleanup;
   }
 
-  stopAutoSync(): void {
-    if (this.autoSyncInterval) {
-      clearInterval(this.autoSyncInterval);
-      this.autoSyncInterval = null;
+  /**
+   * 注销网络恢复监听器
+   */
+  unregisterNetworkRecoverySync(): void {
+    if (this.networkRecoveryCleanup) {
+      this.networkRecoveryCleanup();
+      this.networkRecoveryCleanup = null;
     }
   }
 
   /**
    * 暂停同步引擎
-   * 停止自动同步并阻止新的同步请求（用于路径切换等关键操作前）
+   * 阻止新的同步请求（用于路径切换等关键操作前）
    */
   pause(): void {
-    this.stopAutoSync();
     this.syncInProgress = true;
   }
 
   /**
    * 恢复同步引擎
-   * 解除同步锁定并重新启动自动同步（用于路径切换完成后）
+   * 解除同步锁定（用于路径切换完成后）
    */
   resume(): void {
     this.syncInProgress = false;
-    this.startAutoSync();
   }
 
   /**

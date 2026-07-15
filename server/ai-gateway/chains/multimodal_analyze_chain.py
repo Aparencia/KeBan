@@ -1,0 +1,260 @@
+"""
+课伴 AI 网关 — 多模态课堂分析 Chain
+
+@ai-context Path B 核心链路：客户端捕获关键帧序列 + 语音转写 →
+本 Chain 编排多图联合分析 → 输出结构化 Markdown 课堂笔记。
+
+与 VisionExtractChain 的差异：
+- VisionExtractChain：单图 JSON 结构化提取（截图实时分析）
+- MultimodalAnalyzeChain：多图时序联合分析（课后笔记生成）
+
+关键帧超过 20 帧时分 chunk 并行调用（每 chunk ≤15 帧），
+避免单次请求 token 超限，同时降低整体延迟。
+"""
+
+import asyncio
+import logging
+from typing import Any
+
+from providers.base_provider import AIProvider
+from prompts.session_analyze import (
+    SESSION_ANALYZE_SYSTEM_PROMPT,
+    build_session_prompt,
+)
+
+logger = logging.getLogger(__name__)
+
+# 分 chunk 阈值：超过此数量时拆分为多个并行请求
+_CHUNK_THRESHOLD = 20
+# 每 chunk 最大帧数
+_CHUNK_SIZE = 15
+
+
+def _format_timestamp(seconds: float) -> str:
+    """将秒数格式化为 MM:SS 时间戳"""
+    total = int(seconds)
+    mins, secs = divmod(total, 60)
+    return f"{mins:02d}:{secs:02d}"
+
+
+class MultimodalAnalyzeChain:
+    """多模态课堂分析链：多图时序联合 → Markdown 笔记"""
+
+    def __init__(self, provider: AIProvider, model: str | None = None):
+        self.provider = provider
+        # 未指定模型时使用 Provider 默认视觉模型
+        self.model = model or ""
+
+    # ------------------------------------------------------------------
+    # Prompt 构建
+    # ------------------------------------------------------------------
+
+    def _build_prompt(
+        self,
+        keyframes: list[dict],
+        audio_text: str | None,
+        duration: int,
+    ) -> tuple[list[str], str]:
+        """
+        组装多图分析所需的图片列表和文本 Prompt
+
+        @ai-context 时间标注让模型感知帧间时序关系，
+        "画面变化类型" 帮助模型区分板书切换 / PPT 翻页 / 板书手写等场景。
+
+        Args:
+            keyframes:  关键帧列表 [{timestamp, image_base64, change_type}]
+            audio_text: 语音转写文本（可选，None 表示无语音）
+            duration:   课程总时长（秒）
+
+        Returns:
+            tuple: (images_base64_list, full_prompt)
+        """
+        images: list[str] = []
+        time_annotations: list[str] = []
+
+        for idx, kf in enumerate(keyframes):
+            images.append(kf["image_base64"])
+            ts = _format_timestamp(kf.get("timestamp", 0.0))
+            change = kf.get("change_type", "scene_change")
+            time_annotations.append(
+                f"第 {idx + 1} 帧出现在 {ts}，画面变化类型为 {change}"
+            )
+
+        # 将时间标注嵌入 Prompt 的 keyframes_desc 段落
+        keyframes_desc = "\n".join(time_annotations)
+
+        # 语音转写补充段落
+        audio_context = ""
+        if audio_text and audio_text.strip():
+            audio_context = (
+                "\n以下是课程语音转写内容（请融合到笔记中）：\n"
+                f"{audio_text.strip()}\n"
+            )
+
+        # 基础 Prompt 框架
+        base_prompt = build_session_prompt(
+            keyframes_count=len(keyframes),
+            audio_segments_count=1 if audio_text else 0,
+            duration_seconds=duration,
+        )
+
+        # 将时间标注和语音内容拼入 Prompt
+        full_prompt = (
+            f"{base_prompt}\n\n"
+            f"---\n各帧时间标注：\n{keyframes_desc}"
+            f"{audio_context}"
+        )
+
+        return images, full_prompt
+
+    # ------------------------------------------------------------------
+    # 响应解析
+    # ------------------------------------------------------------------
+
+    def _parse_response(self, raw: str) -> str:
+        """
+        解析模型返回内容
+
+        多模态分析直接输出 Markdown 文本，无需 JSON 解析。
+        若模型意外包裹在代码块中，去除外层围栏。
+        """
+        stripped = raw.strip()
+        # 去除模型常见的外层 Markdown 代码块围栏
+        if stripped.startswith("```markdown"):
+            stripped = stripped[len("```markdown"):].strip()
+            if stripped.endswith("```"):
+                stripped = stripped[:-3].strip()
+        elif stripped.startswith("```") and stripped.endswith("```"):
+            inner = stripped[3:].strip()
+            if inner.endswith("```"):
+                inner = inner[:-3].strip()
+            # 仅当内层不含其他 ``` 时才剥离（避免破坏代码块）
+            if "```" not in inner:
+                stripped = inner
+        return stripped
+
+    # ------------------------------------------------------------------
+    # 单 chunk 执行
+    # ------------------------------------------------------------------
+
+    async def _run_chunk(
+        self,
+        images: list[str],
+        prompt: str,
+        chunk_label: str,
+    ) -> dict[str, Any]:
+        """执行单个 chunk 的多图分析调用"""
+        logger.info(
+            "MultimodalAnalyzeChain %s: images=%d, model=%s",
+            chunk_label, len(images), self.model,
+        )
+        result = await self.provider.generate_vision_multi(
+            images_base64=images,
+            prompt=prompt,
+            system_prompt=SESSION_ANALYZE_SYSTEM_PROMPT,
+            model=self.model,
+            temperature=0.3,
+            max_tokens=4096,
+            _feature="multimodal_analyze",
+        )
+        return result
+
+    # ------------------------------------------------------------------
+    # 主入口
+    # ------------------------------------------------------------------
+
+    async def run(
+        self,
+        keyframes: list[dict],
+        audio_text: str | None,
+        duration: int,
+    ) -> dict[str, Any]:
+        """
+        执行多模态课堂分析
+
+        @ai-context 超过 _CHUNK_THRESHOLD 帧时拆分并行调用，
+        每 chunk ≤ _CHUNK_SIZE 帧，避免单次请求 token 超限。
+
+        Args:
+            keyframes:  关键帧列表 [{timestamp, image_base64, change_type}]
+            audio_text: 语音转写文本（None 表示无语音）
+            duration:   课程总时长（秒）
+
+        Returns:
+            dict: {
+                "content": str,         # Markdown 笔记内容
+                "tokens_used": int,
+                "model": str,
+                "latency_ms": int,
+                "keyframes_analyzed": int,
+            }
+        """
+        if not keyframes:
+            return {
+                "content": "*（无关键帧数据，无法生成笔记）*",
+                "tokens_used": 0,
+                "model": self.model,
+                "latency_ms": 0,
+                "keyframes_analyzed": 0,
+            }
+
+        images, full_prompt = self._build_prompt(keyframes, audio_text, duration)
+        total_frames = len(images)
+
+        # ---- 路径 A：单 chunk（≤ 阈值）----
+        if total_frames <= _CHUNK_THRESHOLD:
+            result = await self._run_chunk(images, full_prompt, "single")
+            return {
+                "content": self._parse_response(result["content"]),
+                "tokens_used": result.get("tokens_used", 0),
+                "model": result.get("model", self.model),
+                "latency_ms": result.get("latency_ms", 0),
+                "keyframes_analyzed": total_frames,
+            }
+
+        # ---- 路径 B：多 chunk 并行（> 阈值）----
+        # 拆分为每 chunk _CHUNK_SIZE 帧
+        chunks: list[list[str]] = [
+            images[i : i + _CHUNK_SIZE]
+            for i in range(0, total_frames, _CHUNK_SIZE)
+        ]
+
+        logger.info(
+            "MultimodalAnalyzeChain: 拆分为 %d 个 chunk 并行执行（共 %d 帧）",
+            len(chunks), total_frames,
+        )
+
+        # 每个 chunk 复用同一个 Prompt（模型可通过帧编号区分上下文）
+        chunk_tasks = [
+            self._run_chunk(chunk_imgs, full_prompt, f"chunk-{idx + 1}/{len(chunks)}")
+            for idx, chunk_imgs in enumerate(chunks)
+        ]
+        chunk_results = await asyncio.gather(*chunk_tasks, return_exceptions=True)
+
+        # 合并结果：成功的 chunk 按序拼接，失败的标注警告
+        merged_parts: list[str] = []
+        total_tokens = 0
+        total_latency = 0
+        used_model = self.model
+
+        for idx, res in enumerate(chunk_results):
+            if isinstance(res, Exception):
+                logger.warning("Chunk %d 执行失败: %s", idx + 1, str(res))
+                merged_parts.append(
+                    f"\n> ⚠️ 第 {idx + 1} 段分析失败，该部分笔记可能不完整\n"
+                )
+            else:
+                merged_parts.append(self._parse_response(res["content"]))
+                total_tokens += res.get("tokens_used", 0)
+                total_latency = max(total_latency, res.get("latency_ms", 0))
+                used_model = res.get("model", used_model)
+
+        merged_content = "\n\n---\n\n".join(merged_parts)
+
+        return {
+            "content": merged_content,
+            "tokens_used": total_tokens,
+            "model": used_model,
+            "latency_ms": total_latency,
+            "keyframes_analyzed": total_frames,
+        }

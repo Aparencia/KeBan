@@ -20,6 +20,10 @@ declare global {
       windowIsMaximized: () => Promise<boolean>;
       /** 监听最大化状态变化，返回取消监听函数 */
       onMaximizedChanged: (callback: (isMaximized: boolean) => void) => () => void;
+      /** 监听退出前同步事件，返回取消监听函数 */
+      onSyncBeforeQuit: (callback: () => void) => () => void;
+      /** 通知主进程同步完成 */
+      notifySyncComplete: () => void;
       /** 设置是否自动检查更新 */
       setAutoUpdate: (enabled: boolean) => Promise<{ success: boolean }>;
       /** v1.0.0: 数据访问 API */

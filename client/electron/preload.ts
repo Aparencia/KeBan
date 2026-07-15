@@ -15,6 +15,15 @@ const ALLOWED_CHANNELS = [
   'ai_recommend_duration',
   'ai_feynman_question',
   'ai_feynman_evaluate_answers',
+  'ai_optimize_card',
+  'ai_tag_content',
+  'ai_sort_inspiration',
+  'ai_anchor_point',
+  'ai_socratic',
+  'ai_socratic_evaluate',
+  'ai_socratic_deepening',
+  'ai_predict',
+  'ai_rescue',
   'ai:set-gateway-url',
   'screen_list_windows',
   'screen_capture_start',
@@ -51,6 +60,14 @@ const ALLOWED_CHANNELS = [
   // v1.1.0: 存储路径切换 IPC channel
   'storage:change-path',
   'storage:get-active-path',
+  // 退出前同步完成通知
+  'sync:quit-complete',
+  // Path C 视频录制 IPC channel
+  'video_record_start',
+  'video_record_stop',
+  'video_record_pause',
+  'video_record_resume',
+  'video_record_status',
 ] as const;
 
 /** 允许渲染进程监听的事件 channel 白名单（主进程 → 渲染进程推送） */
@@ -62,11 +79,22 @@ const ALLOWED_EVENT_CHANNELS = [
   'update-status',
   'window:closing',
   'window:maximized-changed',
+  'sync:before-quit',
+  // Path C 视频录制状态推送
+  'video_record_status',
+  'video_record_error',
+  'video_record_do_start',
+  'video_record_do_stop',
 ] as const;
 
 /** 允许渲染进程单向发送的 channel 白名单（渲染进程 → 主进程，fire-and-forget） */
 const ALLOWED_SEND_CHANNELS = [
   'audio_capture_chunk',
+  // Path C 视频录制数据块回传
+  'video_record_chunk',
+  'video_record_started',
+  'video_record_stopped',
+  'video_record_error',
 ] as const;
 
 type AllowedChannel = (typeof ALLOWED_CHANNELS)[number];
@@ -119,6 +147,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const handler = (_event: unknown, isMaximized: boolean) => callback(isMaximized);
     ipcRenderer.on('window:maximized-changed', handler);
     return () => ipcRenderer.removeListener('window:maximized-changed', handler);
+  },
+  /** 监听退出前同步事件 */
+  onSyncBeforeQuit: (callback: () => void) => {
+    ipcRenderer.on('sync:before-quit', callback);
+    return () => ipcRenderer.removeAllListeners('sync:before-quit');
+  },
+  /** 通知主进程同步已完成 */
+  notifySyncComplete: () => {
+    ipcRenderer.invoke('sync:quit-complete');
   },
   // ---- 自动更新 API ----
   /** 设置是否自动检查更新 */

@@ -9,10 +9,51 @@ import * as electronUpdater from 'electron-updater';
 const { autoUpdater } = electronUpdater;
 import type { UpdateInfo, ProgressInfo } from 'electron-updater';
 import { BrowserWindow, app, net } from 'electron';
+import { readFile, writeFile } from 'fs/promises';
+import * as path from 'path';
 import { logger } from './logger.js';
 
 /** 自动检查开关（由渲染进程通过 IPC 设置，默认开启） */
 let autoCheckEnabled = true;
+
+/** 自动检查最小间隔（7 天，毫秒） */
+const AUTO_CHECK_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** 上次检查更新的时间戳（持久化到 userData/update-check.json） */
+let lastCheckTimestamp = 0;
+
+/**
+ * 读取持久化的上次检查时间戳
+ */
+async function loadLastCheckTimestamp(): Promise<number> {
+  try {
+    const filePath = path.join(app.getPath('userData'), 'update-check.json');
+    const data = JSON.parse(await readFile(filePath, 'utf-8'));
+    return typeof data.lastCheck === 'number' ? data.lastCheck : 0;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * 将当前时间戳持久化到文件
+ */
+async function saveLastCheckTimestamp(): Promise<void> {
+  try {
+    const filePath = path.join(app.getPath('userData'), 'update-check.json');
+    await writeFile(filePath, JSON.stringify({ lastCheck: Date.now() }), 'utf-8');
+    lastCheckTimestamp = Date.now();
+  } catch (err) {
+    logger.warn(`[AutoUpdater] Failed to save last check timestamp: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+/**
+ * 判断距上次检查是否已满 7 天
+ */
+function shouldAutoCheck(): boolean {
+  return Date.now() - lastCheckTimestamp >= AUTO_CHECK_INTERVAL_MS;
+}
 
 /** 检查更新超时时间（毫秒） */
 const CHECK_UPDATE_TIMEOUT = 10_000;
@@ -145,35 +186,54 @@ export function initAutoUpdater(mainWindow: BrowserWindow | null): void {
   });
 
   // 启动时检查更新（延迟 10 秒，等窗口加载完）
-  setTimeout(() => {
-    if (!autoCheckEnabled) return;
-    // 断网时跳过检查，静默等待下次启动
-    if (!net.isOnline()) {
-      logger.info('[AutoUpdater] Offline, skipping auto check');
-      return;
-    }
-    checkForUpdatesWithTimeout().catch((err: unknown) => {
-      logger.error('[AutoUpdater] Initial check failed', err);
-      // 断网导致的失败不通知前端
-      if (!net.isOnline()) return;
-      sendToRenderer(mainWindow, 'update-status', {
-        status: 'error',
-        message: err instanceof Error ? err.message : String(err),
-      });
-    });
-  }, 10_000);
+  // 加载持久化的上次检查时间戳，判断是否已满 7 天
+  loadLastCheckTimestamp().then((ts) => {
+    lastCheckTimestamp = ts;
+  }).finally(() => {
+    setTimeout(() => {
+      if (!autoCheckEnabled) return;
+      // 断网时跳过检查，静默等待下次启动
+      if (!net.isOnline()) {
+        logger.info('[AutoUpdater] Offline, skipping auto check');
+        return;
+      }
+      // 距上次检查不足 7 天，跳过本次自动检查
+      if (!shouldAutoCheck()) {
+        const daysLeft = Math.ceil((AUTO_CHECK_INTERVAL_MS - (Date.now() - lastCheckTimestamp)) / (24 * 60 * 60 * 1000));
+        logger.info(`[AutoUpdater] Auto check skipped (last check ${daysLeft} day(s) ago), next check in ${daysLeft} day(s)`);
+        return;
+      }
+      logger.info('[AutoUpdater] 7-day interval elapsed, performing auto check');
+      checkForUpdatesWithTimeout()
+        .then(() => { saveLastCheckTimestamp(); })
+        .catch((err: unknown) => {
+          logger.error('[AutoUpdater] Initial check failed', err);
+          // 断网导致的失败不通知前端
+          if (!net.isOnline()) return;
+          sendToRenderer(mainWindow, 'update-status', {
+            status: 'error',
+            message: err instanceof Error ? err.message : String(err),
+          });
+        });
+    }, 10_000);
+  });
 }
 
+/**
+ * 手动检查更新（不受 7 天频率限制，始终执行）
+ */
 export function checkForUpdate(): void {
-  checkForUpdatesWithTimeout().catch((err: unknown) => {
-    logger.error('[AutoUpdater] Manual check failed', err);
-    // 手动检查时也将超时错误通知到渲染进程
-    sendToRenderer(
-      BrowserWindow.getAllWindows().find((w) => !w.isDestroyed()) ?? null,
-      'update-status',
-      { status: 'error', message: err instanceof Error ? err.message : String(err) },
-    );
-  });
+  checkForUpdatesWithTimeout()
+    .then(() => { saveLastCheckTimestamp(); })
+    .catch((err: unknown) => {
+      logger.error('[AutoUpdater] Manual check failed', err);
+      // 手动检查时也将超时错误通知到渲染进程
+      sendToRenderer(
+        BrowserWindow.getAllWindows().find((w) => !w.isDestroyed()) ?? null,
+        'update-status',
+        { status: 'error', message: err instanceof Error ? err.message : String(err) },
+      );
+    });
 }
 
 export function downloadUpdate(): void {

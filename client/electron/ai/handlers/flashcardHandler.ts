@@ -6,7 +6,7 @@
 
 import { safeHandle } from '../../ipcUtils.js';
 import { logger } from '../../logger.js';
-import { postJson, type AIFeatureDef } from '../utils.js';
+import { postJson, gatewayUrl, type AIFeatureDef } from '../utils.js';
 
 // ================================================================
 // IPC Handler
@@ -26,18 +26,23 @@ function register(): void {
         difficulty?: string;
         cardType?: string;
         authToken?: string;
+        userApiKey?: string;
       },
     ) => {
       const startMs = Date.now();
-      logger.info(`[IPC] ai_generate_cards start, note_length=${args.note.length}`);
+      logger.info(`[AI] [flashcard] IPC received: note_length=${args.note.length}, maxCards=${args.maxCards ?? 'default'}, difficulty=${args.difficulty ?? 'default'}, cardType=${args.cardType ?? 'default'}, hasAuth=${!!args.authToken}`);
+      logger.debug(`[AI] [flashcard] Note preview: ${args.note.slice(0, 80)}...`);
+
       const reqBody = {
         note: args.note,
         options: {
-          ...(args.maxCards !== undefined && { max_cards: args.maxCards }),
-          ...(args.difficulty !== undefined && { difficulty: args.difficulty }),
-          ...(args.cardType !== undefined && { card_type: args.cardType }),
+          ...(args.maxCards != null && { max_cards: args.maxCards }),
+          ...(args.difficulty != null && { difficulty: args.difficulty }),
+          ...(args.cardType != null && { card_type: args.cardType }),
         },
       };
+
+      logger.info(`[AI] [flashcard] Target: ${gatewayUrl()}/api/v1/ai/generate-cards`);
 
       interface CardResp {
         front: string;
@@ -52,26 +57,36 @@ function register(): void {
         tokens_used: number;
       }
 
-      const { data: resp, requestId } = await postJson<typeof reqBody, CardGenResp>(
-        '/api/v1/ai/generate-cards',
-        reqBody,
-        args.authToken,
-      );
+      try {
+        const { data: resp, requestId } = await postJson<typeof reqBody, CardGenResp>(
+          '/api/v1/ai/generate-cards',
+          reqBody,
+          args.authToken,
+          args.userApiKey,
+          90000,
+        );
 
-      logger.info(`[IPC] Request ID: ${requestId ?? 'N/A'}`);
-      logger.info(`[IPC] ai_generate_cards end, cards_count=${resp.cards.length}`);
-      return {
-        cards: resp.cards.map((c) => ({
-          front: c.front,
-          back: c.back,
-          type: c.type,
-          confidence: c.confidence,
-        })),
-        totalExtracted: resp.total_extracted,
-        model: resp.model,
-        tokensUsed: resp.tokens_used,
-        requestId,
-      };
+        const elapsed = Date.now() - startMs;
+        logger.info(`[AI] [flashcard] ✔ Success: cards=${resp.cards.length}, total_extracted=${resp.total_extracted}, model=${resp.model}, tokens=${resp.tokens_used}, total=${elapsed}ms, reqId=${requestId ?? 'N/A'}`);
+        return {
+          cards: resp.cards.map((c) => ({
+            front: c.front,
+            back: c.back,
+            type: c.type,
+            confidence: c.confidence,
+          })),
+          totalExtracted: resp.total_extracted,
+          model: resp.model,
+          tokensUsed: resp.tokens_used,
+          requestId,
+        };
+      } catch (err) {
+        const elapsed = Date.now() - startMs;
+        const error = err instanceof Error ? err : new Error(String(err));
+        logger.error(`[AI] [flashcard] ✖ Failed after ${elapsed}ms: ${error.message}`);
+        if (error.cause) logger.error(`[AI] [flashcard] Error cause: ${error.cause}`);
+        throw error;
+      }
     },
   );
 }

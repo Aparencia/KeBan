@@ -6,6 +6,12 @@
 // 采集事件类型
 export type CaptureEventType = 'screenshot' | 'audio_chunk' | 'ui_text' | 'extracted' | 'error';
 
+/**
+ * @ai-context Path B 智能模式 / Path C 全录制的采集路径标识
+ * fine = 原有逐帧流水线模式，smart = 轻量关键帧+VAD模式，full_record = 全程录制（预留）
+ */
+export type CapturePath = 'fine' | 'smart' | 'full_record';
+
 // 采集管道消息（在采集层和处理层之间传递）
 export interface PipelineMessage<T = unknown> {
   id: string;
@@ -70,6 +76,10 @@ export interface CaptureSession {
   messageCount: number;
   processedCount: number;
   errorCount: number;
+  /** @ai-context Path B 智能模式采集到的关键帧+音频段+时间轴汇总 */
+  bundle?: SessionBundle;
+  /** @ai-context Path C 全程录制产出的视频文件信息 */
+  videoRecording?: VideoRecording;
 }
 
 // 采集会话配置
@@ -80,6 +90,8 @@ export interface CaptureSessionConfig {
   audioEnabled: boolean;
   language: string;
   autoInsert: boolean;
+  /** @ai-context 采集路径选择，默认 'fine' 走原有流水线 */
+  path?: CapturePath;
 }
 
 // 可捕获窗口信息（screen_list_windows 返回）
@@ -107,4 +119,63 @@ export interface CaptureSidebarConfig {
   language: 'zh' | 'en' | 'mixed';
   autoInsert: boolean;
   mode: CaptureMode;
+}
+
+// ================================================================
+// Path B 智能模式类型
+// ================================================================
+
+/** @ai-context 智能采样器筛选出的关键帧，用于替代逐帧处理 */
+export interface KeyFrame {
+  id: string;
+  timestamp: number;
+  imageBase64: string;
+  changeType: 'slide_change' | 'writing' | 'scene_change' | 'periodic';
+}
+
+/** @ai-context VAD 标记器切出的语音段，含编码后的音频数据 */
+export interface AudioSegment {
+  id: string;
+  timestampStart: number;
+  timestampEnd: number;
+  audioBase64: string;
+  energy: number;
+}
+
+/** @ai-context 全局时间轴条目，串联关键帧和语音段供后续分析回放 */
+export interface TimelineEntry {
+  timestamp: number;
+  type: 'keyframe' | 'voice_start' | 'voice_end' | 'silence';
+  refId?: string;
+  energy?: number;
+}
+
+/** @ai-context 一次智能模式会话的完整数据汇总 */
+export interface SessionBundle {
+  keyframes: KeyFrame[];
+  audioSegments: AudioSegment[];
+  timeline: TimelineEntry[];
+  duration: number;
+}
+
+// ================================================================
+// Path C 全录制模式类型（预留）
+// ================================================================
+
+/** @ai-context 全程录制产出的视频文件元数据 */
+export interface VideoRecording {
+  filePath: string;
+  duration: number;
+  fileSizeBytes: number;
+  format: 'webm' | 'mp4';
+  hasAudio: boolean;
+}
+
+/** @ai-context 全程录制实时状态，主进程通过 IPC 定期推送给渲染进程 */
+export interface RecordingStatus {
+  isRecording: boolean;
+  isPaused: boolean;
+  duration: number;
+  fileSizeBytes: number;
+  filePath: string | null;
 }

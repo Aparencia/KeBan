@@ -11,7 +11,7 @@ from abc import ABC, abstractmethod
 from functools import wraps
 from typing import Any
 
-from config import TIMEOUT_CONFIG
+from config import TIMEOUT_CONFIG, _FEATURE_CONTEXT
 
 logger = logging.getLogger(__name__)
 
@@ -23,14 +23,25 @@ def with_retry_and_timeout(max_retries: int = 2):
     失败时最多重试 max_retries 次，每次重试间隔指数退避。
 
     用法：在 Provider 子类的 generate 方法上添加 @with_retry_and_timeout()
-    若调用方传入了 _feature 关键字参数，则使用该 feature 对应的超时时间；
-    否则取 TIMEOUT_CONFIG 中的最大值作为安全上限。
+
+    feature 来源优先级：
+    1. call_with_fallback 设置的 _FEATURE_CONTEXT 上下文变量（主路径）
+    2. 调用方显式传入的 _feature 关键字参数（如 health_check）
+    3. 以上均无时取 TIMEOUT_CONFIG 最大值作为安全上限
+
+    注意：_feature 仅用于装饰器内部查找超时配置，不会传递给被装饰的方法。
     """
     def decorator(func):
         @wraps(func)
         async def wrapper(self, *args, **kwargs):
-            # 从 kwargs 推断 feature 名称（由 chain 层传入）
-            feature = kwargs.pop('_feature', '')
+            # 从上下文变量读取当前 feature 名称（由 call_with_fallback 设置）
+            feature = _FEATURE_CONTEXT.get('')
+            # 兼容调用方直接传入 _feature 关键字参数的场景（如 health_check），
+            # 但不将其转发给被装饰的方法
+            kwarg_feature = kwargs.pop('_feature', None)
+            if not feature and kwarg_feature:
+                feature = kwarg_feature
+
             if feature and feature in TIMEOUT_CONFIG:
                 timeout = TIMEOUT_CONFIG[feature]
             else:
@@ -135,6 +146,98 @@ class AIProvider(ABC):
         """
         raise NotImplementedError(
             f"{self.__class__.__name__} 不支持多模态视觉调用"
+        )
+
+    async def generate_vision_multi(
+        self,
+        images_base64: list[str],
+        prompt: str,
+        system_prompt: str = "",
+        model: str = "",
+        temperature: float = 0.3,
+        max_tokens: int = 4096,
+        response_format: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """
+        多模态多图分析（默认降级实现）
+
+        默认行为：逐图调用 generate_vision() 后拼接结果。
+        子类（如 QwenProvider / GLMProvider）可覆盖此方法，
+        使用原生多图消息格式以获得更好的上下文关联效果。
+
+        @ai-context 多帧课堂截图需要联合分析，原生多图能让模型
+        感知帧间时序关系，比逐图拼接质量更高。
+
+        Args:
+            images_base64: 多张图片的 base64 编码列表（不含 data: 前缀）
+            prompt: 文本提示词
+            system_prompt: 系统提示词
+            model: 模型名称
+            temperature: 温度参数
+            max_tokens: 最大生成 token 数
+            response_format: 响应格式约束
+
+        Returns:
+            dict: 与 generate 相同的统一返回格式
+        """
+        # 降级方案：逐图调用并拼接（子类应覆盖为原生多图）
+        all_content: list[str] = []
+        total_tokens = 0
+        total_latency = 0
+        used_model = model
+
+        for idx, img in enumerate(images_base64):
+            result = await self.generate_vision(
+                image_base64=img,
+                prompt=f"[第 {idx + 1}/{len(images_base64)} 帧]\n{prompt}",
+                system_prompt=system_prompt,
+                model=model,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                response_format=response_format,
+            )
+            all_content.append(result.get("content", ""))
+            total_tokens += result.get("tokens_used", 0)
+            total_latency += result.get("latency_ms", 0)
+            used_model = result.get("model", used_model)
+
+        return {
+            "content": "\n\n---\n\n".join(all_content),
+            "tokens_used": total_tokens,
+            "model": used_model,
+            "latency_ms": total_latency,
+        }
+
+    async def generate_video(
+        self,
+        video_input: str | bytes,
+        prompt: str,
+        system_prompt: str = "",
+        model: str = "",
+        temperature: float = 0.3,
+        max_tokens: int = 4096,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """
+        视频分析（默认不支持，由原生视频 Provider 覆写）
+
+        @ai-context Path C 视频分析链路需要 Provider 原生支持视频输入
+        （如 Gemini），不支持的 Provider 应保留此默认实现，
+        Chain 层会捕获 NotImplementedError 并降级为抽帧多图分析。
+
+        Args:
+            video_input: 视频文件路径、bytes 或 base64 字符串
+            prompt: 文本提示词
+            system_prompt: 系统提示词
+            model: 模型名称
+            temperature: 温度参数
+            max_tokens: 最大生成 token 数
+
+        Returns:
+            dict: 与 generate 相同的统一返回格式
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} 不支持视频分析，请使用 Gemini 或降级为抽帧多图模式"
         )
 
     @abstractmethod

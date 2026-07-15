@@ -5,6 +5,8 @@
 Provider: 通义千问(Qwen) / 深度求索(DeepSeek) / 智谱(GLM)
 """
 
+import asyncio
+import contextvars
 import logging
 import os
 from typing import Any, Callable, Awaitable
@@ -18,6 +20,10 @@ load_dotenv(dotenv_path=_env_path)
 
 logger = logging.getLogger(__name__)
 
+# 用于在 fallback 链路中透传当前 feature 名称的上下文变量
+# 使得 with_retry_and_timeout 装饰器无需改动所有 router/chain 签名即可按功能超时
+_FEATURE_CONTEXT: contextvars.ContextVar[str] = contextvars.ContextVar("_feature", default="")
+
 # ============================================================
 # Provider 配置
 # ============================================================
@@ -27,6 +33,7 @@ AI_PROVIDERS: dict = {
         "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
         "api_key": os.getenv("QWEN_API_KEY", ""),
         "models": {
+            "free": "qwen-plus",             # 通用兜底模型
             "summary": "qwen-plus",         # 笔记摘要
             "flashcard": "qwen-plus",        # 闪卡生成（JSON Mode 稳定）
             "vision": "qwen-vl-plus",        # 多模态视觉提取
@@ -42,6 +49,7 @@ AI_PROVIDERS: dict = {
         "base_url": "https://api.deepseek.com/v1",
         "api_key": os.getenv("DEEPSEEK_API_KEY", ""),
         "models": {
+            "free": "deepseek-chat",         # 通用兜底模型
             "evaluate": "deepseek-chat",     # 费曼评估
             "recommend": "deepseek-chat",    # 番茄钟推荐
         },
@@ -53,6 +61,14 @@ AI_PROVIDERS: dict = {
             "free": "glm-4-flash",           # 永久免费，Alpha 验证用
             "vision": "glm-4v-flash",        # 多模态视觉（免费）
             "asr": "glm-4-audio",            # 语音转文字
+        },
+    },
+    "gemini": {
+        "base_url": "",  # google-genai SDK 不需要 base_url
+        "api_key": os.getenv("GEMINI_API_KEY", ""),
+        "models": {
+            "video": "gemini-2.0-flash",     # 视频分析（原生视频输入）
+            "vision": "gemini-2.0-flash",    # 多模态视觉
         },
     },
 }
@@ -83,6 +99,10 @@ MODEL_ROUTING: dict[str, tuple[str, str]] = {
     "socratic_brainstorm": ("qwen", "socratic"),
     "socratic_evaluate":   ("qwen", "socratic"),
     "socratic_deepening":  ("qwen", "socratic"),
+    # Path B: 多模态课堂分析（多图联合 → Markdown 笔记）
+    "multimodal_analyze": ("qwen", "vision"),
+    # Path C: 视频分析（Gemini 原生视频 → Markdown 笔记）
+    "video_analyze": ("gemini", "video"),
 }
 
 # ============================================================
@@ -138,10 +158,12 @@ def _get_provider_classes() -> dict:
         from providers.qwen_provider import QwenProvider
         from providers.deepseek_provider import DeepSeekProvider
         from providers.glm_provider import GLMProvider
+        from providers.gemini_provider import GeminiProvider
         _PROVIDER_CLASSES = {
             "qwen": QwenProvider,
             "deepseek": DeepSeekProvider,
             "glm": GLMProvider,
+            "gemini": GeminiProvider,
         }
     return _PROVIDER_CLASSES
 
@@ -222,10 +244,10 @@ def get_provider_for_request(app, feature: str, request) -> tuple:
 # ============================================================
 
 PROVIDER_FALLBACK_CHAIN: dict[str, list[str]] = {
-    "summarize":      ["qwen", "glm", "fallback"],       # Qwen 为主，GLM 备选
-    "generate_cards": ["qwen", "glm", "fallback"],       # Qwen 为主，GLM 备选
-    "evaluate":       ["deepseek", "glm", "fallback"],   # DeepSeek 为主，GLM 备选
-    "recommend":      ["deepseek", "glm", "fallback"],   # DeepSeek 为主，GLM 备选
+    "summarize":      ["glm", "qwen", "fallback"],        # GLM（免费）优先，Qwen 备选
+    "generate_cards": ["glm", "qwen", "fallback"],        # GLM（免费）优先，Qwen 备选
+    "evaluate":       ["glm", "deepseek", "fallback"],    # GLM（免费）优先，DeepSeek 备选
+    "recommend":      ["glm", "deepseek", "fallback"],    # GLM（免费）优先，DeepSeek 备选
     "vision_extract": ["glm", "qwen"],                   # GLM-4V-Flash（免费）优先，Qwen-VL 备选
     "transcribe":     ["qwen", "glm", "fallback"],       # Qwen Paraformer 优先，GLM 备选
     "tag_content":    ["glm", "deepseek", "fallback"],    # GLM（免费）优先，DeepSeek 备选
@@ -243,7 +265,42 @@ PROVIDER_FALLBACK_CHAIN: dict[str, list[str]] = {
     "socratic_brainstorm": ["qwen", "deepseek", "fallback"],
     "socratic_evaluate":   ["qwen", "deepseek", "fallback"],
     "socratic_deepening":  ["qwen", "deepseek", "fallback"],
+    # Path B: 多模态课堂分析（Qwen-VL 优先，GLM-4V 备选）
+    "multimodal_analyze": ["qwen", "glm"],
+    # Path C: 视频分析（Gemini 原生视频优先，Qwen-VL 抽帧降级）
+    "video_analyze": ["gemini", "qwen"],
 }
+
+
+def _resolve_model_name(provider_key: str, feature: str) -> str:
+    """
+    根据当前 Provider 和功能选择最合理的模型名。
+
+    优先使用 MODEL_ROUTING 中为该功能指定的 slot；当 fallback 到其它 Provider 时，
+    先尝试功能对应的 slot，再回退到通用 slot（free/vision/asr），最后使用 Provider 的第一个模型。
+    """
+    provider_cfg = AI_PROVIDERS.get(provider_key, {})
+    models = provider_cfg.get("models", {})
+    routing = MODEL_ROUTING.get(feature)
+
+    # 1. 当前 Provider 是主路由 Provider 时，使用主 slot
+    if routing and routing[0] == provider_key and routing[1] in models:
+        return models[routing[1]]
+
+    # 2. 功能到通用 slot 的映射
+    feature_slot = routing[1] if routing else None
+    if feature_slot and feature_slot in models:
+        return models[feature_slot]
+
+    # 3. 通用兜底 slot
+    for slot in ("free", "vision", "asr"):
+        if slot in models:
+            return models[slot]
+
+    # 4. 最后使用 Provider 声明的第一个模型
+    if models:
+        return next(iter(models.values()))
+    return "fallback"
 
 
 async def call_with_fallback(
@@ -270,42 +327,48 @@ async def call_with_fallback(
         RuntimeError: 所有 Provider 均不可用（status_code=503）
     """
     chain = PROVIDER_FALLBACK_CHAIN.get(feature, ["fallback"])
+    budget = TIMEOUT_CONFIG.get(feature, 30) * 1.5
 
-    for provider_key in chain:
-        provider = app.state.providers.get(provider_key)
-        if not provider:
-            logger.warning("Provider [%s] 未初始化，跳过", provider_key)
-            continue
+    async def _run_fallback_chain():
+        start_time = asyncio.get_event_loop().time()
+        for provider_key in chain:
+            provider = app.state.providers.get(provider_key)
+            if not provider:
+                logger.warning("Provider [%s] 未初始化，跳过", provider_key)
+                continue
 
-        # 从 MODEL_ROUTING 解析模型名；fallback / 未知 feature 时使用 "fallback"
-        routing = MODEL_ROUTING.get(feature)
-        if routing and routing[0] == provider_key:
-            model_slot = routing[1]
-            model_name = AI_PROVIDERS.get(provider_key, {}).get("models", {}).get(model_slot, "fallback")
-        elif routing:
-            # 非主 Provider：优先使用同名 slot（如 "vision"），回退到 "free"
-            feature_slot = routing[1]
-            provider_models = AI_PROVIDERS.get(provider_key, {}).get("models", {})
-            if feature_slot in provider_models:
-                model_name = provider_models[feature_slot]
-            else:
-                model_name = provider_models.get("free", "fallback")
-        elif provider_key == "glm":
-            model_name = AI_PROVIDERS.get("glm", {}).get("models", {}).get("free", "glm-4-flash")
-        else:
-            model_name = "fallback"
+            model_name = _resolve_model_name(provider_key, feature)
 
-        try:
-            result = await fn(provider, model_name)
-            return result, provider_key
-        except Exception as e:
-            logger.warning(
-                "Provider [%s] failed for feature=%s: %s, trying next...",
-                provider_key, feature, str(e),
+            # 计算剩余超时预算
+            elapsed = asyncio.get_event_loop().time() - start_time
+            remaining = budget - elapsed
+            logger.debug(
+                "Provider [%s] 开始调用: feature=%s, 已用=%.1fs, 剩余预算=%.1fs",
+                provider_key, feature, elapsed, remaining,
             )
 
-    # 所有 Provider 都失败
-    raise RuntimeError("所有 AI 服务暂时不可用")
+            try:
+                _FEATURE_CONTEXT.set(feature)
+                result = await fn(provider, model_name)
+                return result, provider_key
+            except Exception as e:
+                logger.warning(
+                    "Provider [%s] failed for feature=%s: %s, trying next...",
+                    provider_key, feature, str(e),
+                )
+            finally:
+                _FEATURE_CONTEXT.set("")
+
+        # 所有 Provider 都失败
+        raise RuntimeError("所有 AI 服务暂时不可用")
+
+    try:
+        return await asyncio.wait_for(_run_fallback_chain(), timeout=budget)
+    except asyncio.TimeoutError:
+        logger.error(
+            "AI 服务超时（预算 %.1fs 已耗尽）: feature=%s", budget, feature,
+        )
+        raise RuntimeError(f"AI 服务超时（预算 {budget}s 已耗尽）")
 
 
 async def call_with_fallback_for_request(
@@ -345,6 +408,7 @@ async def call_with_fallback_for_request(
 
     if is_user_key:
         try:
+            _FEATURE_CONTEXT.set(feature)
             result = await fn(provider, model_name)
             # 从 MODEL_ROUTING 获取 provider_key 用于日志
             provider_key = MODEL_ROUTING.get(feature, ("unknown", ""))[0]
@@ -358,6 +422,8 @@ async def call_with_fallback_for_request(
                 "用户 Key 调用失败，降级到服务端 fallback: feature=%s, error=%s",
                 feature, str(e),
             )
+        finally:
+            _FEATURE_CONTEXT.set("")
 
     # 用户 Key 失败，降级到服务端 fallback 链
     result, provider_key = await call_with_fallback(app, feature, fn)
@@ -369,7 +435,7 @@ async def call_with_fallback_for_request(
 # ============================================================
 
 TIMEOUT_CONFIG: dict[str, int] = {
-    "summarize": 15,
+    "summarize": 30,          # 笔记摘要，模型响应可能较慢
     "generate_cards": 30,
     "evaluate": 20,
     "recommend": 10,
@@ -390,6 +456,10 @@ TIMEOUT_CONFIG: dict[str, int] = {
     "socratic_brainstorm": 20,
     "socratic_evaluate": 15,
     "socratic_deepening": 15,
+    # Path B: 多模态课堂分析（多图 + 长文本生成，需要宽裕超时）
+    "multimodal_analyze": 120,
+    # Path C: 视频分析（视频处理 + 长文本生成，需要更长超时）
+    "video_analyze": 300,
 }
 
 # ============================================================
@@ -419,6 +489,10 @@ RATE_LIMITS: dict[str, int] = {
     "socratic_brainstorm": 15,
     "socratic_evaluate": 20,
     "socratic_deepening": 15,
+    # Path B: 多模态课堂分析（单次分析成本较高，适度限制）
+    "multimodal_analyze": 5,
+    # Path C: 视频分析（单次成本最高，严格限制）
+    "video_analyze": 3,
 }
 
 # ============================================================
@@ -432,6 +506,9 @@ def is_valid_api_key(key: str) -> bool:
     """检查 API Key 是否为有效配置（非占位符）"""
     return bool(key) and not any(key.startswith(p) for p in PLACEHOLDER_PREFIXES)
 
+
+# Supabase 项目地址，提前读取以推导 JWKS 端点等配置
+_supabase_url = os.getenv("SUPABASE_URL", "")
 
 APP_CONFIG = {
     "app_env": os.getenv("APP_ENV", "development"),
@@ -447,7 +524,12 @@ APP_CONFIG = {
         if origin.strip()
     ],
     "jwt_secret": os.getenv("SUPABASE_JWT_SECRET", ""),
-    "jwt_algorithm": "RS256",
-    "supabase_url": os.getenv("SUPABASE_URL", ""),
+    "jwt_algorithm": "ES256",
+    "supabase_url": _supabase_url,
+    "supabase_jwks_url": os.getenv(
+        "SUPABASE_JWKS_URL",
+        # 从 SUPABASE_URL 推导 JWKS 端点（Supabase 标准 .well-known/jwks.json）
+        f"{_supabase_url.rstrip('/')}/.well-known/jwks.json" if _supabase_url else "",
+    ),
     "redis_url": os.getenv("REDIS_URL", "redis://localhost:6379/0"),
 }

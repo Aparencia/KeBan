@@ -45,6 +45,7 @@ function App() {
 
     // 触发淡出过渡（CSS transition: opacity 0.5s ease）
     requestAnimationFrame(() => {
+      splash.style.pointerEvents = 'none';
       splash.style.opacity = '0';
       const onEnd = () => {
         splash.remove();

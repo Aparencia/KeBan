@@ -24,11 +24,12 @@ export function classifyRawError(error: unknown, transport: 'ipc' | 'fetch'): AI
   const msg = getErrorMessage(error);
   const lowerMsg = msg.toLowerCase();
 
-  // 2. 超时检测
-  if (transport === 'fetch' && error instanceof DOMException && error.name === 'AbortError') {
-    return new AIError('AI 服务响应超时，请稍后重试', 'timeout', true);
-  }
-  if (lowerMsg.includes('timeout') || lowerMsg.includes('timed out') || lowerMsg.includes('etimedout')) {
+  // 2. 超时检测（fetch 与 IPC 均可能触发超时/AbortError）
+  if ((transport === 'fetch' && error instanceof DOMException && error.name === 'AbortError') ||
+      lowerMsg.includes('abort') ||
+      lowerMsg.includes('timeout') ||
+      lowerMsg.includes('timed out') ||
+      lowerMsg.includes('etimedout')) {
     return new AIError('AI 服务响应超时，请稍后重试', 'timeout', true);
   }
 
@@ -40,6 +41,11 @@ export function classifyRawError(error: unknown, transport: 'ipc' | 'fetch'): AI
   // 4. 401/403 认证失败
   if (lowerMsg.includes('401') || lowerMsg.includes('403') || lowerMsg.includes('unauthorized') || lowerMsg.includes('forbidden')) {
     return new AIError('AI 服务认证失败，请检查 API Key 是否有效', 'auth_error', false);
+  }
+
+  // 5. 422 输入校验失败
+  if (lowerMsg.includes('422') || lowerMsg.includes('unprocessable entity')) {
+    return new AIError('AI 服务无法理解当前请求内容，请检查输入后重试', 'invalid_input', false);
   }
 
   // 5. 连接拒绝 / 服务不可用

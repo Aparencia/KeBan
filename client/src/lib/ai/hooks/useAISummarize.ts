@@ -22,6 +22,7 @@ export function useAISummarize() {
       return result;
     } catch (error: unknown) {
       setState(resolveAIErrorState(error, getLocalFallbackMessage('summarize')));
+      throw error;
     }
   }, []);
 

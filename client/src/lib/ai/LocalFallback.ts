@@ -74,19 +74,19 @@ export function getLocalFallbackMessage(feature: 'summarize' | 'flashcard' | 'ev
   const messages: Record<string, { message: string; suggestion: string }> = {
     summarize: {
       message: 'AI 摘要服务暂时不可用',
-      suggestion: '您可以尝试手动提取结礁中的关键段落作为摘要',
+      suggestion: '您可以尝试手动提取笔记中的关键段落作为摘要',
     },
     flashcard: {
-      message: 'AI 反衰减呼吸生成服务暂时不可用',
-      suggestion: '您可以手动将结礁中的重要概念制作为反衰减呼吸',
+      message: 'AI 闪卡生成服务暂时不可用',
+      suggestion: '您可以手动将笔记中的重要概念制作为闪卡',
     },
     evaluate: {
-      message: 'AI 浮出水面评估服务暂时不可用',
+      message: 'AI 费曼评估服务暂时不可用',
       suggestion: '您可以尝试将讲解录音后回听，自行评估理解程度',
     },
     optimize_card: {
-      message: 'AI 反衰减呼吸优化服务暂时不可用',
-      suggestion: '您可以尝试手动精简反衰减呼吸内容，使其更易于记忆',
+      message: 'AI 闪卡优化服务暂时不可用',
+      suggestion: '您可以尝试手动精简闪卡内容，使其更易于记忆',
     },
   };
 

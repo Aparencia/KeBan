@@ -19,16 +19,22 @@ const DEFAULT_AI_CONFIG: AIConfig = {
 
 /** 从 localStorage 读取 AI 配置，不存在则返回默认值 */
 export function getAIConfig(): AIConfig {
+  const defaults = { ...DEFAULT_AI_CONFIG };
   try {
     const raw = localStorage.getItem(AI_CONFIG_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      return { ...DEFAULT_AI_CONFIG, ...parsed };
+      const merged = { ...defaults, ...parsed };
+      // 开发模式：环境变量优先，不被 localStorage 残留覆盖
+      if (import.meta.env.DEV && import.meta.env.VITE_AI_GATEWAY_URL) {
+        merged.gatewayUrl = import.meta.env.VITE_AI_GATEWAY_URL;
+      }
+      return merged;
     }
   } catch {
     /* ignore */
   }
-  return { ...DEFAULT_AI_CONFIG };
+  return defaults;
 }
 
 /** 将 AI 配置持久化到 localStorage */

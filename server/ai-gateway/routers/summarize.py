@@ -6,12 +6,14 @@ POST /api/v1/ai/summarize
 """
 
 import time
+import hashlib
 import logging
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, Request
 
 from config import call_with_fallback_for_request
 from chains.summarize_chain import SummarizeChain
+from cache.redis_cache import get_cache
 
 from fastapi import HTTPException
 
@@ -63,6 +65,26 @@ async def summarize(request: Request, body: SummarizeRequest) -> SummarizeRespon
     user_id = getattr(request.state, "user_id", "anonymous")
     logger.info("摘要请求: user=%s, text_length=%d", user_id, len(body.text))
 
+    # 生成 AI 响应缓存键（基于输入文本 + 选项）
+    options_str = str(body.options.model_dump())
+    cache_key = hashlib.sha256((body.text + options_str).encode()).hexdigest()
+
+    # 获取用户自带的 API Key（有 Key 时跳过缓存，确保使用用户自己的 Provider）
+    user_api_key = getattr(request.state, "user_api_key", None)
+
+    # 检查 Redis AI 响应缓存
+    cache = get_cache()
+    if cache._client is not None and not user_api_key:
+        cached = await cache.get_ai_cache(cache_key)
+        if cached:
+            logger.info("摘要缓存命中: user=%s", user_id)
+            return SummarizeResponse(
+                summary=cached["content"],
+                model=cached.get("model", "unknown"),
+                tokens_used=cached.get("tokens_used", 0),
+                latency_ms=cached.get("latency_ms", 0),
+            )
+
     # 通过 fallback 链自动选择 Provider 并在失败时重试/降级
     async def _run_chain(provider, model_name):
         chain = SummarizeChain(provider=provider, model=model_name)
@@ -82,6 +104,10 @@ async def summarize(request: Request, body: SummarizeRequest) -> SummarizeRespon
     latency_ms = result.get("latency_ms", int((time.monotonic() - start_time) * 1000))
 
     logger.info("摘要完成: provider=%s, model=%s", used_provider, result.get("model", "unknown"))
+
+    # 缓存成功结果（Redis 可用时）
+    if cache._client is not None:
+        await cache.set_ai_cache(cache_key, result, expire=3600)
 
     return SummarizeResponse(
         summary=result["content"],

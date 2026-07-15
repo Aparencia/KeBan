@@ -12,7 +12,7 @@ function createClient(baseUrlOrGetter: string | (() => string)) {
   const resolveUrl = typeof baseUrlOrGetter === 'function' ? baseUrlOrGetter : () => baseUrlOrGetter;
 
   async function request<T = unknown>(endpoint: string, options: RequestOptions = {}): Promise<T> {
-    const { timeout = 30000, headers: customHeaders, ...rest } = options;
+    const { timeout = 60000, headers: customHeaders, ...rest } = options;
     const baseUrl = resolveUrl();
 
     if (!baseUrl) {
@@ -31,6 +31,10 @@ function createClient(baseUrlOrGetter: string | (() => string)) {
     // 用户自配置 API Key 时附加 X-User-API-Key header
     const userKey = getActiveUserKey();
     if (userKey) headers.set('X-User-API-Key', userKey);
+
+    // 生成请求追踪 ID，便于 ai-gateway 端链路追踪
+    const requestId = crypto.randomUUID();
+    headers.set('X-Request-ID', requestId);
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
@@ -66,11 +70,15 @@ function createClient(baseUrlOrGetter: string | (() => string)) {
             window.dispatchEvent(new CustomEvent('kb:session-expired'));
             throw new Error(`HTTP ${retryResponse.status}`);
           }
+          const retryGwReqId = retryResponse.headers.get('ai-gateway-request-id');
+          if (retryGwReqId) console.debug(`[ai-gateway] request-id: ${retryGwReqId}`);
           return retryResponse.json() as Promise<T>;
         }
       }
 
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const gwReqId = response.headers.get('ai-gateway-request-id');
+      if (gwReqId) console.debug(`[ai-gateway] request-id: ${gwReqId}`);
       return response.json() as Promise<T>;
     } finally {
       clearTimeout(timeoutId);

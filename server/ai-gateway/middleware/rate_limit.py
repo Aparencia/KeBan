@@ -66,7 +66,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     },
                 )
 
-        # 检查常规频率限制
+        # 检查常规频率限制（预检查模式，仅读取计数）
         is_allowed, detail = await self._check_rate_limit(user_id, feature)
         if not is_allowed:
             return JSONResponse(
@@ -77,7 +77,14 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 },
             )
 
-        return await call_next(request)
+        # 执行请求
+        response = await call_next(request)
+
+        # 仅对 2xx 响应递增计数，避免失败请求消耗配额
+        if 200 <= response.status_code < 300:
+            await self._increment_rate_limit(user_id, feature)
+
+        return response
 
     async def _check_user_key_rate_limit(
         self, user_api_key: str, feature: str
@@ -130,13 +137,15 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self, user_id: str, feature: str
     ) -> tuple[bool, str]:
         """
-        检查用户是否超出频率限制（双层计数器）
+        检查用户是否超出频率限制（预检查模式，仅读取计数）
 
         检查顺序：
         1. 功能级每日限制（如 summarize 每日 15 次）
         2. 全局每日总量限制（每日 50 次）
 
         Redis 不可用时跳过检查，直接放行。
+        实际计数在请求成功（2xx）后由 _increment_rate_limit 执行，
+        避免失败请求消耗配额。
 
         Args:
             user_id: 用户 ID
@@ -157,6 +166,58 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         feature_limit = RATE_LIMITS.get(feature, 10)
         daily_limit = RATE_LIMITS.get("daily_total", 50)
 
+        # ---- 第一层：功能级限制（预检查，仅读取） ----
+        feature_key = f"rate_limit:{user_id}:{feature}:{today}"
+        try:
+            feature_raw = await cache.get(feature_key)
+            feature_count = int(feature_raw) if feature_raw else 0
+        except Exception as exc:
+            logger.warning("频率限制预检查失败(功能级): %s", exc)
+            return True, ""  # Redis 异常，降级放行
+
+        if feature_count >= feature_limit:
+            return False, (
+                f"「{feature}」今日使用次数已达上限（{feature_limit} 次/天），"
+                "请明天再试，或升级套餐获取更多配额。"
+            )
+
+        # ---- 第二层：全局每日总量限制（预检查，仅读取） ----
+        global_key = f"rate_limit:{user_id}:global:{today}"
+        try:
+            global_raw = await cache.get(global_key)
+            global_count = int(global_raw) if global_raw else 0
+        except Exception as exc:
+            logger.warning("频率限制预检查失败(全局): %s", exc)
+            return True, ""  # Redis 异常，降级放行
+
+        if global_count >= daily_limit:
+            return False, (
+                f"今日 AI 功能总使用次数已达上限（{daily_limit} 次/天），"
+                "请明天再试，或升级套餐获取更多配额。"
+            )
+
+        logger.debug(
+            "频率限制预检查通过: user=%s, feature=%s, feature_count=%d/%d, global_count=%d/%d",
+            user_id, feature, feature_count, feature_limit, global_count, daily_limit,
+        )
+        return True, ""
+
+    async def _increment_rate_limit(self, user_id: str, feature: str) -> None:
+        """
+        请求成功后递增频率限制计数器
+
+        在 dispatch 中仅对 2xx 响应调用，避免失败请求消耗配额。
+
+        Args:
+            user_id: 用户 ID
+            feature: 功能名称
+        """
+        cache = get_cache()
+        if not cache._client:
+            return
+
+        today = datetime.now().strftime("%Y-%m-%d")
+
         # 计算到当日结束的剩余秒数（至少 60 秒，避免边界问题）
         now = datetime.now()
         seconds_until_end_of_day = (
@@ -166,36 +227,16 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         )
         ttl = max(seconds_until_end_of_day, 60)
 
-        # ---- 第一层：功能级限制 ----
+        # ---- 第一层：功能级计数 ----
         feature_key = f"rate_limit:{user_id}:{feature}:{today}"
         try:
-            feature_count = await cache.increment(feature_key, expire=ttl)
+            await cache.increment(feature_key, expire=ttl)
         except Exception as exc:
             logger.warning("频率限制计数失败(功能级): %s", exc)
-            return True, ""  # Redis 异常，降级放行
 
-        if feature_count > feature_limit:
-            return False, (
-                f"「{feature}」今日使用次数已达上限（{feature_limit} 次/天），"
-                "请明天再试，或升级套餐获取更多配额。"
-            )
-
-        # ---- 第二层：全局每日总量限制 ----
+        # ---- 第二层：全局每日总量计数 ----
         global_key = f"rate_limit:{user_id}:global:{today}"
         try:
-            global_count = await cache.increment(global_key, expire=ttl)
+            await cache.increment(global_key, expire=ttl)
         except Exception as exc:
             logger.warning("频率限制计数失败(全局): %s", exc)
-            return True, ""  # Redis 异常，降级放行
-
-        if global_count > daily_limit:
-            return False, (
-                f"今日 AI 功能总使用次数已达上限（{daily_limit} 次/天），"
-                "请明天再试，或升级套餐获取更多配额。"
-            )
-
-        logger.debug(
-            "频率限制通过: user=%s, feature=%s, feature_count=%d/%d, global_count=%d/%d",
-            user_id, feature, feature_count, feature_limit, global_count, daily_limit,
-        )
-        return True, ""

@@ -7,6 +7,7 @@
 
 import { app } from 'electron';
 import * as path from 'path';
+import { randomUUID } from 'crypto';
 import { readFile, writeFile } from 'fs/promises';
 import { logger } from '../logger.js';
 
@@ -14,19 +15,62 @@ import { logger } from '../logger.js';
 // 常量
 // ================================================================
 
-const DEFAULT_GATEWAY_URL = '';
+const DEFAULT_GATEWAY_URL = 'https://entropydecrease.com';
 const GATEWAY_CONFIG_FILE = 'ai-gateway-config.json';
 
 // ── 运行时网关地址（渲染进程通过 IPC 同步） ──
 let _runtimeGatewayUrl: string | null = null;
 
+/** 记录 gatewayUrl() 是否已打印过首次解析日志，避免重复输出 */
+let _gatewayFirstResolveLogged = false;
+
+/**
+ * 判定当前是否为开发模式
+ * 可靠依据：electron:dev 脚本设置 NODE_ENV=development，安装包运行时 app.isPackaged=true
+ */
+export function isDevMode(): boolean {
+  return process.env.NODE_ENV === 'development' || !app.isPackaged;
+}
+
 /**
  * 获取 AI 网关地址
- * 优先级：运行时设置 > 持久化文件 > 环境变量 > 默认空值
+ *
+ * 按模式分流优先级：
+ * - 开发模式：环境变量 > 运行时 IPC > 默认值
+ * - 生产模式：运行时 IPC > 持久化文件(已存入_runtimeGatewayUrl) > 环境变量 > 默认值
  */
 export function gatewayUrl(): string {
-  if (_runtimeGatewayUrl) return _runtimeGatewayUrl;
-  return process.env.VITE_AI_GATEWAY_URL || DEFAULT_GATEWAY_URL;
+  const url = _resolveGatewayUrl();
+  if (!_gatewayFirstResolveLogged) {
+    _gatewayFirstResolveLogged = true;
+    const dev = isDevMode();
+    const source = dev
+      ? (process.env.VITE_AI_GATEWAY_URL
+          ? `env (VITE_AI_GATEWAY_URL=${process.env.VITE_AI_GATEWAY_URL})`
+          : _runtimeGatewayUrl
+            ? 'runtime (IPC)'
+            : 'DEFAULT (hardcoded fallback)')
+      : (_runtimeGatewayUrl
+          ? 'runtime (IPC/persisted)'
+          : process.env.VITE_AI_GATEWAY_URL
+            ? `env (VITE_AI_GATEWAY_URL=${process.env.VITE_AI_GATEWAY_URL})`
+            : 'DEFAULT (hardcoded fallback)');
+    logger.info(`[AI] Gateway URL resolved: ${url}  [source: ${source}, mode: ${dev ? 'dev' : 'prod'}]`);
+    if (!process.env.VITE_AI_GATEWAY_URL && !_runtimeGatewayUrl) {
+      logger.warn('[AI] Gateway URL fell back to DEFAULT. Set VITE_AI_GATEWAY_URL in .env or configure via AI settings.');
+    }
+  }
+  return url;
+}
+
+/** 内部解析逻辑，按模式分流优先级 */
+function _resolveGatewayUrl(): string {
+  if (isDevMode()) {
+    // 开发模式：环境变量优先，持久化不覆盖开发配置
+    return process.env.VITE_AI_GATEWAY_URL || _runtimeGatewayUrl || DEFAULT_GATEWAY_URL;
+  }
+  // 生产模式：运行时/持久化 > 环境变量 > 默认值
+  return _runtimeGatewayUrl || process.env.VITE_AI_GATEWAY_URL || DEFAULT_GATEWAY_URL;
 }
 
 /**
@@ -35,7 +79,14 @@ export function gatewayUrl(): string {
  */
 export async function setRuntimeGatewayUrl(url: string): Promise<void> {
   _runtimeGatewayUrl = url;
-  logger.info(`[AI-Gateway] Runtime gateway URL set: ${url}`);
+  // 重置首次解析日志标记，使下次 gatewayUrl() 重新打印来源
+  _gatewayFirstResolveLogged = false;
+  logger.info(`[AI] Runtime gateway URL set via IPC: ${url}`);
+  // 开发模式不写入持久化文件，防止调试数据污染生产配置
+  if (isDevMode()) {
+    logger.info('[AI] Dev mode: skip persisting gateway URL to file');
+    return;
+  }
   // 持久化到文件
   try {
     const configPath = path.join(app.getPath('userData'), GATEWAY_CONFIG_FILE);
@@ -50,13 +101,17 @@ export async function setRuntimeGatewayUrl(url: string): Promise<void> {
  * 在 registerAIHandlers 之前调用
  */
 export async function loadPersistedGatewayUrl(): Promise<void> {
+  if (isDevMode()) {
+    logger.info('[AI] Dev mode: skip loading persisted gateway URL (using .env config)');
+    return;
+  }
   try {
     const configPath = path.join(app.getPath('userData'), GATEWAY_CONFIG_FILE);
     const raw = await readFile(configPath, 'utf-8');
     const config = JSON.parse(raw);
     if (config.gatewayUrl) {
       _runtimeGatewayUrl = config.gatewayUrl;
-      logger.info(`[AI-Gateway] Loaded persisted gateway URL: ${config.gatewayUrl}`);
+      logger.info(`[AI] Loaded persisted gateway URL from file: ${config.gatewayUrl}`);
     }
   } catch {
     // 文件不存在或解析失败，静默忽略
@@ -99,24 +154,34 @@ export async function postJson<TReq, TRes>(
   apiPath: string,
   body: TReq,
   authToken?: string,
+  userApiKey?: string,
+  timeoutMs: number = 60000,
 ): Promise<{ data: TRes; requestId: string | undefined }> {
   const base = gatewayUrl();
   if (!base) {
-    throw new Error('[KeBan] AI Gateway URL not configured. Please set VITE_AI_GATEWAY_URL in environment');
+    throw new Error('[AI] Gateway URL not configured. Set VITE_AI_GATEWAY_URL in .env or configure via AI settings');
   }
   const url = `${base}${apiPath}`;
   const startTime = Date.now();
-  logger.info(`[AI-Gateway] [${new Date().toISOString()}] POST ${url}`);
+  const clientRequestId = randomUUID();
+
+  // ── 请求前日志 ──
+  logger.info(`[AI] → POST ${url} [req-id: ${clientRequestId}]`);
+  logger.debug(`[AI] Request config: timeout=${timeoutMs}ms, hasAuth=${!!authToken}, hasUserKey=${!!userApiKey}, bodyKeys=${Object.keys(body as Record<string, unknown>).join(',')}`);
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    'X-Request-ID': clientRequestId,
   };
   if (authToken) {
     headers['Authorization'] = `Bearer ${authToken}`;
   }
+  if (userApiKey) {
+    headers['X-User-API-Key'] = userApiKey;
+  }
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 60_000); // 60s timeout
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   let resp: Response;
   try {
@@ -126,14 +191,26 @@ export async function postJson<TReq, TRes>(
       body: JSON.stringify(body),
       signal: controller.signal,
     });
-  } catch (networkError: any) {
+  } catch (networkError: unknown) {
     const elapsed = Date.now() - startTime;
-    if (networkError.name === 'AbortError') {
-      logger.error(`[AI-Gateway] [${new Date().toISOString()}] POST ${url} TIMEOUT after ${elapsed}ms`);
-      throw new Error('Request timeout after 60s');
+    const err = networkError as { name?: string; message?: string; cause?: unknown };
+    if (err.name === 'AbortError') {
+      logger.error(`[AI] ✖ TIMEOUT ${url} after ${elapsed}ms`);
+      throw new Error(`Request timeout after ${timeoutMs}ms`);
     }
-    logger.error(`[AI-Gateway] [${new Date().toISOString()}] POST ${url} FAILED after ${elapsed}ms: ${networkError.message}`);
-    throw new Error(`Network error: ${networkError.message}`);
+    // 详细网络错误诊断
+    const cause = err.cause ? String(err.cause) : '';
+    const errDetail = err.message || String(networkError);
+    logger.error(`[AI] ✖ NETWORK_ERROR ${url} after ${elapsed}ms: ${errDetail}${cause ? ` (cause: ${cause})` : ''}`);
+    // 识别常见网络错误码
+    if (/ECONNREFUSED/i.test(errDetail)) {
+      logger.error('[AI] Hint: Connection refused — check if AI Gateway service is running and the URL is correct');
+    } else if (/ENOTFOUND/i.test(errDetail)) {
+      logger.error('[AI] Hint: DNS resolution failed — check the gateway URL hostname');
+    } else if (/ETIMEDOUT/i.test(errDetail)) {
+      logger.error('[AI] Hint: Connection timed out — check network connectivity and firewall rules');
+    }
+    throw new Error(`Network error: ${errDetail}`);
   } finally {
     clearTimeout(timeoutId);
   }
@@ -143,17 +220,19 @@ export async function postJson<TReq, TRes>(
 
   if (!resp.ok) {
     const detail = await resp.text().catch(() => 'unknown error');
-    logger.error(`[AI-Gateway] [${new Date().toISOString()}] POST ${url} -> ${resp.status} (${elapsed}ms): ${detail}`);
+    // 截取响应体前 500 字符防止日志爆炸
+    const detailPreview = detail.length > 500 ? `${detail.slice(0, 500)}...(+${detail.length - 500} chars)` : detail;
+    logger.error(`[AI] ✖ HTTP ${resp.status} ${url} (${elapsed}ms) [req-id: ${requestId ?? clientRequestId}]: ${detailPreview}`);
     throw new Error(`HTTP ${resp.status}: ${detail}`);
   }
 
-  logger.info(`[AI-Gateway] [${new Date().toISOString()}] POST ${url} -> ${resp.status} (${elapsed}ms)`);
+  logger.info(`[AI] ← ${resp.status} ${url} (${elapsed}ms)${requestId ? ` [req-id: ${requestId}]` : ''}`);
 
   try {
     const data = (await resp.json()) as TRes;
     return { data, requestId };
   } catch (e) {
-    logger.error(`[AI-Gateway] Response parse error for ${url}: ${e}`);
+    logger.error(`[AI] Response JSON parse error for ${url}: ${e}`);
     throw new Error(`Response parse error: ${e}`);
   }
 }

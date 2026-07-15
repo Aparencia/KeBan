@@ -64,26 +64,26 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     return unsubscribe;
   }, [isAuthenticated]);
 
-  // 模式感知：根据当前模式决定是否启动自动同步
+  // 模式感知：注册网络恢复时的同步监听（不再使用定时同步）
   useEffect(() => {
     if (!isAuthenticated) return;
 
     const modeConfig = modeManager.getConfig();
     if (modeConfig.syncEnabled) {
-      syncEngine.startAutoSync(60000);
+      syncEngine.registerNetworkRecoverySync();
     }
 
     const unsubscribe = modeManager.subscribe((_mode, config) => {
       if (config.syncEnabled) {
-        syncEngine.sync();      // 模式切换后立即触发一次
-        syncEngine.startAutoSync(60000); // 重启定时同步
+        syncEngine.registerNetworkRecoverySync();
+      } else {
+        syncEngine.unregisterNetworkRecoverySync();
       }
-      // syncDisabled 时无需在此停止，effect cleanup 统一处理 stopAutoSync
     });
 
     return () => {
       unsubscribe();
-      syncEngine.stopAutoSync();
+      syncEngine.unregisterNetworkRecoverySync();
     };
   }, [isAuthenticated]);
 

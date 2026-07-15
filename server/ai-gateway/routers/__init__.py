@@ -12,6 +12,7 @@ from routers.inspiration import router as inspiration_router
 from routers.learning import router as learning_router
 from routers.inspiration_draft import router as inspiration_draft_router
 from routers.socratic import router as socratic_router
+from routers.multimodal import router as multimodal_router
 
 __all__ = [
     "summarize_router",
@@ -26,4 +27,5 @@ __all__ = [
     "learning_router",
     "inspiration_draft_router",
     "socratic_router",
+    "multimodal_router",
 ]

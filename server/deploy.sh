@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-# 课伴（KeBan）后端服务一键部署脚本
+# entropy-decrease 后端服务一键部署脚本
 # 用法：chmod +x deploy.sh && ./deploy.sh
 # =============================================================================
 
@@ -103,7 +103,7 @@ check_service() {
 ERRORS=0
 
 # PostgreSQL
-if docker exec keban-postgres pg_isready -U keban > /dev/null 2>&1; then
+if docker exec entropy-decrease-postgres pg_isready -U entropy-decrease > /dev/null 2>&1; then
     log_info "PostgreSQL ✓ 运行正常"
 else
     log_error "PostgreSQL ✗ 未就绪"
@@ -111,7 +111,7 @@ else
 fi
 
 # Redis
-if docker exec keban-redis redis-cli -a "$(grep REDIS_PASSWORD "$ENV_FILE" | cut -d= -f2)" ping > /dev/null 2>&1; then
+if docker exec entropy-decrease-redis redis-cli -a "$(grep REDIS_PASSWORD "$ENV_FILE" | cut -d= -f2)" ping > /dev/null 2>&1; then
     log_info "Redis ✓ 运行正常"
 else
     log_error "Redis ✗ 未就绪"

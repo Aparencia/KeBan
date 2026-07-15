@@ -26,6 +26,10 @@ const WINDOW_MIN_WIDTH = 600;
 /** 缓存的关闭选择，避免在同步事件处理器中执行异步 I/O */
 let cachedCloseChoice: string | null = null;
 
+/** 退出前同步状态 */
+let syncBeforeQuitRequested = false;
+let syncBeforeQuitCompleted = false;
+
 /** 读取保存的关闭选择 */
 export async function getCloseChoice(): Promise<string | null> {
   try {
@@ -58,7 +62,7 @@ export async function saveCloseChoice(choice: string): Promise<void> {
 /**
  * 创建并返回主窗口
  *
- * @param isQuittingRef - 退出标志引用，用于区分"最小化到托盘"与"真正退出"
+ * @param isQuittingRef - 退出标志引用，用于区分“最小化到托盘”与“真正退出”
  * @param onQuit - 确认退出时的回调
  * @returns 创建的 BrowserWindow 实例
  */
@@ -105,7 +109,10 @@ export function createMainWindow(
   if (isDev) {
     // 开发模式：连接 Vite 开发服务器
     win.loadURL('http://localhost:5173');
-    win.webContents.openDevTools({ mode: 'detach' });
+    // 等待页面加载完成后再打开 DevTools，避免 "Runtime agent is not enabled" 错误
+    win.webContents.once('did-finish-load', () => {
+      win.webContents.openDevTools({ mode: 'right' });
+    });
   } else {
     // 生产模式：加载打包后的 index.html
     win.loadFile(path.join(app.getAppPath(), 'dist', 'index.html'));
@@ -135,20 +142,68 @@ export function createMainWindow(
       event.preventDefault();
       const savedChoice = cachedCloseChoice;
       if (savedChoice === 'quit') {
-        isQuittingRef.value = true;
-        onQuit();
+        syncAndQuit(win, isQuittingRef, onQuit);
       } else if (savedChoice === 'minimize') {
         win.hide();
       } else {
         // 无记忆选择，通知前端弹出确认对话框
         win.webContents.send('window:closing');
       }
+    } else if (!syncBeforeQuitCompleted) {
+      // 用户确认退出，先触发数据同步
+      if (!syncBeforeQuitRequested) {
+        event.preventDefault();
+        syncBeforeQuitRequested = true;
+        logger.info('[Window] Sync before quit: requesting renderer sync');
+        win.webContents.send('sync:before-quit');
+      } else {
+        // 同步尚未完成，继续等待
+        event.preventDefault();
+      }
     }
+    // syncBeforeQuitCompleted === true 时允许窗口正常关闭
   });
 
   // 创建系统托盘
-  createTray(win, onQuit);
+  createTray(win, syncAndQuit.bind(null, win, isQuittingRef, onQuit));
 
   logger.info('[Window] Main window created');
   return win;
+}
+
+/**
+ * 退出前同步流程入口
+ * 不立即设置退出标志，而是先触发渲染进程同步
+ */
+function syncAndQuit(
+  win: BrowserWindow,
+  isQuittingRef: { value: boolean },
+  onQuit: () => void,
+): void {
+  if (syncBeforeQuitRequested && !syncBeforeQuitCompleted) {
+    // 同步已在进行中，等待完成
+    return;
+  }
+  if (syncBeforeQuitCompleted) {
+    // 同步已完成，直接退出
+    isQuittingRef.value = true;
+    onQuit();
+    return;
+  }
+  // 首次触发：发送同步请求给渲染进程
+  syncBeforeQuitRequested = true;
+  logger.info('[Window] Sync before quit: requesting renderer sync');
+  win.webContents.send('sync:before-quit');
+}
+
+/**
+ * 渲染进程同步完成后调用，允许窗口关闭
+ */
+export function completeSyncBeforeQuit(): void {
+  syncBeforeQuitCompleted = true;
+  logger.info('[Window] Sync before quit: completed, proceeding with quit');
+  const win = BrowserWindow.getAllWindows()[0];
+  if (win) {
+    win.close();
+  }
 }

@@ -13,6 +13,8 @@ MVP-2 阶段的 AI 增强服务网关。
 import asyncio
 import logging
 import os
+import time
+import uuid
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -40,6 +42,7 @@ from routers import (
     learning_router,
     inspiration_draft_router,
     socratic_router,
+    multimodal_router,
 )
 from cache.redis_cache import get_cache
 
@@ -94,6 +97,7 @@ async def lifespan(app: FastAPI):
     from providers.qwen_provider import QwenProvider
     from providers.deepseek_provider import DeepSeekProvider
     from providers.glm_provider import GLMProvider
+    from providers.gemini_provider import GeminiProvider
     from providers.fallback_provider import FallbackProvider
 
     # 将 Provider 实例存储到 app.state，供路由层使用
@@ -128,6 +132,16 @@ async def lifespan(app: FastAPI):
         logger.info("Provider [glm]: 已初始化")
     else:
         logger.warning("Provider [glm]: API Key 未配置，跳过初始化")
+
+    # Gemini: google-genai SDK，仅需 api_key
+    gemini_cfg = AI_PROVIDERS.get("gemini", {})
+    if is_valid_api_key(gemini_cfg.get("api_key", "")):
+        app.state.providers["gemini"] = GeminiProvider(
+            api_key=gemini_cfg["api_key"],
+        )
+        logger.info("Provider [gemini]: 已初始化")
+    else:
+        logger.warning("Provider [gemini]: API Key 未配置，跳过初始化")
     
     # FallbackProvider 始终可用
     app.state.providers["fallback"] = FallbackProvider()
@@ -188,6 +202,18 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         return response
 
 
+class RequestIdMiddleware(BaseHTTPMiddleware):
+    """为每个请求生成/透传 request_id，并写入响应头"""
+
+    async def dispatch(self, request: Request, call_next):
+        request_id = request.headers.get("x-request-id") or str(uuid.uuid4())
+        request.state.request_id = request_id
+        response: Response = await call_next(request)
+        response.headers["X-Request-ID"] = request_id
+        response.headers["ai-gateway-request-id"] = request_id
+        return response
+
+
 # ============================================================
 # 中间件注册（执行顺序与注册顺序相反：后注册的先执行）
 #
@@ -198,21 +224,23 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 #   X-XSS-Protection 已废弃，不再添加。
 #
 # 注册顺序（从内到外）：
-#   1. SecurityHeaders   — 最内层，确保所有响应都带安全头
-#   2. JWTAuth           — 认证层
-#   3. RateLimit         — 频率限制层
+#   1. RequestId         — 最内层，先生成 request_id
+#   2. SecurityHeaders   — 响应安全头
+#   3. RateLimit         — 频率限制层（需要 user_id，故放在 JWTAuth 之后）
 #   4. InputValidation   — 输入校验层
-#   5. CORS              — 最后注册 = 最外层，最先处理请求（含 OPTIONS 预检）
+#   5. JWTAuth           — 认证层
+#   6. CORS              — 最后注册 = 最外层，最先处理请求（含 OPTIONS 预检）
 #
 # CORS 策略：
 #   - 生产环境：仅允许 CORS_ORIGINS 环境变量中配置的域名
 #   - 开发环境：允许所有来源（便于调试）
 # ============================================================
 
-app.add_middleware(SecurityHeadersMiddleware)   # 最内层：纵深防御安全头
-app.add_middleware(JWTAuthMiddleware)           # 认证层
-app.add_middleware(RateLimitMiddleware)         # 频率限制层
+app.add_middleware(RequestIdMiddleware)         # 最内层：request_id
+app.add_middleware(SecurityHeadersMiddleware)   # 纵深防御安全头
+app.add_middleware(RateLimitMiddleware)         # 频率限制层（需要 user_id）
 app.add_middleware(InputValidationMiddleware)   # 输入校验层
+app.add_middleware(JWTAuthMiddleware)           # 认证层
 
 # CORS 中间件：根据 APP_ENV 区分严格/宽松模式
 if APP_CONFIG.get("app_env") == "production":
@@ -222,7 +250,7 @@ if APP_CONFIG.get("app_env") == "production":
         allow_origins=APP_CONFIG["cors_origins"],
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        allow_headers=["Authorization", "Content-Type", "X-Requested-With", "X-User-API-Key"],
+        allow_headers=["Authorization", "Content-Type", "X-Requested-With", "X-User-API-Key", "X-Request-ID"],
     )
 else:
     # 开发环境 CORS 宽松模式：允许所有来源（便于调试）
@@ -232,6 +260,7 @@ else:
         allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=["X-Request-ID", "ai-gateway-request-id"],
     )
 
 
@@ -267,16 +296,33 @@ async def health_check():
     健康检查端点
 
     对每个 Provider 发送 ping 测试，记录响应时间和可用性。
+    并行 ping 所有 Provider（最坏耗时 5s），并缓存结果 30 秒。
     """
-    providers_status = {}
+    # 30 秒 TTL 健康状态缓存
+    cache_ttl = 30
+    cached_result = getattr(app.state, "_health_cache", None)
+    cache_time = getattr(app.state, "_health_cache_time", 0)
+    now = time.monotonic()
+    if cached_result is not None and (now - cache_time) < cache_ttl:
+        return cached_result
 
-    for name, provider in app.state.providers.items():
+    async def _ping_provider(name, provider):
+        """单个 Provider 健康检测（带 5 秒超时）"""
         try:
-            # 实际 ping 测试（带 5 秒超时）
             result = await asyncio.wait_for(provider.health_check(), timeout=5.0)
-            providers_status[name] = result
+            return name, result
         except asyncio.TimeoutError:
-            providers_status[name] = {"status": "unhealthy", "latency_ms": 5000, "error": "health check timeout"}
+            return name, {"status": "unhealthy", "latency_ms": 5000, "error": "health check timeout"}
+        except Exception as e:
+            return name, {"status": "unhealthy", "latency_ms": 0, "error": str(e)}
+
+    # 并行 ping 所有 Provider
+    tasks = [
+        _ping_provider(name, provider)
+        for name, provider in app.state.providers.items()
+    ]
+    results = await asyncio.gather(*tasks) if tasks else []
+    providers_status = dict(results)
 
     # Redis 连接状态检查
     redis_status = "not_connected"
@@ -292,7 +338,7 @@ async def health_check():
     healthy_providers = sum(1 for p in providers_status.values() if p.get("status") == "healthy")
     overall = "healthy" if healthy_providers > 0 else "degraded"
 
-    return {
+    response = {
         "status": overall,
         "service": "ai-gateway",
         "version": APP_CONFIG["version"],
@@ -301,6 +347,12 @@ async def health_check():
         "healthy_count": healthy_providers,
         "total_count": len(providers_status),
     }
+
+    # 缓存结果
+    app.state._health_cache = response
+    app.state._health_cache_time = now
+
+    return response
 
 
 @app.get("/health/live", tags=["系统"])
@@ -339,6 +391,7 @@ app.include_router(inspiration_router)
 app.include_router(learning_router)         # v1.0.0: 记忆锚点/苏格拉底/预测/救援
 app.include_router(inspiration_draft_router) # v1.1.0: AI 草稿生成
 app.include_router(socratic_router)          # FEAT-022: 苏格拉底式学习（头脑风暴+四维度评估）
+app.include_router(multimodal_router)          # Path B: 多模态课堂分析（多图联合 → Markdown 笔记）
 
 
 # ============================================================

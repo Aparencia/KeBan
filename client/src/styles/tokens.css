@@ -109,6 +109,12 @@
   --kb-ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
   --kb-ease-spring: cubic-bezier(0.175, 0.885, 0.32, 1.275);
 
+  /* 沉浸式动画 */
+  --kb-duration-immersive: 600ms;
+  --kb-duration-synapse: 800ms;
+  --kb-duration-converge: 400ms;
+  --kb-ease-synapse: cubic-bezier(0.22, 0.61, 0.36, 1);
+
   /* 图标系统 (Lucide Icons, 线性风格) */
   --kb-icon-default: currentColor;
   --kb-icon-size-xs: 14px;

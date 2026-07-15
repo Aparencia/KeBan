@@ -53,6 +53,8 @@ class Logger {
       console.error(fullLine.trimEnd());
     } else if (level === 'WARN') {
       console.warn(fullLine.trimEnd());
+    } else if (level === 'DEBUG') {
+      console.debug(fullLine.trimEnd());
     } else {
       console.log(fullLine.trimEnd());
     }
@@ -65,6 +67,10 @@ class Logger {
         // 静默降级
       }
     }
+  }
+
+  debug(msg: string): void {
+    this.write('DEBUG', msg);
   }
 
   info(msg: string): void {

@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { aiPluginLoader } from '../AIPluginLoader';
-import { type AIState, INITIAL_STATE, resolveAIErrorState } from './types';
+import { type AIState, INITIAL_STATE } from './types';
 import type { DurationResult, DurationHistoryData, DurationOptions } from '../types';
 
 /**
@@ -20,6 +20,7 @@ export function useAIDuration() {
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : (typeof error === 'string' ? error : '深潜推荐失败');
       setState({ data: null, loading: false, error: msg, isFallback: true, needsConfig: false });
+      throw error;
     }
   }, []);
 

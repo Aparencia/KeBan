@@ -6,11 +6,12 @@ import { ContextMenu } from '@/components/ui/ContextMenu';
 import type { ContextMenuGroup } from '@/components/ui/ContextMenu';
 import { VirtualList } from '@/components/ui/VirtualList';
 import {
-  Search, Plus, FolderPlus, ChevronRight, FileText, PanelLeftClose, PanelLeft, Pin,
-  MoreVertical, Trash2, Copy, Download, BookOpen, Sparkles,
+  Search, Plus, FolderPlus, FileText, PanelLeftClose, PanelLeft, Pin,
+  MoreVertical, Trash2, Copy, Download, BookOpen, Sparkles, ListTodo,
 } from 'lucide-react';
 import { TemplateSelector } from '../components/TemplateSelector';
 import type { NoteTemplate } from '../components/TemplateSelector';
+import SubjectFolder from '../components/SubjectFolder';
 import { NoteSearchBar } from '../components/NoteSearchBar';
 import { NoteTagFilter } from '../components/NoteTagFilter';
 import { cn } from '@/lib/utils';
@@ -22,8 +23,8 @@ import type { Note } from '@/types/models';
 import { useAISummarize, useAIFlashcards } from '@/lib/ai/useAI';
 import { useAIErrorHandler } from '@/lib/ai/hooks/useAIErrorHandler';
 
-const templateLabels: Record<NoteTemplate | 'qa', string> = {
-  outline: '大纲式', cornell: '康奈尔', mindmap: '思维导图', free: '自由笔记', blank: '空白', qa: '问答',
+const templateLabels: Record<NoteTemplate | 'qa' | 'video' | 'todo', string> = {
+  outline: '大纲式', cornell: '康奈尔', mindmap: '思维导图', free: '自由笔记', blank: '空白', qa: '问答', video: '视频笔记', todo: '待办',
 };
 
 function formatDate(date: Date): string {
@@ -70,6 +71,7 @@ function colorForType(template: string): string {
     case 'cornell': return 'rgb(91,138,114)';   // brand-500
     case 'outline': return 'rgb(96,165,250)';   // accent-400
     case 'mindmap': return 'rgb(251,191,36)';   // note
+    case 'todo':    return 'rgb(16,185,129)';   // emerald-500
     default:        return 'rgb(156,163,175)';  // border
   }
 }
@@ -83,7 +85,7 @@ export default function NotesPage() {
 
   const {
     folders, selectedFolderId, selectedNoteId, searchQuery, selectedTags,
-    loadNotes, loadFolders, createNote, createFolder, selectNote, selectFolder,
+    loadNotes, loadFolders, createNote, createFolder, updateFolder, selectNote, selectFolder,
     setSearchQuery, getFilteredNotes, createFromTemplate, toggleTag, getAllTags,
     deleteNote, togglePin,
   } = useNoteStore(useShallow(s => s));
@@ -119,6 +121,9 @@ export default function NotesPage() {
     if (newFolderName.trim()) { await createFolder(newFolderName.trim()); setNewFolderName(''); setShowNewFolder(false); }
   };
   const handleSelectNote = (noteId: string) => { selectNote(noteId); navigate(`/notes/${noteId}`); };
+  const handleRenameFolder = useCallback(async (id: string, newName: string) => {
+    await updateFolder(id, { name: newName });
+  }, [updateFolder]);
 
   const handleTogglePin = useCallback((noteId: string) => { togglePin(noteId); toast({ type: 'success', message: '已更新置顶状态' }); }, [togglePin, toast]);
   const handleDeleteNote = useCallback((id: string) => { setDeleteTargetId(id); }, []);
@@ -265,25 +270,13 @@ export default function NotesPage() {
                 <span className="text-[11px] text-text-tertiary font-mono">{useNoteStore.getState().notes.length}</span>
               </motion.button>
               {folders.map((f) => (
-                <motion.button
+                <SubjectFolder
                   key={f.id}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => selectFolder(f.id!)}
-                  className={cn(
-                    'flex items-center justify-between px-3 py-2 rounded-[var(--kb-radius-sm)] text-[13px] relative transition-all duration-200',
-                    selectedFolderId === f.id
-                      ? 'bg-brand-50/80 text-brand-700 font-medium shadow-[inset_0_0_0_1px_rgba(91,138,114,0.08)]'
-                      : 'text-text-secondary hover:bg-bg-tertiary/40',
-                  )}
-                >
-                  {selectedFolderId === f.id && (
-                    <motion.span layoutId="folder-active" className="absolute left-0 top-1/2 -translate-y-1/2 w-[2px] h-4 bg-brand-500 rounded-[1px]" transition={{ type: 'spring', stiffness: 350, damping: 30 }} />
-                  )}
-                  <span className="flex items-center gap-2">
-                    <ChevronRight className="w-3.5 h-3.5 opacity-40" strokeWidth={1.5} />
-                    {f.name}
-                  </span>
-                </motion.button>
+                  folder={f}
+                  isSelected={selectedFolderId === f.id}
+                  onSelect={selectFolder}
+                  onRename={handleRenameFolder}
+                />
               ))}
             </nav>
 
@@ -356,6 +349,7 @@ export default function NotesPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         {note.pinned && <Pin className="w-3.5 h-3.5 text-accent-400 flex-shrink-0" strokeWidth={1.5} />}
+                        {note.template === 'todo' && <ListTodo className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" strokeWidth={1.5} />}
                         <h3 className="text-[14px] font-medium text-text-primary truncate">{note.title}</h3>
                       </div>
                       <p className="text-[13px] text-text-secondary mt-1 line-clamp-2 leading-relaxed">{stripHtml(note.content)}</p>
@@ -406,6 +400,7 @@ export default function NotesPage() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           {note.pinned && <Pin className="w-3.5 h-3.5 text-accent-400 flex-shrink-0" strokeWidth={1.5} />}
+                          {note.template === 'todo' && <ListTodo className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" strokeWidth={1.5} />}
                           <h3 className="text-[14px] font-medium text-text-primary truncate">{note.title}</h3>
                         </div>
                         <p className="text-[13px] text-text-secondary mt-1 line-clamp-2 leading-relaxed">

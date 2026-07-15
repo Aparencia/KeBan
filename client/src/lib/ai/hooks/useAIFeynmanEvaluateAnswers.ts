@@ -26,7 +26,7 @@ export function useAIFeynmanEvaluateAnswers() {
         message: 'AI 评估服务暂时不可用',
         suggestion: '您可以对照标准答案自行检查回答的准确性',
       }));
-      return null;
+      throw error;
     }
   }, []);
 

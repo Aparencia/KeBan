@@ -10,6 +10,11 @@ export { Pipeline } from './pipeline';
 export { CrossFusionEngine } from './crossFusion';
 export type { VADConfig, FusionSegment, VADTriggerEvent } from './crossFusion';
 export { CaptureManager } from './captureManager';
+export { SmartSampler } from './smartSampler';
+export type { SmartSamplerConfig } from './smartSampler';
+export { VADMarker } from './vadMarker';
+export type { VADMarkerConfig } from './vadMarker';
+export { VideoRecorderRenderer } from './videoRecorderRenderer';
 export { NoteGenerator } from './noteGenerator';
 export type {
   NoteGeneratorConfig,
@@ -28,6 +33,7 @@ export type {
   FusionResult,
 } from '@/lib/ai/routeDispatcher';
 export type {
+  CapturePath,
   CaptureEventType,
   PipelineMessage,
   ScreenshotData,
@@ -42,4 +48,10 @@ export type {
   ExtractedSegment,
   CaptureMode,
   CaptureSidebarConfig,
+  KeyFrame,
+  AudioSegment,
+  TimelineEntry,
+  SessionBundle,
+  VideoRecording,
+  RecordingStatus,
 } from './captureTypes';

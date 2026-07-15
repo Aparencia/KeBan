@@ -22,7 +22,7 @@ export function useAIFeynmanQuestion() {
         message: 'AI 追问生成服务暂时不可用',
         suggestion: '您可以尝试自问"这个概念的核心是什么"来深入理解',
       }));
-      return null;
+      throw error;
     }
   }, []);
 

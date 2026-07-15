@@ -11,12 +11,13 @@
 import { app, BrowserWindow, Menu, dialog, session } from 'electron';
 import * as path from 'path';
 import { writeFile, readFile } from 'fs/promises';
+import { readFileSync, existsSync } from 'fs';
 import { safeHandle, setMainWindowId } from './ipcUtils.js';
 import { logger } from './logger.js';
 import { registerAIHandlers } from './ai/index.js';
-import { loadPersistedGatewayUrl, setRuntimeGatewayUrl } from './ai/utils.js';
+import { loadPersistedGatewayUrl, setRuntimeGatewayUrl, gatewayUrl, isDevMode } from './ai/utils.js';
 import { initAutoUpdater, checkForUpdate, downloadUpdate, installUpdate, destroyAutoUpdater, setAutoCheckEnabled } from './updater.js';
-import { createMainWindow, saveCloseChoice } from './windowManager.js';
+import { createMainWindow, saveCloseChoice, completeSyncBeforeQuit } from './windowManager.js';
 import { destroyTray } from './trayManager.js';
 import { registerCaptureHandlers, disposeCaptureHandlers } from './captureHandlers.js';
 import { initialize, getConnection, close as closeDb, checkpointAndClose, reinitialize, getDbPath } from './db/sqliteService.js';
@@ -26,8 +27,56 @@ import { migrateDatabaseFiles, verifyDatabaseIntegrity, createBackup } from './d
 import SqliteRepository from './db/sqliteRepository.js';
 import { registerMigrationHandlers } from './db/migration.js';
 
+// ================================================================
+// .env 文件加载（Electron 主进程由 tsc 编译，不经过 Vite，
+// 需手动解析 .env 文件注入 process.env，使 VITE_* 变量可用）
+// ================================================================
+
+/**
+ * 简易 .env 解析器：读取文件并注入 process.env
+ * @param overrideKeys 记录本次写入的 key，允许后续 .env.<mode> 覆盖
+ */
+function loadEnvFile(filePath: string, overrideKeys: Set<string>): void {
+  if (!existsSync(filePath)) return;
+  try {
+    const content = readFileSync(filePath, 'utf-8');
+    for (const line of content.split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const eqIdx = trimmed.indexOf('=');
+      if (eqIdx === -1) continue;
+      const key = trimmed.slice(0, eqIdx).trim();
+      let value = trimmed.slice(eqIdx + 1).trim();
+      // 移除首尾引号
+      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+        value = value.slice(1, -1);
+      }
+      if (key) {
+        // 不覆盖系统环境变量，但允许 .env.<mode> 覆盖 .env 基础值
+        if (!(key in process.env) || overrideKeys.has(key)) {
+          process.env[key] = value;
+          overrideKeys.add(key);
+        }
+      }
+    }
+  } catch {
+    // .env 文件加载失败不阻塞启动
+  }
+}
+
+// 按 Vite 约定分层加载：.env（基础）→ .env.<mode>（覆盖）
+// electron:dev 使用 --mode test，electron:build 使用 production
+{
+  const mode = process.env.NODE_ENV === 'development' ? 'test' : 'production';
+  // __dirname 在编译后为 dist-electron/electron/，需回退到 client/ 根目录
+  const clientRoot = path.resolve(__dirname, '..', '..');
+  const envKeys = new Set<string>();
+  loadEnvFile(path.join(clientRoot, '.env'), envKeys);
+  loadEnvFile(path.join(clientRoot, `.env.${mode}`), envKeys);
+}
+
 // 仅开发模式禁用 Electron 安全警告，生产环境保留
-if (process.env.NODE_ENV === 'development' || !app.isPackaged) {
+if (isDevMode()) {
   process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
 }
 
@@ -93,15 +142,27 @@ if (!gotTheLock) {
     // ================================================================
     // SEC-005: CSP 安全策略注入
     // ================================================================
-    const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+    const isDev = isDevMode();
 
     try {
+      // 动态构建 connect-src：除固定域名外，追加配置的 AI 网关和 API 地址
+      const configuredGateway = process.env.VITE_AI_GATEWAY_URL || '';
+      const configuredApi = process.env.VITE_API_BASE_URL || '';
+      const extraOrigins = new Set<string>();
+      if (configuredGateway && configuredGateway !== 'https://entropydecrease.com') {
+        extraOrigins.add(configuredGateway);
+      }
+      if (configuredApi && configuredApi !== 'https://entropydecrease.com') {
+        extraOrigins.add(configuredApi);
+      }
+      const extraConnectSrc = extraOrigins.size > 0 ? ` ${[...extraOrigins].join(' ')}` : '';
+
       session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
         // 开发环境：允许 unsafe-inline/unsafe-eval（Vite HMR 需要）
         // 生产环境：禁止 unsafe-eval，保留 unsafe-inline（Tailwind 运行时需要）
         const csp = isDev
-          ? "default-src 'self' 'unsafe-inline' 'unsafe-eval' http://localhost:* ws://localhost:*; connect-src 'self' http://localhost:* ws://localhost:* https://*.supabase.co wss://*.supabase.co https://entropydecrease.com wss://entropydecrease.com; img-src 'self' data: blob: https://*.supabase.co; font-src 'self' data:;"
-          : "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co; font-src 'self' data:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://entropydecrease.com wss://entropydecrease.com; frame-ancestors 'none';";
+          ? `default-src 'self' 'unsafe-inline' 'unsafe-eval' http://localhost:* ws://localhost:*; connect-src 'self' http://localhost:* ws://localhost:* https://*.supabase.co wss://*.supabase.co https://entropydecrease.com wss://entropydecrease.com${extraConnectSrc}; img-src 'self' data: blob: https://*.supabase.co; font-src 'self' data:;`
+          : `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co; font-src 'self' data:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://entropydecrease.com wss://entropydecrease.com${extraConnectSrc}; frame-ancestors 'none';`;
 
         callback({
           responseHeaders: {
@@ -118,6 +179,7 @@ if (!gotTheLock) {
 
     // 加载持久化的 AI 网关地址（在注册 handler 之前，确保 handler 可用正确的 URL）
     await loadPersistedGatewayUrl();
+    logger.info(`[AI] Gateway URL resolved: ${gatewayUrl()}`);
     registerAIHandlers();
     registerCaptureHandlers();
 
@@ -315,6 +377,12 @@ if (!gotTheLock) {
 
     safeHandle('update:set-auto-check', async (_event, enabled: boolean) => {
       setAutoCheckEnabled(enabled);
+      return { success: true };
+    });
+
+    // 退出前同步完成通知（渲染进程 → 主进程）
+    safeHandle('sync:quit-complete', async () => {
+      completeSyncBeforeQuit();
       return { success: true };
     });
 

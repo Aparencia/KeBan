@@ -22,6 +22,7 @@ export function useAIFlashcards() {
       return result;
     } catch (error: unknown) {
       setState(resolveAIErrorState(error, getLocalFallbackMessage('flashcard')));
+      throw error;
     }
   }, []);
 

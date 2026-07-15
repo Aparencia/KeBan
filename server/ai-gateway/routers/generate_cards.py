@@ -6,6 +6,7 @@ POST /api/v1/ai/generate-cards
 """
 
 import time
+import hashlib
 import logging
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, Request
@@ -13,6 +14,7 @@ from fastapi import APIRouter, Request
 from config import call_with_fallback_for_request
 from chains.card_gen_chain import CardGenChain
 from chains.optimize_card_chain import OptimizeCardChain
+from cache.redis_cache import get_cache
 from fastapi import HTTPException
 
 logger = logging.getLogger(__name__)
@@ -73,6 +75,27 @@ async def generate_cards(request: Request, body: CardGenRequest) -> CardGenRespo
     user_id = getattr(request.state, "user_id", "anonymous")
     logger.info("闪卡生成请求: user=%s, note_length=%d", user_id, len(body.note))
 
+    # 生成 AI 响应缓存键（基于输入笔记 + 选项）
+    options_str = str(body.options.model_dump())
+    cache_key = hashlib.sha256((body.note + options_str).encode()).hexdigest()
+
+    # 获取用户自带的 API Key（有 Key 时跳过缓存，确保使用用户自己的 Provider）
+    user_api_key = getattr(request.state, "user_api_key", None)
+
+    # 检查 Redis AI 响应缓存
+    cache = get_cache()
+    if cache._client is not None and not user_api_key:
+        cached = await cache.get_ai_cache(cache_key)
+        if cached:
+            logger.info("闪卡生成缓存命中: user=%s", user_id)
+            cached_cards = cached.get("cards", [])
+            return CardGenResponse(
+                cards=[FlashCard(**card) for card in cached_cards],
+                total_extracted=cached.get("total_extracted", len(cached_cards)),
+                model=cached.get("model", "unknown"),
+                tokens_used=cached.get("tokens_used", 0),
+            )
+
     # 通过 fallback 链自动选择 Provider 并在失败时重试/降级
     async def _run_chain(provider, model_name):
         chain = CardGenChain(provider=provider, model=model_name)
@@ -96,6 +119,10 @@ async def generate_cards(request: Request, body: CardGenRequest) -> CardGenRespo
     except RuntimeError as e:
         logger.error("闪卡生成服务全部不可用: %s", str(e))
         raise HTTPException(status_code=503, detail="所有 AI 服务暂时不可用，请稍后重试")
+
+    # 缓存成功结果（Redis 可用时）
+    if cache._client is not None:
+        await cache.set_ai_cache(cache_key, chain_result, expire=3600)
 
     cards = [FlashCard(**card) for card in cards_data]
 

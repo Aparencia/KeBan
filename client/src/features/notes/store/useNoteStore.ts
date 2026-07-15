@@ -5,6 +5,8 @@ import { createWithLog, updateWithLog, deleteWithLog } from '@/lib/storage/write
 import { dexieSearchIndexer } from '@/lib/search/dexieSearchIndexer';
 import type { SearchResultItem } from '@/lib/search/types';
 import type { Note, NoteFolder } from '@/types/models';
+import { createTodoTemplateContent, createEmptyTodoTemplate } from '../lib/todoTemplate';
+import type { TodoItem } from '../lib/todoTemplate';
 
 interface NoteState {
   // 数据
@@ -57,6 +59,8 @@ interface NoteState {
 
   // 模板
   createFromTemplate: (template: Note['template'], folderId?: string) => Promise<string>;
+  /** v0.11.0: 创建待办笔记（从灵感分拣桥接） */
+  createTodoNote: (todo: Omit<TodoItem, 'id'>, subject?: string) => Promise<string>;
 
   // 计算属性
   getFilteredNotes: () => Note[];
@@ -121,6 +125,8 @@ const TEMPLATE_CONTENT: Record<Note['template'], string> = {
       { type: 'paragraph', content: [{ type: 'text', text: '在此记录视频学习内容，可使用时间戳标记关联视频进度。' }] },
     ],
   }),
+  /** v0.11.0: 待办笔记模板占位内容（实际创建时由 createTodoNote 动态生成） */
+  todo: createEmptyTodoTemplate(),
 };
 
 const TEMPLATE_TITLES: Record<Note['template'], string> = {
@@ -131,6 +137,8 @@ const TEMPLATE_TITLES: Record<Note['template'], string> = {
   free: '自由笔记',
   blank: '空白笔记',
   video: '视频笔记',
+  /** v0.11.0 */
+  todo: '待办笔记',
 };
 
 export const useNoteStore = create<NoteState>((set, get) => {
@@ -333,6 +341,24 @@ export const useNoteStore = create<NoteState>((set, get) => {
       const content = TEMPLATE_CONTENT[template];
       const title = TEMPLATE_TITLES[template];
       return get().createNote({ title, content, template, folderId });
+    },
+
+    /**
+     * v0.11.0: 创建待办笔记（灵感分拣桥接入口）
+     * @ai-context 从 AISortPanel 转化按钮或手动新建待办时调用。
+     * 副作用：写入 IndexedDB + 搜索索引，触发 loadNotes 刷新列表。
+     */
+    createTodoNote: async (todo, subject?) => {
+      // 根据 subject 查找匹配的文件夹 ID（如果存在）
+      let folderId: string | undefined;
+      if (subject) {
+        const { folders } = get();
+        const matched = folders.find((f) => f.name === subject);
+        if (matched?.id) folderId = matched.id;
+      }
+      const content = createTodoTemplateContent(todo);
+      const title = todo.text.slice(0, 30) || '待办笔记';
+      return get().createNote({ title, content, template: 'todo', folderId });
     },
 
     getFilteredNotes: () => {

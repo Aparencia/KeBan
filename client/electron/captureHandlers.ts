@@ -1,7 +1,7 @@
 /**
- * 屏幕截图 & 系统音频 IPC Handler
+ * 屏幕截图 & 系统音频 & 视频录制 IPC Handler
  *
- * 从 main.ts 拆分而来，管理截图采集和音频捕获的生命周期。
+ * 从 main.ts 拆分而来，管理截图采集、音频捕获和视频录制的生命周期。
  */
 
 import { BrowserWindow, ipcMain, desktopCapturer } from 'electron';
@@ -9,6 +9,8 @@ import { ScreenCapture } from './screenCapture.js';
 import type { ScreenCaptureOptions, ScreenshotFrameData } from './screenCapture.js';
 import { AudioCapture, listAudioSources } from './audioCapture.js';
 import type { AudioCaptureOptions, AudioChunk } from './audioCapture.js';
+import { VideoRecorder } from './videoRecorder.js';
+import type { VideoRecordOptions } from './videoRecorder.js';
 import { safeHandle, getMainWindowId } from './ipcUtils.js';
 import { logger } from './logger.js';
 
@@ -21,6 +23,9 @@ let activeCapture: ScreenCapture | null = null;
 
 /** 当前活跃的音频捕获实例 */
 let activeAudioCapture: AudioCapture | null = null;
+
+/** @ai-context Path C 全程录制：当前活跃的视频录制实例 */
+let activeVideoRecorder: VideoRecorder | null = null;
 
 /** screen_capture_start 防抖：500ms 内多次调用只响应最后一次 */
 let startDebounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -70,7 +75,13 @@ export function registerCaptureHandlers(): void {
 
           const senderWin = BrowserWindow.fromWebContents(event.sender);
 
-          activeCapture = new ScreenCapture(options, (frame: ScreenshotFrameData) => {
+          // 对采集参数做边界校验，防止非法值导致主进程异常
+          const safeOptions = options || {};
+          if (typeof safeOptions.interval === 'number' && (safeOptions.interval < 100 || safeOptions.interval > 60000)) {
+            safeOptions.interval = 5000;
+          }
+
+          activeCapture = new ScreenCapture(safeOptions, (frame: ScreenshotFrameData) => {
             if (senderWin && !senderWin.isDestroyed()) {
               senderWin.webContents.send('screen_capture_frame', frame);
             }
@@ -109,11 +120,15 @@ export function registerCaptureHandlers(): void {
         thumbnailSize: { width: 240, height: 135 },
       });
 
-      return sources.map((src) => ({
-        id: src.id,
-        title: src.name,
-        thumbnail: src.thumbnail.toDataURL(),
-      }));
+      return sources.map((src) => {
+        // 压缩缩略图，避免窗口多时 UI 内存占用过大
+        const thumb = src.thumbnail.isEmpty() ? src.thumbnail : src.thumbnail.resize({ width: 120 });
+        return {
+          id: src.id,
+          title: src.name,
+          thumbnail: thumb.toDataURL(),
+        };
+      });
     } catch (err) {
       logger.error('[IPC] screen_list_windows failed:', err);
       return [];
@@ -196,6 +211,102 @@ export function registerCaptureHandlers(): void {
       }
     },
   );
+
+  // ---- Path C 视频录制 ----
+
+  safeHandle(
+    'video_record_start',
+    async (event, sourceId: string, options?: VideoRecordOptions) => {
+      // 幂等：先清理旧实例
+      if (activeVideoRecorder) {
+        activeVideoRecorder.dispose();
+        activeVideoRecorder = null;
+      }
+
+      const senderWin = BrowserWindow.fromWebContents(event.sender);
+      if (!senderWin || senderWin.isDestroyed()) {
+        return { success: false, error: 'No valid window' };
+      }
+
+      activeVideoRecorder = new VideoRecorder(options);
+      activeVideoRecorder.bindWindow(senderWin);
+
+      try {
+        activeVideoRecorder.startRecording(sourceId, options);
+        logger.info('[IPC] video_record_start 已启动');
+        return { success: true };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        logger.error('[IPC] video_record_start failed:', message);
+        activeVideoRecorder.dispose();
+        activeVideoRecorder = null;
+        return { success: false, error: message };
+      }
+    },
+  );
+
+  safeHandle('video_record_stop', async () => {
+    if (!activeVideoRecorder) {
+      return { success: false, error: 'No active recording' };
+    }
+    try {
+      const filePath = await activeVideoRecorder.stopRecording();
+      const finalStatus = activeVideoRecorder.status;
+      logger.info('[IPC] video_record_stop 已完成');
+      activeVideoRecorder.dispose();
+      activeVideoRecorder = null;
+      return { success: true, filePath, finalStatus };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error('[IPC] video_record_stop failed:', message);
+      activeVideoRecorder?.dispose();
+      activeVideoRecorder = null;
+      return { success: false, error: message };
+    }
+  });
+
+  safeHandle('video_record_pause', async () => {
+    activeVideoRecorder?.pauseRecording();
+    return { success: true };
+  });
+
+  safeHandle('video_record_resume', async () => {
+    activeVideoRecorder?.resumeRecording();
+    return { success: true };
+  });
+
+  safeHandle('video_record_status', async () => {
+    return activeVideoRecorder?.status ?? {
+      isRecording: false, isPaused: false, duration: 0, fileSizeBytes: 0, filePath: null,
+    };
+  });
+
+  // 渲染进程回传视频数据块
+  ipcMain.on('video_record_chunk', (_event, chunkBuffer: ArrayBuffer) => {
+    // SEC-005: sender 验证
+    const mainId = getMainWindowId();
+    if (mainId !== null && _event.sender.id !== mainId) {
+      logger.warn(
+        `[IPC] Sender verification failed for "video_record_chunk": ` +
+        `expected sender.id=${mainId}, got ${_event.sender.id}`
+      );
+      return;
+    }
+    activeVideoRecorder?.handleRendererChunk(chunkBuffer);
+  });
+
+  // 渲染进程上报录制错误
+  ipcMain.on('video_record_error', (_event, errorInfo: { message: string }) => {
+    const mainId = getMainWindowId();
+    if (mainId !== null && _event.sender.id !== mainId) {
+      logger.warn(
+        `[IPC] Sender verification failed for "video_record_error": ` +
+        `expected sender.id=${mainId}, got ${_event.sender.id}`
+      );
+      return;
+    }
+    activeVideoRecorder?.handleRendererError(errorInfo);
+  });
 }
 
 // ================================================================
@@ -218,5 +329,9 @@ export function disposeCaptureHandlers(): void {
   if (activeAudioCapture) {
     activeAudioCapture.dispose();
     activeAudioCapture = null;
+  }
+  if (activeVideoRecorder) {
+    activeVideoRecorder.dispose();
+    activeVideoRecorder = null;
   }
 }

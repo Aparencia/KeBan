@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
+import { cn } from '@/lib/utils';
 
 interface PageTransitionProps {
   children: React.ReactNode;
@@ -21,12 +22,12 @@ export function PageTransition({ children, className, variant = 'default' }: Pag
   const prefersReduced = useReducedMotion();
 
   if (prefersReduced || variant === 'none') {
-    return <div className={className}>{children}</div>;
+    return <div className={cn("h-full", className)}>{children}</div>;
   }
 
   return (
     <motion.div
-      className={className}
+      className={cn("h-full", className)}
       initial={{ opacity: 0, y: 12, scale: 0.97 }}
       animate={{
         opacity: 1,

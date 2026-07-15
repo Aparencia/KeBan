@@ -164,7 +164,11 @@ export default function NoteEditPage() {
     if (!note?.content || note?.template !== 'free') return null;
     try {
       const parsed = JSON.parse(note.content);
-      if (parsed && parsed.blocks) return parsed;
+      if (parsed && parsed.blocks) return {
+        blocks: parsed.blocks,
+        canvasWidth: parsed.canvasWidth ?? 3000,
+        canvasHeight: parsed.canvasHeight ?? 3000,
+      };
       return null;
     } catch { return null; }
   }, [note?.id, note?.content, note?.template]);
@@ -379,6 +383,14 @@ export default function NoteEditPage() {
     toast({ type: 'success', message: '摘要已导出' });
   }, [aiData, toast]);
 
+  // 自由画布变更回调（稳定引用，避免每次渲染重建）
+  const handleFreeCanvasChange = useCallback(
+    (data: FreeCanvasData) => {
+      if (noteId) debouncedSave(JSON.stringify(data));
+    },
+    [noteId, debouncedSave],
+  );
+
   // 加载笔记数据
   useEffect(() => {
     loadNotes();
@@ -421,7 +433,7 @@ export default function NoteEditPage() {
 
   if (!note) {
     return (
-      <div className="flex flex-col h-[calc(100vh-4rem)] items-center justify-center">
+      <div className="flex flex-col h-full items-center justify-center">
         <div className="flex flex-col items-center gap-kb-md text-center">
           <h3 className="text-h2 font-medium text-text-primary">笔记不存在</h3>
           <p className="text-b2 text-text-tertiary">该笔记可能已被删除</p>
@@ -437,10 +449,10 @@ export default function NoteEditPage() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-4rem)]">
-    <div className="flex flex-col flex-1 min-w-0">
+    <div className="flex h-full">
+    <div className="flex flex-col flex-1 min-w-0 overflow-hidden" data-free-canvas-wrapper>
       {/* 顶部栏 */}
-      <div className="flex items-center gap-kb-sm px-kb-md py-3 border-b border-border/50 flex-shrink-0">
+      <div className="relative z-10 flex items-center gap-kb-sm px-kb-md py-3 border-b border-border/50 flex-shrink-0 bg-bg-primary">
         <button
           onClick={() => navigate('/notes')}
           className="p-1.5 rounded-kb-full text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-kb-fast"
@@ -679,13 +691,10 @@ export default function NoteEditPage() {
 
       {/* 编辑区 */}
       {note?.template === 'free' ? (
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 min-h-0 overflow-hidden">
           <FreeCanvas
             content={freeCanvasData}
-            onChange={(data) => {
-              const json = JSON.stringify(data);
-              if (noteId) debouncedSave(json);
-            }}
+            onChange={handleFreeCanvasChange}
           />
         </div>
       ) : (
@@ -714,8 +723,15 @@ export default function NoteEditPage() {
             />
           ) : (
             <>
+              {/* v0.11.0: 待办笔记模板时在编辑器顶部显示进度统计 */}
+              {note?.template === 'todo' && (
+                <div className="mb-4 sticky top-0 z-10 bg-bg-primary/90 backdrop-blur-sm rounded-kb-md">
+                  <TodoStats editor={editor} />
+                </div>
+              )}
               <EditorContent editor={editor} />
-              <TodoStats editor={editor} />
+              {/* 非待办笔记模板时在底部显示统计 */}
+              {note?.template !== 'todo' && <TodoStats editor={editor} />}
             </>
           )}
         </div>

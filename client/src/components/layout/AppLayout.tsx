@@ -10,6 +10,7 @@ import { CustomTitlebar } from './CustomTitlebar';
 import SyncStatusBar from '../sync/SyncStatusBar';
 import { PageTransition } from './PageTransition';
 import { useSessionExpiry } from '@/hooks/useSessionExpiry';
+import { useSync } from '@/lib/sync/SyncContext';
 
 const DENSITY_KEY = 'keban-density';
 
@@ -27,6 +28,7 @@ function applyDensity() {
 export default function AppLayout() {
   const { pathname } = useLocation();
   const [showCloseDialog, setShowCloseDialog] = useState(false);
+  const { sync } = useSync();
 
   // 监听 session 过期事件
   useSessionExpiry();
@@ -44,6 +46,22 @@ export default function AppLayout() {
     });
     return cleanup;
   }, []);
+
+  // 监听退出前同步事件：主进程通知渲染进程执行一次同步
+  useEffect(() => {
+    if (!window.electronAPI?.onSyncBeforeQuit) return;
+    const cleanup = window.electronAPI.onSyncBeforeQuit(async () => {
+      try {
+        await sync();
+      } catch (err) {
+        console.error('[AppLayout] Sync before quit failed:', err);
+      } finally {
+        // 无论同步成功与否，都通知主进程可以继续退出
+        window.electronAPI?.notifySyncComplete();
+      }
+    });
+    return cleanup;
+  }, [sync]);
 
   // Hide navigation for immersive study sessions
   const isStudySession = Boolean(pathname.match(/^\/flashcards\/[^/]+\/study$/));
@@ -81,7 +99,7 @@ export default function AppLayout() {
           <SyncStatusBar />
 
           {/* Page content */}
-          <main className="flex-1 overflow-y-auto overflow-x-hidden pb-16 md:pb-0 relative">
+          <main className="flex-1 overflow-y-auto pb-16 md:pb-0 relative">
             <AnimatePresence mode="wait" initial={false}>
               <PageTransition key={pathname} variant={pathname === '/' ? 'none' : 'default'}>
                 <Outlet />

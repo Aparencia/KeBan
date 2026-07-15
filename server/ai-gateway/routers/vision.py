@@ -14,6 +14,9 @@ from fastapi import APIRouter, HTTPException, Request
 from config import call_with_fallback_for_request
 from chains.vision_extract_chain import VisionExtractChain
 
+# 单张图片 base64 上限：10 MB（约 7.5 MB 二进制）
+MAX_IMAGE_BASE64_CHARS = 10 * 1024 * 1024
+
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/vision", tags=["视觉提取"])
 
@@ -69,15 +72,31 @@ async def extract_vision(request: Request, body: VisionExtractRequest) -> Vision
         user_id, len(body.image_base64),
     )
 
-    # 校验 base64 数据非空
-    if not body.image_base64.strip():
+    # 去除可能存在的 data URI 前缀
+    image_base64 = body.image_base64.strip()
+    if image_base64.startswith("data:image"):
+        image_base64 = image_base64.split(",", 1)[-1]
+
+    # 校验 base64 数据非空且大小合理
+    if not image_base64:
         raise HTTPException(status_code=400, detail="image_base64 不能为空")
+    if len(image_base64) > MAX_IMAGE_BASE64_CHARS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"图片过大（{len(image_base64)} 字符），请压缩后重试"
+        )
+
+    request_id = getattr(request.state, "request_id", "unknown")
+    logger.info(
+        "视觉提取请求: user=%s, request_id=%s, image_size=%d chars",
+        user_id, request_id, len(image_base64),
+    )
 
     # 通过 fallback 链自动选择 Provider 并在失败时降级
     async def _run_chain(provider, model_name):
         chain = VisionExtractChain(provider=provider, model=model_name)
         return await chain.run(
-            image_base64=body.image_base64,
+            image_base64=image_base64,
             custom_prompt=body.prompt,
             language=body.language,
             mode=body.mode,

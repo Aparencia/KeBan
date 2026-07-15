@@ -256,4 +256,133 @@ describe('AIPluginLoader', () => {
       }
     });
   });
+
+  // ── withGuard: 离线检查 ────────────────────────────────────────────────────
+  describe('withGuard - offline check', () => {
+    afterEach(() => {
+      // 恢复在线状态
+      Object.defineProperty(navigator, 'onLine', { value: true, configurable: true });
+    });
+
+    it('should block summarizeNote when offline and throw AIError(offline)', async () => {
+      Object.defineProperty(navigator, 'onLine', { value: false, configurable: true });
+      mockIsElectron.mockReturnValue(false);
+
+      try {
+        await aiPluginLoader.summarizeNote('这是一段足够长的笔记内容用于测试离线状态');
+        expect.fail('Should have thrown');
+      } catch (e: any) {
+        expect(e).toBeInstanceOf(AIError);
+        expect(e.code).toBe('offline');
+        expect(e.retryable).toBe(false);
+      }
+      // 确保远程插件未被调用
+      expect(mockAiPost).not.toHaveBeenCalled();
+    });
+
+    it('should block evaluateExplanation when offline', async () => {
+      Object.defineProperty(navigator, 'onLine', { value: false, configurable: true });
+      mockIsElectron.mockReturnValue(false);
+
+      try {
+        await aiPluginLoader.evaluateExplanation('概念', '这是一段足够长的解释内容用于测试');
+        expect.fail('Should have thrown');
+      } catch (e: any) {
+        expect(e).toBeInstanceOf(AIError);
+        expect(e.code).toBe('offline');
+      }
+      expect(mockAiPost).not.toHaveBeenCalled();
+    });
+
+    it('should block generateFlashcards when offline', async () => {
+      Object.defineProperty(navigator, 'onLine', { value: false, configurable: true });
+      mockIsElectron.mockReturnValue(false);
+
+      try {
+        await aiPluginLoader.generateFlashcards('这是一段足够长的笔记内容用于离线测试');
+        expect.fail('Should have thrown');
+      } catch (e: any) {
+        expect(e).toBeInstanceOf(AIError);
+        expect(e.code).toBe('offline');
+      }
+      expect(mockAiPost).not.toHaveBeenCalled();
+    });
+
+    it('should block recommendDuration when offline (no local fallback)', async () => {
+      Object.defineProperty(navigator, 'onLine', { value: false, configurable: true });
+      mockIsElectron.mockReturnValue(false);
+
+      try {
+        await aiPluginLoader.recommendDuration({ sessions: [] });
+        expect.fail('Should have thrown');
+      } catch (e: any) {
+        expect(e).toBeInstanceOf(AIError);
+        expect(e.code).toBe('offline');
+      }
+      expect(mockAiPost).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── withGuard: 内容长度检查 ─────────────────────────────────────────────────
+  describe('withGuard - content length check', () => {
+    it('should block summarizeNote with too short content', async () => {
+      mockIsElectron.mockReturnValue(false);
+
+      try {
+        await aiPluginLoader.summarizeNote('太短');
+        expect.fail('Should have thrown');
+      } catch (e: any) {
+        expect(e).toBeInstanceOf(AIError);
+        expect(e.code).toBe('content_too_short');
+        expect(e.retryable).toBe(false);
+      }
+      expect(mockAiPost).not.toHaveBeenCalled();
+    });
+
+    it('should block evaluateExplanation with too short explanation', async () => {
+      mockIsElectron.mockReturnValue(false);
+
+      try {
+        await aiPluginLoader.evaluateExplanation('熵', '短');
+        expect.fail('Should have thrown');
+      } catch (e: any) {
+        expect(e).toBeInstanceOf(AIError);
+        expect(e.code).toBe('content_too_short');
+      }
+      expect(mockAiPost).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── 在线状态正常调用验证 ──────────────────────────────────────────────────────
+  describe('online state - normal calls', () => {
+    it('should call plugin normally when online (navigator.onLine = true)', async () => {
+      // jsdom 默认 navigator.onLine = true
+      mockIsElectron.mockReturnValue(false);
+      mockAiPost.mockResolvedValueOnce({
+        summary: '在线状态摘要结果',
+        model: 'glm-4-flash',
+        tokens_used: 100,
+        latency_ms: 500,
+      });
+
+      const result = await aiPluginLoader.summarizeNote('这是一段足够长的笔记内容用于在线状态测试');
+      expect(result.summary).toBe('在线状态摘要结果');
+      expect(mockAiPost).toHaveBeenCalledTimes(1);
+    });
+
+    it('should allow content with exactly 10 characters (boundary)', async () => {
+      mockIsElectron.mockReturnValue(false);
+      mockAiPost.mockResolvedValueOnce({
+        summary: '边界摘要',
+        model: 'glm-4-flash',
+        tokens_used: 50,
+        latency_ms: 300,
+      });
+
+      // 10 个字符刚好通过检查
+      const result = await aiPluginLoader.summarizeNote('这是一段十个字的内容啊');
+      expect(result.summary).toBe('边界摘要');
+      expect(mockAiPost).toHaveBeenCalledTimes(1);
+    });
+  });
 });

@@ -142,12 +142,18 @@ class VisionExtractChain:
         mode: str = "auto",
     ) -> str:
         """构建提取 prompt，支持自定义覆盖和模式选择"""
-        if custom_prompt:
-            return custom_prompt
         # 校验 mode，无效值回退到 auto
         if mode not in VALID_MODES:
             logger.warning("未知的视觉提取模式 '%s'，回退到 auto", mode)
             mode = "auto"
+
+        if custom_prompt:
+            # 即使使用自定义 prompt，也保留语言/模式提示，避免完全忽略传入参数
+            prompt = custom_prompt
+            if language:
+                prompt = f"请使用 {language} 语言回答。\n{prompt}"
+            return prompt
+
         return VISION_MODE_PROMPTS[mode]
 
     def _parse_response(self, content: str) -> dict[str, Any]:

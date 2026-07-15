@@ -25,6 +25,7 @@ import type {
 } from './types';
 import { AIError } from './types';
 import { classifyRawError } from './errorClassifier';
+import { getActiveUserKey } from './apiKeyManager';
 
 /**
  * Electron AI 插件 — 通过 Electron IPC 通道调用 ai-gateway
@@ -53,15 +54,14 @@ export class ElectronAIPlugin implements AIPlugin {
 
   // ── invoke('ai_summarize') ──────────────────────────────────
   async summarizeNote(noteContent: string, options?: SummarizeOptions): Promise<SummarizeResult> {
-    this.checkOnline();
     try {
-      const ipcStart = performance.now();
       const result = await window.electronAPI!.invoke('ai_summarize', {
         text: noteContent,
-        maxLength: options?.maxLength ?? null,
-        style: options?.style ?? null,
-        language: options?.language ?? null,
+        maxLength: options?.maxLength,
+        style: options?.style,
+        language: options?.language,
         authToken: this.authToken,
+        userApiKey: getActiveUserKey(),
       }) as {
         summary: string;
         model: string;
@@ -69,8 +69,6 @@ export class ElectronAIPlugin implements AIPlugin {
         latencyMs: number;
         requestId?: string;
       };
-      const ipcElapsed = Math.round(performance.now() - ipcStart);
-
       return {
         summary: result.summary,
         keyPoints: [],
@@ -86,15 +84,14 @@ export class ElectronAIPlugin implements AIPlugin {
 
   // ── invoke('ai_generate_cards') ─────────────────────────────
   async generateFlashcards(noteContent: string, options?: FlashcardOptions): Promise<FlashcardResult> {
-    this.checkOnline();
     try {
-      const ipcStart = performance.now();
       const result = await window.electronAPI!.invoke('ai_generate_cards', {
         note: noteContent,
-        maxCards: options?.count ?? null,
-        difficulty: options?.difficulty ?? null,
-        cardType: options?.cardType ?? null,
+        maxCards: options?.count,
+        difficulty: options?.difficulty,
+        cardType: options?.cardType,
         authToken: this.authToken,
+        userApiKey: getActiveUserKey(),
       }) as {
         cards: Array<{ front: string; back: string; type: string; confidence: number }>;
         totalExtracted: number;
@@ -102,8 +99,6 @@ export class ElectronAIPlugin implements AIPlugin {
         tokensUsed: number;
         requestId?: string;
       };
-      const ipcElapsed = Math.round(performance.now() - ipcStart);
-
       return {
         cards: result.cards.map(c => ({
           front: c.front,
@@ -127,13 +122,12 @@ export class ElectronAIPlugin implements AIPlugin {
     explanation: string,
     _options?: EvaluateOptions,
   ): Promise<EvaluateResult> {
-    this.checkOnline();
     try {
-      const ipcStart = performance.now();
       const result = await window.electronAPI!.invoke('ai_evaluate', {
         concept,
         explanation,
         authToken: this.authToken,
+        userApiKey: getActiveUserKey(),
       }) as {
         overallScore: number;
         dimensions: Array<{ name: string; score: number; feedback: string }>;
@@ -145,8 +139,6 @@ export class ElectronAIPlugin implements AIPlugin {
         latencyMs: number;
         requestId?: string;
       };
-      const ipcElapsed = Math.round(performance.now() - ipcStart);
-
       return {
         overallScore: result.overallScore > 10 ? result.overallScore / 10 : result.overallScore,
         dimensions: result.dimensions.map(d => ({
@@ -173,7 +165,6 @@ export class ElectronAIPlugin implements AIPlugin {
     historyData: DurationHistoryData,
     _options?: DurationOptions,
   ): Promise<DurationResult> {
-    this.checkOnline();
     try {
       // 将前端 session 数据映射为 FocusSessionInput（camelCase）
       const history = (historyData.sessions || []).map(s => ({
@@ -183,10 +174,10 @@ export class ElectronAIPlugin implements AIPlugin {
         timestamp: s.date,
       }));
 
-      const ipcStart = performance.now();
       const result = await window.electronAPI!.invoke('ai_recommend_duration', {
         history,
         authToken: this.authToken,
+        userApiKey: getActiveUserKey(),
       }) as {
         recommendedMinutes: number;
         breakMinutes: number;
@@ -198,8 +189,6 @@ export class ElectronAIPlugin implements AIPlugin {
         latencyMs: number;
         requestId?: string;
       };
-      const ipcElapsed = Math.round(performance.now() - ipcStart);
-
       return {
         recommendedDuration: result.recommendedMinutes,
         breakMinutes: result.breakMinutes,
@@ -218,13 +207,12 @@ export class ElectronAIPlugin implements AIPlugin {
 
   // ── invoke('ai_optimize_card') ──────────────────────────────
   async optimizeCard(front: string, back: string): Promise<OptimizeCardResult> {
-    this.checkOnline();
     try {
-      const ipcStart = performance.now();
       const result = await window.electronAPI!.invoke('ai_optimize_card', {
         front,
         back,
         authToken: this.authToken,
+        userApiKey: getActiveUserKey(),
       }) as {
         suggestedFront: string;
         suggestedBack: string;
@@ -234,8 +222,6 @@ export class ElectronAIPlugin implements AIPlugin {
         latencyMs: number;
         requestId?: string;
       };
-      const ipcElapsed = Math.round(performance.now() - ipcStart);
-
       return {
         suggestedFront: result.suggestedFront,
         suggestedBack: result.suggestedBack,
@@ -251,13 +237,12 @@ export class ElectronAIPlugin implements AIPlugin {
 
   // ── invoke('ai_feynman_question') ──────────────────────────
   async generateFeynmanQuestions(concept: string, explanation: string): Promise<FeynmanQuestionResult> {
-    this.checkOnline();
     try {
-      const ipcStart = performance.now();
       const result = await window.electronAPI!.invoke('ai_feynman_question', {
         concept,
         explanation,
         authToken: this.authToken,
+        userApiKey: getActiveUserKey(),
       }) as {
         questions: Array<{ question: string; focus: string }>;
         model: string;
@@ -265,8 +250,6 @@ export class ElectronAIPlugin implements AIPlugin {
         latencyMs: number;
         requestId?: string;
       };
-      const ipcElapsed = Math.round(performance.now() - ipcStart);
-
       return {
         questions: result.questions.map(q => ({
           question: q.question,
@@ -287,14 +270,13 @@ export class ElectronAIPlugin implements AIPlugin {
     questions: string[],
     answers: string[],
   ): Promise<FeynmanAnswerEvalResult> {
-    this.checkOnline();
     try {
-      const ipcStart = performance.now();
       const result = await window.electronAPI!.invoke('ai_feynman_evaluate_answers', {
         concept,
         questions,
         answers,
         authToken: this.authToken,
+        userApiKey: getActiveUserKey(),
       }) as {
         understandingScore: number;
         feedback: string;
@@ -305,8 +287,6 @@ export class ElectronAIPlugin implements AIPlugin {
         latencyMs: number;
         requestId?: string;
       };
-      const ipcElapsed = Math.round(performance.now() - ipcStart);
-
       return {
         understandingScore: result.understandingScore,
         feedback: result.feedback,
@@ -323,12 +303,11 @@ export class ElectronAIPlugin implements AIPlugin {
 
   // ── invoke('ai_tag_content') ─────────────────────────────────
   async tagContent(content: string): Promise<TagContentResult> {
-    this.checkOnline();
     try {
-      const ipcStart = performance.now();
       const result = await window.electronAPI!.invoke('ai_tag_content', {
         content,
         authToken: this.authToken,
+        userApiKey: getActiveUserKey(),
       }) as {
         contentNature: string;
         cognitiveDepth: string;
@@ -354,13 +333,12 @@ export class ElectronAIPlugin implements AIPlugin {
 
   // ── invoke('ai_sort_inspiration') ─────────────────────────────
   async sortInspiration(content: string, existingTags?: Record<string, string>): Promise<SortResult> {
-    this.checkOnline();
     try {
-      const ipcStart = performance.now();
       const result = await window.electronAPI!.invoke('ai_sort_inspiration', {
         content,
         existingTags,
         authToken: this.authToken,
+        userApiKey: getActiveUserKey(),
       }) as {
         suggestions: Array<{ category: string; reason: string; confidence: number; suggestedAction?: string }>;
         model: string;
@@ -387,12 +365,12 @@ export class ElectronAIPlugin implements AIPlugin {
 
   // ── invoke('ai_anchor_point') ─────────────────────────────────
   async generateAnchorPoint(noteId: string, content: string): Promise<{ anchorPoints: AnchorPoint[] }> {
-    this.checkOnline();
     try {
       const result = await window.electronAPI!.invoke('ai_anchor_point', {
         content,
         title: '',
         authToken: this.authToken,
+        userApiKey: getActiveUserKey(),
       }) as {
         anchorPoints: Array<{ concept: string; association: string; memoryTechnique: string; importance: number }>;
         status: string; model: string; tokensUsed: number; latencyMs: number;
@@ -413,12 +391,12 @@ export class ElectronAIPlugin implements AIPlugin {
 
   // ── invoke('ai_socratic') brainstorm ──────────────────────────
   async socraticBrainstorm(topic: string, context?: string): Promise<{ ideas: BrainstormIdea[] }> {
-    this.checkOnline();
     try {
       const result = await window.electronAPI!.invoke('ai_socratic', {
         topic,
         history: context ? [{ role: 'learner', content: context }] : null,
         authToken: this.authToken,
+        userApiKey: getActiveUserKey(),
       }) as {
         question: string; hint: string; thinkingDirection: string;
         depthLevel: number; turnCount: number;
@@ -447,7 +425,6 @@ export class ElectronAIPlugin implements AIPlugin {
     topic: string,
     history: ChatMessage[],
   ): Promise<{ question: string; hints: string[] }> {
-    this.checkOnline();
     try {
       const backendHistory = history.map(h => ({
         role: h.role === 'assistant' ? 'tutor' : 'learner',
@@ -458,6 +435,7 @@ export class ElectronAIPlugin implements AIPlugin {
         topic,
         history: backendHistory.length > 0 ? backendHistory : null,
         authToken: this.authToken,
+        userApiKey: getActiveUserKey(),
       }) as {
         question: string; hint: string; thinkingDirection: string;
         depthLevel: number; turnCount: number;
@@ -480,7 +458,6 @@ export class ElectronAIPlugin implements AIPlugin {
     answer: string,
     history: ChatMessage[],
   ): Promise<SocraticEvaluateResult> {
-    this.checkOnline();
     try {
       const backendHistory = history.map(h => ({
         role: h.role === 'assistant' ? 'tutor' : 'learner',
@@ -493,6 +470,7 @@ export class ElectronAIPlugin implements AIPlugin {
         answer,
         history: backendHistory,
         authToken: this.authToken,
+        userApiKey: getActiveUserKey(),
       }) as {
         dimensions: { accuracy: number; completeness: number; logic: number; expression: number };
         feedback: string;
@@ -522,7 +500,6 @@ export class ElectronAIPlugin implements AIPlugin {
     dialogueSummary: string,
     history: ChatMessage[],
   ): Promise<SocraticDeepeningResult> {
-    this.checkOnline();
     try {
       const backendHistory = history.map(h => ({
         role: h.role === 'assistant' ? 'tutor' : 'learner',
@@ -534,6 +511,7 @@ export class ElectronAIPlugin implements AIPlugin {
         dialogueSummary,
         history: backendHistory,
         authToken: this.authToken,
+        userApiKey: getActiveUserKey(),
       }) as {
         angles: Array<{ key: string; label: string; question: string }>;
         status: string;
@@ -556,11 +534,11 @@ export class ElectronAIPlugin implements AIPlugin {
 
   // ── invoke('ai_predict') ──────────────────────────────────────
   async predictQuestion(noteId: string, content: string): Promise<{ predictions: PredictionPrompt[] }> {
-    this.checkOnline();
     try {
       const result = await window.electronAPI!.invoke('ai_predict', {
         content,
         authToken: this.authToken,
+        userApiKey: getActiveUserKey(),
       }) as {
         predictions: Array<{ question: string; type: string; reason: string; curiosityScore: number }>;
         status: string; model: string; tokensUsed: number; latencyMs: number;
@@ -581,13 +559,13 @@ export class ElectronAIPlugin implements AIPlugin {
 
   // ── invoke('ai_rescue') ───────────────────────────────────────
   async rescue(context: RescueContext): Promise<{ hints: string[]; resources: ResourceLink[]; alternativeApproach?: string }> {
-    this.checkOnline();
     try {
       const result = await window.electronAPI!.invoke('ai_rescue', {
         content: context.relatedContent || context.topic,
         stuckDescription: context.stuckPoint || context.topic,
         attemptedMethods: context.attempts?.join('; ') || '',
         authToken: this.authToken,
+        userApiKey: getActiveUserKey(),
       }) as {
         rescueLevels: Array<{ level: number; label: string; suggestion: string; hintQuestion: string }>;
         encouragement: string;

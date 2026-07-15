@@ -31,6 +31,7 @@ interface FlashcardState {
   loadDecks: () => Promise<void>;
   createDeck: (name: string, description?: string, color?: string) => Promise<string>;
   updateDeck: (id: string, changes: Partial<FlashcardDeck>) => Promise<void>;
+  renameDeck: (id: string, newName: string) => Promise<void>;
   deleteDeck: (id: string) => Promise<void>;
   selectDeck: (id: string | null) => void;
 
@@ -98,6 +99,16 @@ export const useFlashcardStore = create<FlashcardState>((set, get) => {
       set((state) => ({
         decks: state.decks.map((d) =>
           d.id === id ? { ...d, ...changes, updatedAt } : d,
+        ),
+      }));
+    },
+
+    renameDeck: async (id, newName) => {
+      const updatedAt = new Date();
+      await updateWithLog(flashcardDeckStore, 'flashcardDecks', id, { name: newName, updatedAt });
+      set((state) => ({
+        decks: state.decks.map((d) =>
+          d.id === id ? { ...d, name: newName, updatedAt } : d,
         ),
       }));
     },

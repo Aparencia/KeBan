@@ -42,6 +42,11 @@ body {
   color: var(--kb-text-primary);
 }
 
+/* 自由笔记无限空间内的 TipTap 编辑器：移除全局 min-height 约束，防止溢出 */
+[data-free-text] .tiptap {
+  min-height: auto;
+}
+
 .tiptap p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);
   float: left;
@@ -239,11 +244,10 @@ body {
   --kb-font-scale: 1.05;
 }
 
-/* 减少动效支持 */
+/* 减少动效支持 — 暂停所有动画而非移除，保留视觉状态 */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
+    animation-play-state: paused !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
@@ -401,6 +405,9 @@ body {
   animation: kb-shimmer-sweep 3s ease-in-out infinite;
   pointer-events: none;
 }
+@media (prefers-reduced-motion: reduce) {
+  .kb-shimmer::after { animation-play-state: paused; }
+}
 
 /* ── 渐变边框发光 ── */
 .kb-glow-border {
@@ -417,6 +424,9 @@ body {
   z-index: -1;
   opacity: 0;
   transition: opacity 300ms ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .kb-glow-border::before { animation-play-state: paused; }
 }
 .kb-glow-border:hover::before {
   opacity: 0.6;
@@ -463,6 +473,9 @@ body {
   animation: kb-ambient-glow 5s ease-in-out infinite;
   pointer-events: none;
 }
+@media (prefers-reduced-motion: reduce) {
+  .kb-ambient-glow { animation-play-state: paused; }
+}
 
 /* ── 问候区氛围光晕（呼吸） ── */
 @keyframes kb-glow-breathe {
@@ -473,6 +486,9 @@ body {
   background: radial-gradient(ellipse at 30% 50%, rgba(251,146,60,0.08) 0%, transparent 70%);
   animation: kb-glow-breathe 4s ease-in-out infinite;
   pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .kb-greeting-glow { animation-play-state: paused; }
 }
 [data-theme="dark"] .kb-greeting-glow {
   background: radial-gradient(ellipse at 30% 50%, rgba(99,102,241,0.1) 0%, transparent 70%);
@@ -491,6 +507,9 @@ body {
   background: linear-gradient(90deg, transparent, rgba(59,130,246,0.06), transparent);
   animation: kb-shimmer-flow 4s ease-in-out infinite;
   pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .kb-greeting-shimmer::after { animation-play-state: paused; }
 }
 [data-theme="dark"] .kb-greeting-shimmer::after {
   background: linear-gradient(90deg, transparent, rgba(129,140,248,0.08), transparent);
@@ -549,6 +568,9 @@ body {
   width: 30%; height: 100%;
   background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
   animation: kb-progress-shine 2s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .kb-progress-shine::after { animation-play-state: paused; }
 }
 
 /* ── 弹性翻页容器隐藏滚动条 ── */
@@ -633,3 +655,197 @@ body::before {
   border-bottom-right-radius: 12% 8%;
   border-bottom-left-radius: 12% 8%;
 }
+
+/* ── 灵感星座呼吸动画 ── */
+@keyframes kb-constellation-breathe {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50% { opacity: 0.8; transform: scale(1.3); }
+}
+
+/* ── 深海焦散光斑漂移 ── */
+@keyframes kb-caustic-drift {
+  0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.03; }
+  33%      { transform: translate(30px, -20px) scale(1.1); opacity: 0.06; }
+  66%      { transform: translate(-20px, 15px) scale(0.95); opacity: 0.04; }
+}
+.kb-caustic-light {
+  position: absolute;
+  width: 300px;
+  height: 300px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(34, 211, 238, 0.08) 0%, transparent 70%);
+  animation: kb-caustic-drift 20s ease-in-out infinite;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .kb-caustic-light { animation-play-state: paused; }
+}
+
+/* ── 水母脉动 ── */
+@keyframes kb-jelly-pulse {
+  0%, 100% { transform: scaleX(1) scaleY(1); opacity: 0.6; }
+  30% { transform: scaleX(1.08) scaleY(0.92); opacity: 0.8; }
+  60% { transform: scaleX(0.95) scaleY(1.05); opacity: 0.5; }
+}
+
+/* ── 漂移光带 ── */
+@keyframes kb-drift-ray {
+  0%, 100% { transform: translateX(-100px); opacity: 0.02; }
+  50% { transform: translateX(100px); opacity: 0.05; }
+}
+
+/* ── 底部雾气呼吸 ── */
+@keyframes kb-fog-breathe {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kb-jelly-orb,
+  .kb-drift-ray,
+  .kb-depth-fog,
+  .kb-depth-particle {
+    animation-play-state: paused !important;
+  }
+}
+
+/* ═══════════════════════════════════════════
+   萤火海沟 · 脉冲波纹动画
+   ═══════════════════════════════════════════ */
+
+/* ── 脉冲波纹扩展 ── */
+@keyframes kb-pulse-expand {
+  0% { transform: translate(-50%, -50%) scale(0); opacity: 0.7; }
+  100% { transform: translate(-50%, -50%) scale(4); opacity: 0; }
+}
+
+/* ── 脉冲波纹收缩 ── */
+@keyframes kb-pulse-converge {
+  0% { transform: translate(-50%, -50%) scale(4); opacity: 0; }
+  100% { transform: translate(-50%, -50%) scale(0); opacity: 0.5; }
+}
+
+/* ── 中心呼吸 ── */
+@keyframes kb-pulse-center-breathe {
+  0%, 100% { opacity: 0.6; transform: translate(-50%, -50%) scale(1); }
+  50% { opacity: 1; transform: translate(-50%, -50%) scale(1.2); }
+}
+
+/* ── 闪光爆发 ── */
+@keyframes kb-pulse-flash {
+  0% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(3); }
+}
+
+.kb-pulse-ring {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.kb-pulse-ring--expand {
+  animation: kb-pulse-expand var(--pulse-duration, 1200ms) cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.kb-pulse-ring--converge {
+  animation: kb-pulse-converge var(--pulse-duration, 600ms) cubic-bezier(0.7, 0, 0.84, 0) forwards;
+}
+
+.kb-pulse-center {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: kb-pulse-center-breathe 1.5s ease-in-out infinite;
+}
+
+.kb-pulse-flash {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: kb-pulse-flash 300ms ease-out forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kb-pulse-ring,
+  .kb-pulse-center,
+  .kb-pulse-flash {
+    animation: none !important;
+    opacity: 0.5;
+  }
+}
+
+/** 沉浸式全屏深海多层渐变背景 */
+.kb-immersive-bg {
+  transition: opacity var(--kb-duration-slow, 400ms) ease;
+  background:
+    /* 中心微光：赛博青径向，模拟深海透光区 */
+    radial-gradient(ellipse at 50% 35%, rgba(6, 182, 212, 0.07) 0%, transparent 55%),
+    /* 底部暖光：品牌紫径向，模拟海底热泉微弱光 */
+    radial-gradient(ellipse at 30% 85%, rgba(139, 92, 246, 0.05) 0%, transparent 45%),
+    /* 深度渐变：从深海蓝到墨黑的垂直过渡 */
+    linear-gradient(180deg, #080d18 0%, #0a1020 30%, #0d1525 60%, #080c15 100%);
+  animation: kb-bg-breathe 25s ease-in-out infinite;
+}
+@keyframes kb-bg-breathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.92; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kb-immersive-bg {
+    transition: none;
+    animation: none;
+  }
+}
+
+/* ═══════════════════════════════════════════
+   萤火海沟 · 萤火球群动效
+   ═══════════════════════════════════════════ */
+
+/* 球体呼吸缩放 @ai-context 收缩态球体微幅缩放，模拟深海生物呼吸节律 */
+@keyframes kb-orb-breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+/* 球体发光脉冲 @ai-context 球体 box-shadow 周期性明暗变化，增强存在感 */
+@keyframes kb-orb-glow-pulse {
+  0%, 100% { box-shadow: 0 0 12px var(--orb-color); }
+  50% { box-shadow: 0 0 20px var(--orb-color); }
+}
+
+/* 沉淀提醒条微漂移 @ai-context SortPendingBanner 图标的垂直悬浮感 */
+@keyframes kb-pending-drift {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kb-orb-breathe,
+  .kb-orb-glow-pulse,
+  .kb-pending-drift {
+    animation-play-state: paused !important;
+  }
+}
+
+/* ── 灵感浮现 · 深海萤火偶尔浮出水面 ── */
+/* @ai-context 使用 transition 而非 keyframe，使放大→恢复平滑无跳变 */
+.kb-constellation-surface {
+  transform: scale(2.5) !important;
+  opacity: 1 !important;
+  box-shadow: 0 0 24px currentColor !important;
+  transition: transform 2s ease-in-out, opacity 2s ease-in-out, box-shadow 2s ease-in-out !important;
+  z-index: 10;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kb-constellation-surface {
+    transform: none !important;
+    transition: none !important;
+  }
+}
+
+/* FreeCanvas 画布滚动条增强 */
+[data-free-canvas]::-webkit-scrollbar { width: 6px; height: 6px; }
+[data-free-canvas]::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.25); border-radius: 6px; }
+[data-free-canvas]::-webkit-scrollbar-track { background: transparent; }
+[data-theme="dark"] [data-free-canvas]::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); }

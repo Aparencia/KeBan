@@ -43,14 +43,22 @@ const AUTO_CHECK_INTERVAL = 30_000;
 // ── 模块级缓存（跨组件共享） ──
 let cachedResult: HealthResult | null = null;
 let cachedTimestamp = 0;
-const CACHE_TTL_ONLINE = 30_000;      // 在线时 30 秒内视为有效
-const CACHE_TTL_DEGRADED = 15_000;    // 降级时 15 秒内视为有效
-const CACHE_TTL_OFFLINE = 5 * 60_000; // 离线时 5 分钟内视为有效，避免反复 fetch 产生控制台噪音
+const CACHE_TTL_ONLINE = 2 * 60_000;    // 在线时 2 分钟内视为有效
+const CACHE_TTL_DEGRADED = 60_000;      // 降级时 1 分钟内视为有效
+const CACHE_TTL_OFFLINE = 5 * 60_000;   // 离线时 5 分钟内视为有效，避免反复 fetch 产生控制台噪音
 
 function getCacheTTL(): number {
   if (cachedResult?.status === 'online') return CACHE_TTL_ONLINE;
   if (cachedResult?.status === 'degraded') return CACHE_TTL_DEGRADED;
   return CACHE_TTL_OFFLINE;
+}
+
+/** 获取当前缓存的网关健康状态（同步，无副作用） */
+export function getCachedGatewayStatus(): GatewayHealthStatus | null {
+  if (cachedResult && Date.now() - cachedTimestamp < getCacheTTL()) {
+    return cachedResult.status;
+  }
+  return null;
 }
 
 /** 供外部调用的预检测函数（不依赖 React 生命周期） */

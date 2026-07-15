@@ -53,6 +53,9 @@ class DummyProvider(AIProvider):
             "latency_ms": 1,
         }
 
+    async def transcribe(self, audio_base64, language="zh", sample_rate=16000, channels=1, model=""):
+        return {"text": "", "segments": [], "language": language, "confidence": 1.0, "model": model, "latency_ms": 0}
+
 
 # ────────────────────────────────────────────────────────────
 # with_retry_and_timeout 装饰器
@@ -237,29 +240,30 @@ class TestCallWithFallback:
         async def mock_fn(provider, model_name):
             return {"content": "主响应", "model": model_name, "tokens_used": 10, "latency_ms": 5}
 
-        app = self._make_app({"qwen": primary, "glm": AsyncMock(), "fallback": FallbackProvider()})
+        # 当前 summarize 的 fallback chain 以 glm 为主 Provider
+        app = self._make_app({"qwen": AsyncMock(), "glm": primary, "fallback": FallbackProvider()})
         result, provider_key = await call_with_fallback(app, "summarize", mock_fn)
         assert result["content"] == "主响应"
-        assert provider_key == "qwen"
+        assert provider_key == "glm"
 
     @pytest.mark.asyncio
     async def test_fallback_on_primary_failure(self):
         """主 Provider 失败时自动回退到下一个"""
-        class FailingQwen:
-            provider_name = "qwen"
-            async def generate(self, *a, **kw): raise RuntimeError("qwen 故障")
-
-        class WorkingGLM:
+        class FailingGLM:
             provider_name = "glm"
+            async def generate(self, *a, **kw): raise RuntimeError("glm 故障")
+
+        class WorkingQwen:
+            provider_name = "qwen"
 
         async def mock_fn(provider, model_name):
-            if getattr(provider, "provider_name", None) == "qwen":
-                raise RuntimeError("qwen 故障")
-            return {"content": "GLM 备选响应", "model": model_name, "tokens_used": 5, "latency_ms": 2}
+            if getattr(provider, "provider_name", None) == "glm":
+                raise RuntimeError("glm 故障")
+            return {"content": "Qwen 备选响应", "model": model_name, "tokens_used": 5, "latency_ms": 2}
 
-        app = self._make_app({"qwen": FailingQwen(), "glm": WorkingGLM(), "fallback": FallbackProvider()})
+        app = self._make_app({"qwen": WorkingQwen(), "glm": FailingGLM(), "fallback": FallbackProvider()})
         result, provider_key = await call_with_fallback(app, "summarize", mock_fn)
-        assert provider_key == "glm"
+        assert provider_key == "qwen"
 
     @pytest.mark.asyncio
     async def test_all_providers_fail_raises_runtime_error(self):

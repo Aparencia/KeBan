@@ -56,6 +56,8 @@ export const useInspirationStore = create<InspirationState>((set, get) => ({
       tagsManuallyEdited: false,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
+      /** @ai-context 新建灵感默认 pending，等待 AI 分拣 */
+      sortStatus: 'pending',
     };
     // Optimistic update: add to state immediately
     set((s) => ({ items: [item, ...s.items] }));

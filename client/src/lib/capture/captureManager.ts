@@ -10,14 +10,19 @@ import { RouteDispatcher } from '@/lib/ai/routeDispatcher';
 import type { RouteDispatcherConfig, RouteDecision } from '@/lib/ai/routeDispatcher';
 import { VisionWorker } from '@/lib/ai/visionWorker';
 import { ASRWorker } from '@/lib/ai/asrWorker';
+import { SmartSampler } from './smartSampler';
+import { VADMarker } from './vadMarker';
 import { captureEventBus } from './eventBus';
 import { captureStore } from '@/lib/storage/captureStore';
 import type {
+  CapturePath,
   CaptureSessionConfig,
   ExtractionResult,
   PipelineMessage,
   ScreenshotData,
   AudioChunkData,
+  SessionBundle,
+  VideoRecording,
 } from './captureTypes';
 
 // ================================================================
@@ -37,6 +42,15 @@ export class CaptureManager {
   private lastDecision: RouteDecision | null = null;
   private fusionIntervalId: ReturnType<typeof setInterval> | null = null;
   private isPaused = false;
+
+  /** @ai-context Path B 智能模式状态隔离：smart 模式下不走 pipeline */
+  private capturePath: CapturePath = 'fine';
+  private smartSampler: SmartSampler | null = null;
+  private vadMarker: VADMarker | null = null;
+  private smartStartTime = 0;
+
+  /** @ai-context Path C 全程录制：记录录制开始时间用于计算 duration */
+  private fullRecordStartTime = 0;
 
   // ---- 帧超时保底重启 ----
   private frameWatchdogTimer: ReturnType<typeof setTimeout> | null = null;
@@ -92,6 +106,68 @@ export class CaptureManager {
     if (this.sessionId) {
       await this.stopSession();
     }
+
+    this.capturePath = config.path ?? 'fine';
+
+    // ================================================================
+    // Path B 智能模式：跳过 Pipeline/Worker，用轻量采样器替代
+    // ================================================================
+    if (this.capturePath === 'smart') {
+      const session = await captureStore.createSession({
+        targetWindow: config.windowTitle,
+        mode: 'vision',
+        status: 'active',
+        segments: [],
+      });
+
+      this.sessionId = session.id;
+      this.sessionConfig = config;
+      this.frameCount = 0;
+      this.extractedCount = 0;
+      this.smartStartTime = Date.now();
+
+      this.smartSampler = new SmartSampler();
+      this.vadMarker = new VADMarker();
+
+      captureEventBus.emit('session:started', {
+        sessionId: this.sessionId,
+        config,
+        path: 'smart',
+      });
+
+      return this.sessionId;
+    }
+
+    // ================================================================
+    // Path C 全程录制：跳过 Pipeline/Worker/SmartSampler/VADMarker
+    // 录制本身由 Electron 主进程的 VideoRecorder 管理，此处仅协调状态
+    // ================================================================
+    if (this.capturePath === 'full_record') {
+      const session = await captureStore.createSession({
+        targetWindow: config.windowTitle,
+        mode: 'vision',
+        status: 'active',
+        segments: [],
+      });
+
+      this.sessionId = session.id;
+      this.sessionConfig = config;
+      this.frameCount = 0;
+      this.extractedCount = 0;
+      this.fullRecordStartTime = Date.now();
+
+      captureEventBus.emit('session:started', {
+        sessionId: this.sessionId,
+        config,
+        path: 'full_record',
+      });
+
+      return this.sessionId;
+    }
+
+    // ================================================================
+    // Path A（fine）原有逐帧流水线模式
+    // ================================================================
 
     // 通过 RouteDispatcher 做出路由决策
     this.lastDecision = this.dispatcher.decide({
@@ -153,6 +229,81 @@ export class CaptureManager {
     // 最先停止帧超时保底计时器，防止在后续 await 期间触发重启
     this.stopFrameWatchdog();
 
+    // ================================================================
+    // Path C 全程录制：构建 VideoRecording 并广播 record:video_ready
+    // ================================================================
+    if (this.capturePath === 'full_record') {
+      const duration = Date.now() - this.fullRecordStartTime;
+
+      await captureStore.updateSession(this.sessionId, {
+        status: 'completed',
+        endedAt: new Date(),
+      });
+
+      // 视频文件信息由主进程 VideoRecorder 在 stopRecording 后返回，
+      // 此处先发事件，外部监听者可通过 IPC 查询最终文件路径
+      const videoRecording: VideoRecording = {
+        filePath: '', // 由调用方在 IPC stop 回调中填充
+        duration,
+        fileSizeBytes: 0, // 由调用方在 IPC stop 回调中填充
+        format: 'webm',
+        hasAudio: false,
+      };
+
+      captureEventBus.emit('record:video_ready', {
+        sessionId: this.sessionId,
+        videoRecording,
+      });
+
+      captureEventBus.emit('session:stopped', {
+        sessionId: this.sessionId,
+        frameCount: this.frameCount,
+        extractedCount: this.extractedCount,
+      });
+
+      this.sessionId = null;
+      this.sessionConfig = null;
+      this.capturePath = 'fine';
+      this.fullRecordStartTime = 0;
+      return;
+    }
+
+    // ================================================================
+    // Path B 智能模式：组装 SessionBundle 并广播
+    // ================================================================
+    if (this.capturePath === 'smart') {
+      const bundle = this.assembleSmartBundle();
+
+      await captureStore.updateSession(this.sessionId, {
+        status: 'completed',
+        endedAt: new Date(),
+      });
+
+      captureEventBus.emit('smart:bundle_ready', {
+        sessionId: this.sessionId,
+        bundle,
+      });
+
+      captureEventBus.emit('session:stopped', {
+        sessionId: this.sessionId,
+        frameCount: this.frameCount,
+        extractedCount: this.extractedCount,
+      });
+
+      this.smartSampler?.reset();
+      this.vadMarker?.reset();
+      this.smartSampler = null;
+      this.vadMarker = null;
+      this.sessionId = null;
+      this.sessionConfig = null;
+      this.capturePath = 'fine';
+      return;
+    }
+
+    // ================================================================
+    // Path A（fine）原有流水线清理
+    // ================================================================
+
     this.pipeline.clear();
     this.dispatcher.reset();
     this.crossFusion.reset();
@@ -187,12 +338,39 @@ export class CaptureManager {
       return;
     }
 
-    // 检查路由决策是否启用视觉通道
-    if (this.lastDecision && !this.lastDecision.visionEnabled) {
+    if (this.isPaused) {
       return;
     }
 
-    if (this.isPaused) {
+    // @ai-context Path C 全程录制：帧数据由 MediaRecorder 直接采集，无需处理
+    if (this.capturePath === 'full_record') {
+      this.frameCount++;
+      return;
+    }
+
+    // ================================================================
+    // Path B 智能模式：通过 SmartSampler 筛选关键帧
+    // ================================================================
+    if (this.capturePath === 'smart' && this.smartSampler) {
+      this.frameCount++;
+      // processFrame 是异步的（Canvas 压缩），fire-and-forget 不阻塞截图循环
+      this.smartSampler.processFrame(frameData).then((keyframe) => {
+        if (keyframe && this.sessionId) {
+          captureEventBus.emit('smart:keyframe', {
+            sessionId: this.sessionId,
+            keyframe,
+          });
+        }
+      }).catch(() => { /* 压缩失败静默跳过，不阻断采集流 */ });
+      return;
+    }
+
+    // ================================================================
+    // Path A（fine）原有逐帧推送
+    // ================================================================
+
+    // 检查路由决策是否启用视觉通道
+    if (this.lastDecision && !this.lastDecision.visionEnabled) {
       return;
     }
 
@@ -223,12 +401,29 @@ export class CaptureManager {
       return;
     }
 
-    // 检查路由决策是否启用音频通道
-    if (this.lastDecision && !this.lastDecision.audioEnabled) {
+    if (this.isPaused) {
       return;
     }
 
-    if (this.isPaused) {
+    // @ai-context Path C 全程录制：音频由 MediaRecorder 直接采集，无需处理
+    if (this.capturePath === 'full_record') {
+      return;
+    }
+
+    // ================================================================
+    // Path B 智能模式：VADMarker 检测语音段，不送入 ASR
+    // ================================================================
+    if (this.capturePath === 'smart' && this.vadMarker) {
+      this.vadMarker.processChunk(audioData);
+      return;
+    }
+
+    // ================================================================
+    // Path A（fine）原有音频处理
+    // ================================================================
+
+    // 检查路由决策是否启用音频通道
+    if (this.lastDecision && !this.lastDecision.audioEnabled) {
       return;
     }
 
@@ -253,7 +448,10 @@ export class CaptureManager {
   pauseSession(): void {
     if (!this.sessionId || this.isPaused) return;
     this.isPaused = true;
-    this.pipeline.clear();
+    // smart 和 full_record 模式下 pipeline 无待清数据
+    if (this.capturePath === 'fine') {
+      this.pipeline.clear();
+    }
   }
 
   /**
@@ -307,11 +505,20 @@ export class CaptureManager {
     this.dispatcher.dispose();
     this.crossFusion.reset();
     this.asrWorker = null;
+    this.smartSampler?.reset();
+    this.vadMarker?.reset();
+    this.smartSampler = null;
+    this.vadMarker = null;
+    this.capturePath = 'fine';
+    this.fullRecordStartTime = 0;
     captureEventBus.off('session:started');
     captureEventBus.off('session:stopped');
     captureEventBus.off('frame:pushed');
     captureEventBus.off('fusion:vad_triggered');
     captureEventBus.off('fusion:segment_complete');
+    captureEventBus.off('smart:keyframe');
+    captureEventBus.off('smart:bundle_ready');
+    captureEventBus.off('record:video_ready');
   }
 
   // ================================================================
@@ -430,5 +637,17 @@ export class CaptureManager {
       clearTimeout(this.frameWatchdogTimer);
       this.frameWatchdogTimer = null;
     }
+  }
+
+  /**
+   * 组装智能模式的完整数据包
+   * @ai-context 会话结束时一次性打包所有关键帧+语音段+时间轴，供 UI 层分析预览
+   */
+  private assembleSmartBundle(): SessionBundle {
+    const keyframes = this.smartSampler?.getKeyframes() ?? [];
+    const audioSegments = this.vadMarker?.getSegments() ?? [];
+    const timeline = this.vadMarker?.getTimeline() ?? [];
+    const duration = Date.now() - this.smartStartTime;
+    return { keyframes, audioSegments, timeline, duration };
   }
 }

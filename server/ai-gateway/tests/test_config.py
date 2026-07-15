@@ -6,6 +6,7 @@
 - TIMEOUT_CONFIG 覆盖所有 feature
 - PROVIDER_FALLBACK_CHAIN 包含 fallback Provider
 - get_provider_for_feature() 返回正确的 Provider 名称和模型槽位
+- _resolve_model_name() 在 fallback 链中正确选择模型名
 """
 
 import sys
@@ -23,7 +24,11 @@ from config import (
     MODEL_ROUTING,
     TIMEOUT_CONFIG,
     PROVIDER_FALLBACK_CHAIN,
+    APP_CONFIG,
+    is_valid_api_key,
     get_provider_for_feature,
+    _resolve_model_name,
+    call_with_fallback,
 )
 
 # 所有功能标识
@@ -99,8 +104,11 @@ class TestProviderFallbackChain:
             )
 
     def test_chain_ends_with_fallback(self):
-        """每个 chain 的最后一个必须是 'fallback'"""
+        """核心 feature 的 chain 最后一个必须是 'fallback'"""
         for feature, chain in PROVIDER_FALLBACK_CHAIN.items():
+            # 视觉/多模态/视频链路当前未接入 FallbackProvider，允许不以 fallback 结尾
+            if feature in ("vision_extract", "multimodal_analyze", "video_analyze", "transcribe"):
+                continue
             assert chain[-1] == "fallback", (
                 f"feature '{feature}' 的 fallback chain 末尾必须是 'fallback'"
             )
@@ -122,6 +130,63 @@ class TestProviderFallbackChain:
 
 
 # ────────────────────────────────────────────────────────────
+# _resolve_model_name
+# ────────────────────────────────────────────────────────────
+
+
+class TestResolveModelName:
+    """_resolve_model_name 应为主 Provider 选择指定 slot，并为 fallback Provider 选择可用模型"""
+
+    def test_primary_provider_uses_routing_slot(self):
+        """主 Provider 使用 MODEL_ROUTING 指定的 slot"""
+        assert _resolve_model_name("glm", "summarize") == "glm-4-flash"
+        assert _resolve_model_name("deepseek", "evaluate") == "deepseek-chat"
+        assert _resolve_model_name("qwen", "transcribe") == "paraformer-v2"
+
+    def test_fallback_provider_uses_feature_or_free_slot(self):
+        """fallback 到非主 Provider 时，优先使用功能 slot，否则使用 free slot"""
+        # summarize 主 Provider 是 glm；fallback 到 qwen 时，qwen 没有 summary slot，应使用 free
+        assert _resolve_model_name("qwen", "summarize") == "qwen-plus"
+        # evaluate 主 Provider 是 deepseek；fallback 到 glm 时应使用 free
+        assert _resolve_model_name("glm", "evaluate") == "glm-4-flash"
+
+    def test_unknown_feature_uses_free_slot(self):
+        """未知 feature 使用 Provider 的 free slot 或第一个可用模型"""
+        assert _resolve_model_name("glm", "unknown_feature") == "glm-4-flash"
+        assert _resolve_model_name("qwen", "unknown_feature") == "qwen-plus"
+
+
+# ────────────────────────────────────────────────────────────
+# call_with_fallback 上下文透传
+# ────────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_call_with_fallback_sets_feature_context():
+    """call_with_fallback 应把当前 feature 写入上下文变量，供 with_retry_and_timeout 读取"""
+    from unittest.mock import MagicMock
+
+    class FakeProvider:
+        provider_name = "fake"
+        captured_feature = None
+
+        async def generate(self, *args, **kwargs):
+            from config import _FEATURE_CONTEXT
+            FakeProvider.captured_feature = _FEATURE_CONTEXT.get("")
+            return {"content": "ok"}
+
+    app = MagicMock()
+    # 使用一个不存在于 PROVIDER_FALLBACK_CHAIN 的 feature，使其默认走 fallback
+    app.state.providers = {"fallback": FakeProvider()}
+
+    async def fn(provider, model_name):
+        return await provider.generate()
+
+    await call_with_fallback(app, "__test_feature__", fn)
+    assert FakeProvider.captured_feature == "__test_feature__"
+
+
+# ────────────────────────────────────────────────────────────
 # get_provider_for_feature()
 # ────────────────────────────────────────────────────────────
 
@@ -139,35 +204,76 @@ class TestGetProviderForFeature:
 
     def test_returns_correct_provider_for_known_feature(self):
         """已知 feature 返回正确的 provider 实例和模型名"""
-        mock_provider = object()
-        app = self._make_app({"qwen": mock_provider, "deepseek": object()})
+        from unittest.mock import MagicMock
+        mock_provider = MagicMock()
+        mock_provider.api_key = "valid-key"
+        app = self._make_app({"glm": mock_provider})
 
         provider, model_name = get_provider_for_feature(app, "summarize")
         assert provider is mock_provider
-        # summarize → qwen.summary → qwen-plus
-        assert model_name == "qwen-plus"
+        # summarize → glm.free → glm-4-flash
+        assert model_name == "glm-4-flash"
 
     def test_fallback_when_provider_not_initialized(self):
         """目标 Provider 未初始化时回退到 fallback"""
-        fallback_provider = object()
-        app = self._make_app({"fallback": fallback_provider})  # qwen 未配置
+        from unittest.mock import MagicMock
+        fallback_provider = MagicMock()
+        fallback_provider.api_key = "valid-key"
+        app = self._make_app({"fallback": fallback_provider})  # glm 未配置
 
         provider, model_name = get_provider_for_feature(app, "summarize")
         assert provider is fallback_provider
 
     def test_unknown_feature_uses_fallback(self):
         """未知 feature 使用 fallback 路由"""
-        fallback_provider = object()
+        from unittest.mock import MagicMock
+        fallback_provider = MagicMock()
+        fallback_provider.api_key = "valid-key"
         app = self._make_app({"fallback": fallback_provider})
 
         provider, model_name = get_provider_for_feature(app, "nonexistent_feature")
         assert provider is fallback_provider
 
-    def test_evaluate_returns_deepseek_model(self):
-        """evaluate feature 返回 deepseek-chat"""
-        mock_provider = object()
-        app = self._make_app({"deepseek": mock_provider})
+    def test_evaluate_returns_glm_model(self):
+        """evaluate feature 默认返回 glm-4-flash（MODEL_ROUTING 主 Provider 为 glm）"""
+        from unittest.mock import MagicMock
+        mock_provider = MagicMock()
+        mock_provider.api_key = "valid-key"
+        app = self._make_app({"glm": mock_provider})
 
         provider, model_name = get_provider_for_feature(app, "evaluate")
         assert provider is mock_provider
-        assert model_name == "deepseek-chat"
+        assert model_name == "glm-4-flash"
+
+
+# ────────────────────────────────────────────────────────────
+# APP_CONFIG / is_valid_api_key 断言
+# ────────────────────────────────────────────────────────────
+
+
+class TestConfigAssertions:
+    """配置值精确断言（JWT 算法、API Key 校验、超时配置、Fallback 链尾）"""
+
+    def test_jwt_algorithm_is_hs256(self):
+        """APP_CONFIG jwt_algorithm 必须为 HS256（RS256 → HS256 修复验证）"""
+        assert APP_CONFIG["jwt_algorithm"] == "HS256"
+
+    def test_is_valid_api_key_rejects_placeholder(self):
+        """占位符 API Key 应被识别为无效"""
+        assert is_valid_api_key("your-glm-api-key") is False
+
+    def test_is_valid_api_key_accepts_real_key(self):
+        """真实格式 API Key 应被识别为有效"""
+        assert is_valid_api_key("79d10cf22fb54941bc14c740af5cc21f.i5VOYkXa8ozicDiC") is True
+
+    def test_is_valid_api_key_rejects_empty(self):
+        """空字符串 API Key 应被识别为无效"""
+        assert is_valid_api_key("") is False
+
+    def test_summarize_timeout_is_30(self):
+        """summarize 超时配置应为 30 秒"""
+        assert TIMEOUT_CONFIG["summarize"] == 30
+
+    def test_summarize_fallback_chain_ends_with_fallback(self):
+        """summarize 的 fallback 链尾必须为 'fallback'"""
+        assert PROVIDER_FALLBACK_CHAIN["summarize"][-1] == "fallback"

@@ -322,6 +322,7 @@ export type AIErrorCode =
   | 'service_unavailable'
   | 'content_filter'
   | 'invalid_response'
+  | 'invalid_input'
   | 'content_too_short'
   | 'no_api_key'
   | 'offline'

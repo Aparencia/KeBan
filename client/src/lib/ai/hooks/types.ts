@@ -6,6 +6,8 @@
 
 import { AIError } from '../types';
 import { hasUserKeys } from '../apiKeyManager';
+import { getCachedGatewayStatus } from '@/hooks/useAIGatewayHealth';
+import { getAIConfig } from '../config';
 
 /** AI Hook 统一状态 */
 export interface AIState<T> {
@@ -23,13 +25,35 @@ export const INITIAL_STATE: AIState<never> = {
 
 /**
  * 统一处理 service_unavailable 错误：
- * - 用户无自配 Key → 提示前往设置页配置
+ * - 网关在线/降级 + 用户无自配 Key → 服务端 Provider 问题，提示稍后重试
+ * - 网关离线 + 网关 URL 已配置 → 网关服务未启动，提示检查网关
+ * - 网关离线/未知 + 网关 URL 未配置 + 用户无自配 Key → 引导用户配置
  * - 用户有自配 Key → 正常网络/服务错误提示
  */
 export function handleServiceUnavailable(): { error: string; needsConfig: boolean } {
+  const gatewayStatus = getCachedGatewayStatus();
+  const gatewayReachable = gatewayStatus === 'online' || gatewayStatus === 'degraded';
+
   if (!hasUserKeys()) {
+    if (gatewayReachable) {
+      // 网关可达但服务不可用 → 服务端 Provider 问题（如 API Key 未配置/过期）
+      return {
+        error: 'AI 服务暂时不可用，可能是服务端模型配置问题，请稍后重试',
+        needsConfig: false,
+      };
+    }
+    // 网关不可达时，区分「URL 已配置但服务未运行」和「完全未配置」
+    const gatewayUrl = getAIConfig().gatewayUrl?.trim();
+    if (gatewayUrl) {
+      // 网关 URL 已配置但服务不可达 → 提示检查网关服务
+      return {
+        error: 'AI 网关未连接，请检查网关服务是否正在运行',
+        needsConfig: false,
+      };
+    }
+    // 网关 URL 未配置 + 用户无自配 Key → 引导用户配置
     return {
-      error: '当前还没有配置 API Key 呢，请前往设置页面配置',
+      error: '当前还没有配置 AI 网关地址呢，请前往设置页面配置',
       needsConfig: true,
     };
   }

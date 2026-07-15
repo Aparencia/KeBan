@@ -1,5 +1,6 @@
-import { useCallback } from 'react';
-import { Plus } from 'lucide-react';
+import { useCallback, useRef, useState, useEffect, useMemo } from 'react';
+import { Plus, Trash2, Copy, Eraser, CheckSquare } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
 import FreeTextBlock from './FreeTextBlock';
 import type { FreeCanvasData, FreeCanvasBlock } from '@/types/models';
 
@@ -8,8 +9,8 @@ interface FreeCanvasProps {
   onChange: (data: FreeCanvasData) => void;
 }
 
-const DEFAULT_CANVAS_WIDTH = 2000;
-const DEFAULT_CANVAS_HEIGHT = 2000;
+const DEFAULT_CANVAS_WIDTH = 3000;
+const DEFAULT_CANVAS_HEIGHT = 3000;
 
 function buildDefaultData(): FreeCanvasData {
   return {
@@ -20,7 +21,15 @@ function buildDefaultData(): FreeCanvasData {
 }
 
 export default function FreeCanvas({ content, onChange }: FreeCanvasProps) {
-  const data: FreeCanvasData = content ?? buildDefaultData();
+  const raw = content ?? buildDefaultData();
+  const data: FreeCanvasData = {
+    blocks: raw.blocks ?? [],
+    canvasWidth: raw.canvasWidth || DEFAULT_CANVAS_WIDTH,
+    canvasHeight: raw.canvasHeight || DEFAULT_CANVAS_HEIGHT,
+  };
+
+  const dataRef = useRef(data);
+  dataRef.current = data;
 
   const emitChange = useCallback(
     (next: FreeCanvasData) => {
@@ -29,83 +38,460 @@ export default function FreeCanvas({ content, onChange }: FreeCanvasProps) {
     [onChange],
   );
 
-  // 添加新文本块
-  const handleAddBlock = useCallback(() => {
+  const [selectedBlockIds, setSelectedBlockIds] = useState<Set<string>>(new Set());
+  const [paletteOpen, setPaletteOpen] = useState(false);
+
+  // 框选状态
+  const [selectionBox, setSelectionBox] = useState<{x1: number; y1: number; x2: number; y2: number} | null>(null);
+  const isSelectingRef = useRef(false);
+  const selectStartRef = useRef({ x: 0, y: 0 });
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const selectionBoxRef = useRef(selectionBox);
+  selectionBoxRef.current = selectionBox;
+
+  // 右键浮动菜单状态
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; canvasX: number; canvasY: number } | null>(null);
+
+  // 拖出块取消选中的抑制标志
+  const suppressSelectRef = useRef(false);
+
+  // 选中块回调
+  const handleSelectBlock = useCallback((id: string, addToSelection: boolean = false) => {
+    if (suppressSelectRef.current) {
+      suppressSelectRef.current = false;
+      return;
+    }
+    setSelectedBlockIds(prev => {
+      const next = new Set(addToSelection ? prev : []);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
+
+  // 块释放到外部 → 取消选中
+  const handleBlockReleaseOutside = useCallback(() => {
+    setSelectedBlockIds(new Set());
+    suppressSelectRef.current = true;
+    setTimeout(() => { suppressSelectRef.current = false; }, 100);
+  }, []);
+
+  // 在指定画布坐标添加新块
+  const addBlockAtPosition = useCallback((canvasX: number, canvasY: number) => {
+    const current = dataRef.current;
     const newBlock: FreeCanvasBlock = {
       id: crypto.randomUUID(),
       type: 'text',
       content: '',
-      position: {
-        x: data.canvasWidth / 2 - 140 + Math.random() * 40 - 20,
-        y: data.canvasHeight / 2 - 80 + Math.random() * 40 - 20,
-      },
+      position: { x: canvasX - 140, y: canvasY - 20 },
       size: { width: 280, height: 160 },
     };
-    emitChange({ ...data, blocks: [...data.blocks, newBlock] });
-  }, [data, emitChange]);
+    emitChange({ ...current, blocks: [...current.blocks, newBlock] });
+  }, [emitChange]);
+
+  // 删除选中块
+  const handleDeleteSelected = useCallback(() => {
+    if (selectedBlockIds.size === 0) return;
+    const current = dataRef.current;
+    emitChange({
+      ...current,
+      blocks: current.blocks.filter(b => !selectedBlockIds.has(b.id)),
+    });
+    setSelectedBlockIds(new Set());
+  }, [selectedBlockIds, emitChange]);
+
+  // 复制块
+  const handleDuplicateBlock = useCallback(
+    (id: string) => {
+      const current = dataRef.current;
+      const source = current.blocks.find(b => b.id === id);
+      if (!source) return;
+      const newBlock = {
+        ...source,
+        id: crypto.randomUUID(),
+        position: { x: source.position.x + 30, y: source.position.y + 30 },
+      };
+      emitChange({ ...current, blocks: [...current.blocks, newBlock] });
+      setSelectedBlockIds(new Set([newBlock.id]));
+    },
+    [emitChange],
+  );
+
+  // 双击空白区域添加文本块
+  const handleCanvasDoubleClick = (e: React.MouseEvent) => {
+    const scrollContainer = scrollContainerRef.current;
+    if (!scrollContainer) return;
+
+    const rect = scrollContainer.getBoundingClientRect();
+    const canvasX = e.clientX - rect.left + scrollContainer.scrollLeft;
+    const canvasY = e.clientY - rect.top + scrollContainer.scrollTop;
+
+    addBlockAtPosition(canvasX, canvasY);
+  };
+
+  // ===== 鼠标事件统一处理 =====
+  const handleCanvasMouseDown = (e: React.MouseEvent) => {
+    // 关闭右键菜单
+    if (contextMenu) setContextMenu(null);
+
+    // ---- 右键：拖拽平移 / 快捷菜单 ----
+    if (e.button === 2) {
+      e.preventDefault();
+      const container = scrollContainerRef.current;
+      if (!container) return;
+
+      const startX = e.clientX;
+      const startY = e.clientY;
+      const startScrollLeft = container.scrollLeft;
+      const startScrollTop = container.scrollTop;
+      let hasMoved = false;
+
+      container.style.cursor = 'grabbing';
+
+      const handleMouseMove = (ev: MouseEvent) => {
+        const dx = ev.clientX - startX;
+        const dy = ev.clientY - startY;
+        if (Math.abs(dx) > 3 || Math.abs(dy) > 3) hasMoved = true;
+        container.scrollLeft = startScrollLeft - dx;
+        container.scrollTop = startScrollTop - dy;
+      };
+
+      const handleMouseUp = () => {
+        container.style.cursor = '';
+        // 未拖动 → 显示右键快捷菜单
+        if (!hasMoved) {
+          const rect = container.getBoundingClientRect();
+          setContextMenu({
+            x: e.clientX,
+            y: e.clientY,
+            canvasX: e.clientX - rect.left + startScrollLeft,
+            canvasY: e.clientY - rect.top + startScrollTop,
+          });
+        }
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+      };
+
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      return;
+    }
+
+    // ---- Shift + 左键：框选 ----
+    if (e.button === 0 && e.shiftKey) {
+      e.preventDefault();
+      isSelectingRef.current = true;
+      const rect = e.currentTarget.getBoundingClientRect();
+      const scrollContainer = scrollContainerRef.current;
+      const scrollLeft = scrollContainer?.scrollLeft ?? 0;
+      const scrollTop = scrollContainer?.scrollTop ?? 0;
+      selectStartRef.current = {
+        x: e.clientX - rect.left + scrollLeft,
+        y: e.clientY - rect.top + scrollTop,
+      };
+      setSelectionBox({
+        x1: selectStartRef.current.x,
+        y1: selectStartRef.current.y,
+        x2: selectStartRef.current.x,
+        y2: selectStartRef.current.y,
+      });
+
+      const handleMouseMove = (ev: MouseEvent) => {
+        if (!isSelectingRef.current) return;
+        const x2 = ev.clientX - rect.left + scrollLeft;
+        const y2 = ev.clientY - rect.top + scrollTop;
+        setSelectionBox({ x1: selectStartRef.current.x, y1: selectStartRef.current.y, x2, y2 });
+      };
+
+      const handleMouseUp = () => {
+        isSelectingRef.current = false;
+        const box = selectionBoxRef.current;
+        if (box) {
+          const minX = Math.min(box.x1, box.x2);
+          const maxX = Math.max(box.x1, box.x2);
+          const minY = Math.min(box.y1, box.y2);
+          const maxY = Math.max(box.y1, box.y2);
+
+          const current = dataRef.current;
+          const ids = new Set<string>();
+          for (const block of current.blocks) {
+            const bx = block.position.x;
+            const by = block.position.y;
+            const bw = block.size.width;
+            const bh = typeof block.size.height === 'number' ? block.size.height : 160;
+            if (bx + bw > minX && bx < maxX && by + bh > minY && by < maxY) {
+              ids.add(block.id);
+            }
+          }
+          setSelectedBlockIds(ids);
+        }
+        setSelectionBox(null);
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+      };
+
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      return;
+    }
+
+    // ---- 普通左键：清除选中 ----
+    if (e.button === 0 && !e.shiftKey) {
+      setSelectedBlockIds(new Set());
+      (document.activeElement as HTMLElement)?.blur?.();
+      suppressSelectRef.current = true;
+      setTimeout(() => { suppressSelectRef.current = false; }, 100);
+    }
+  };
+
+  // 内层画布 mouseup：块内按下拖到外部释放 → 取消选中
+  const handleInnerCanvasMouseUp = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    const isInsideBlock = !!target.closest('[data-freeblock]');
+    if (!isInsideBlock && suppressSelectRef.current) {
+      setSelectedBlockIds(new Set());
+      suppressSelectRef.current = false;
+    }
+  };
 
   // 移动块
   const handleMove = useCallback(
     (id: string, x: number, y: number) => {
+      const current = dataRef.current;
       emitChange({
-        ...data,
-        blocks: data.blocks.map((b) =>
+        ...current,
+        blocks: current.blocks.map((b) =>
           b.id === id ? { ...b, position: { x, y } } : b,
         ),
       });
     },
-    [data, emitChange],
+    [emitChange],
   );
 
   // 内容变更
   const handleContentChange = useCallback(
     (id: string, blockContent: string) => {
+      const current = dataRef.current;
       emitChange({
-        ...data,
-        blocks: data.blocks.map((b) =>
+        ...current,
+        blocks: current.blocks.map((b) =>
           b.id === id ? { ...b, content: blockContent } : b,
         ),
       });
     },
-    [data, emitChange],
+    [emitChange],
   );
 
   // 删除块
   const handleDelete = useCallback(
     (id: string) => {
+      const current = dataRef.current;
       emitChange({
-        ...data,
-        blocks: data.blocks.filter((b) => b.id !== id),
+        ...current,
+        blocks: current.blocks.filter((b) => b.id !== id),
+      });
+      setSelectedBlockIds(prev => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
       });
     },
-    [data, emitChange],
+    [emitChange],
   );
 
-  // 调整大小
+  // 调整块大小
   const handleResize = useCallback(
     (id: string, width: number, height: number) => {
+      const current = dataRef.current;
       emitChange({
-        ...data,
-        blocks: data.blocks.map((b) =>
+        ...current,
+        blocks: current.blocks.map((b) =>
           b.id === id ? { ...b, size: { width, height } } : b,
         ),
       });
     },
-    [data, emitChange],
+    [emitChange],
   );
 
+  // 右键菜单操作列表
+  const contextMenuActions = useMemo(() => [
+    {
+      id: 'add-text',
+      label: '添加新文本',
+      icon: Plus,
+      disabled: false,
+      execute: () => {
+        if (contextMenu) addBlockAtPosition(contextMenu.canvasX, contextMenu.canvasY);
+      },
+    },
+    {
+      id: 'select-all',
+      label: '全选',
+      icon: CheckSquare,
+      disabled: data.blocks.length === 0,
+      execute: () => {
+        setSelectedBlockIds(new Set(data.blocks.map(b => b.id)));
+      },
+    },
+    {
+      id: 'delete-selected',
+      label: '删除选中',
+      icon: Trash2,
+      disabled: selectedBlockIds.size === 0,
+      execute: () => handleDeleteSelected(),
+    },
+    {
+      id: 'duplicate-selected',
+      label: '复制',
+      icon: Copy,
+      disabled: selectedBlockIds.size === 0,
+      execute: () => {
+        const firstId = selectedBlockIds.values().next().value;
+        if (!firstId) return;
+        handleDuplicateBlock(firstId);
+      },
+    },
+    {
+      id: 'clear-canvas',
+      label: '清空画布',
+      icon: Eraser,
+      disabled: data.blocks.length === 0,
+      execute: () => {
+        emitChange({ ...dataRef.current, blocks: [] });
+        setSelectedBlockIds(new Set());
+      },
+    },
+  ], [contextMenu, data.blocks, selectedBlockIds, emitChange, handleDeleteSelected, addBlockAtPosition, handleDuplicateBlock]);
+
+  // 操作面板操作列表
+  const actions = useMemo(() => [
+    {
+      id: 'add-block',
+      label: '添加文本块',
+      icon: Plus,
+      disabled: false,
+      execute: () => {
+        const current = dataRef.current;
+        const centerX = (current.canvasWidth || 3000) / 2 - 140;
+        const centerY = (current.canvasHeight || 3000) / 2 - 80;
+        const newBlock = {
+          id: crypto.randomUUID(),
+          type: 'text' as const,
+          content: '',
+          position: { x: centerX + (Math.random() - 0.5) * 60, y: centerY + (Math.random() - 0.5) * 60 },
+          size: { width: 280, height: 160 },
+        };
+        emitChange({ ...current, blocks: [...current.blocks, newBlock] });
+      },
+    },
+    {
+      id: 'delete-block',
+      label: '删除选中块',
+      icon: Trash2,
+      disabled: selectedBlockIds.size === 0,
+      execute: () => handleDeleteSelected(),
+    },
+    {
+      id: 'duplicate-block',
+      label: '复制选中块',
+      icon: Copy,
+      disabled: selectedBlockIds.size === 0,
+      execute: () => {
+        const firstId = selectedBlockIds.values().next().value;
+        if (!firstId) return;
+        handleDuplicateBlock(firstId);
+      },
+    },
+    {
+      id: 'clear-canvas',
+      label: '清空画布',
+      icon: Eraser,
+      disabled: data.blocks.length === 0,
+      execute: () => {
+        emitChange({ ...dataRef.current, blocks: [] });
+        setSelectedBlockIds(new Set());
+      },
+    },
+  ], [selectedBlockIds, data.blocks.length, emitChange, handleDeleteSelected, handleDuplicateBlock]);
+
+  // 键盘快捷键
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isInEditor = document.activeElement?.closest('.ProseMirror') ||
+                         document.activeElement?.closest('[contenteditable]') ||
+                         document.activeElement?.tagName === 'INPUT' ||
+                         document.activeElement?.tagName === 'TEXTAREA';
+
+      // Shift+A 切换面板（仅非编辑器聚焦时）
+      if (e.shiftKey && (e.key === 'A' || e.key === 'a') && !isInEditor) {
+        e.preventDefault();
+        setPaletteOpen(prev => !prev);
+        return;
+      }
+
+      // Ctrl+D 复制选中块（仅非编辑器聚焦时）
+      if (e.ctrlKey && (e.key === 'd' || e.key === 'D') && !isInEditor && selectedBlockIds.size > 0) {
+        e.preventDefault();
+        const firstId = selectedBlockIds.values().next().value;
+        if (!firstId) return;
+        handleDuplicateBlock(firstId);
+        return;
+      }
+
+      // Delete/Backspace 删除选中块（仅非编辑器聚焦时）
+      if ((e.key === 'Delete' || e.key === 'Backspace') && !isInEditor && selectedBlockIds.size > 0) {
+        e.preventDefault();
+        handleDeleteSelected();
+        return;
+      }
+
+      // Escape 取消选中 / 关闭面板 / 关闭右键菜单
+      if (e.key === 'Escape') {
+        if (contextMenu) {
+          setContextMenu(null);
+        } else if (paletteOpen) {
+          setPaletteOpen(false);
+        } else {
+          setSelectedBlockIds(new Set());
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedBlockIds, handleDeleteSelected, paletteOpen, handleDuplicateBlock, contextMenu]);
+
+  // 挂载后自动滚动到画布中心
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    const centerX = (data.canvasWidth - container.clientWidth) / 2;
+    const centerY = (data.canvasHeight - container.clientHeight) / 2;
+    container.scrollLeft = Math.max(0, centerX);
+    container.scrollTop = Math.max(0, centerY);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
-    <div className="flex flex-col h-full">
+    <div className="h-full relative" data-allow-context-menu>
       {/* 画布滚动区域 */}
-      <div className="flex-1 overflow-auto relative">
+      <div
+        ref={scrollContainerRef}
+        data-free-canvas
+        className="h-full w-full overflow-auto relative bg-bg-elevated/95 backdrop-blur-xl"
+        onDoubleClick={handleCanvasDoubleClick}
+        onMouseDown={handleCanvasMouseDown}
+        onContextMenu={(e) => e.preventDefault()}
+      >
         <div
           style={{
             position: 'relative',
             width: data.canvasWidth,
             height: data.canvasHeight,
-            backgroundImage: 'radial-gradient(circle, #e5e7eb 1px, transparent 1px)',
-            backgroundSize: '20px 20px',
           }}
+          onMouseUp={handleInnerCanvasMouseUp}
         >
           {data.blocks.map((block) => (
             <FreeTextBlock
@@ -115,21 +501,104 @@ export default function FreeCanvas({ content, onChange }: FreeCanvasProps) {
               onContentChange={handleContentChange}
               onDelete={handleDelete}
               onResize={handleResize}
+              isSelected={selectedBlockIds.has(block.id)}
+              onSelect={handleSelectBlock}
+              onReleaseOutside={handleBlockReleaseOutside}
+              onDuplicate={handleDuplicateBlock}
             />
           ))}
+
+          {/* 框选矩形 */}
+          {selectionBox && (
+            <div
+              className="absolute border-2 border-blue-500/50 bg-blue-500/10 pointer-events-none z-30"
+              style={{
+                left: Math.min(selectionBox.x1, selectionBox.x2),
+                top: Math.min(selectionBox.y1, selectionBox.y2),
+                width: Math.abs(selectionBox.x2 - selectionBox.x1),
+                height: Math.abs(selectionBox.y2 - selectionBox.y1),
+              }}
+            />
+          )}
         </div>
       </div>
 
-      {/* 底部固定操作栏 */}
-      <div className="flex-shrink-0 border-t border-border/40 bg-bg-elevated px-4 py-2 flex items-center justify-center">
-        <button
-          type="button"
-          onClick={handleAddBlock}
-          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-kb-md text-sm font-medium bg-brand-600 text-white hover:bg-brand-700 active:scale-95 transition-all duration-kb-fast"
-        >
-          <Plus className="w-4 h-4" strokeWidth={1.5} />
-          添加文本块
-        </button>
+      {/* 右键快捷菜单 */}
+      <AnimatePresence>
+        {contextMenu && (
+          <>
+            <div
+              className="fixed inset-0 z-40"
+              onClick={() => setContextMenu(null)}
+              onContextMenu={(e) => { e.preventDefault(); setContextMenu(null); }}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.12 }}
+              className="fixed z-50 min-w-[180px] py-1.5 bg-bg-elevated/95 backdrop-blur-2xl rounded-[var(--kb-radius-xl)] shadow-kb-lg border border-border/40 overflow-hidden"
+              style={{ left: contextMenu.x, top: contextMenu.y }}
+            >
+              {contextMenuActions.map(action => (
+                <button
+                  key={action.id}
+                  disabled={action.disabled}
+                  onClick={() => { action.execute(); setContextMenu(null); }}
+                  className="w-full flex items-center gap-3 px-4 py-2 text-sm hover:bg-bg-sunken/60 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+                >
+                  <action.icon className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
+                  <span>{action.label}</span>
+                </button>
+              ))}
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* 操作面板 */}
+      <AnimatePresence>
+        {paletteOpen && (
+          <>
+            <div
+              className="absolute inset-0 z-40"
+              onClick={() => setPaletteOpen(false)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: -8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: -8 }}
+              transition={{ duration: 0.15, ease: [0.25, 0.1, 0.25, 1] }}
+              className="absolute left-1/2 top-12 z-50 -translate-x-1/2 w-[300px] bg-bg-elevated/90 backdrop-blur-2xl rounded-[var(--kb-radius-xl)] shadow-kb-lg border border-border/40 overflow-hidden"
+            >
+              <div className="px-4 py-2.5 border-b border-border/30 flex items-center justify-between">
+                <span className="text-xs text-muted-foreground font-medium">画布操作</span>
+                <kbd className="text-[10px] px-1.5 py-0.5 rounded bg-bg-sunken text-muted-foreground/70 font-mono">Shift+A</kbd>
+              </div>
+              <div className="py-1.5">
+                {actions.map(action => (
+                  <button
+                    key={action.id}
+                    disabled={action.disabled}
+                    onClick={() => {
+                      action.execute();
+                      setPaletteOpen(false);
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-bg-sunken/60 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+                  >
+                    <action.icon className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
+                    <span>{action.label}</span>
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* 右下角快捷键提示 */}
+      <div className="absolute bottom-3 right-3 z-10 flex items-center gap-1.5 text-xs text-muted-foreground/50 select-none pointer-events-none">
+        <span>Shift+A 操作面板 · 双击添加文本块 · Shift+拖拽框选 · 右键拖拽平移 · Ctrl+D 复制</span>
       </div>
     </div>
   );
