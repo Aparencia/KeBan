@@ -331,6 +331,7 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
         # 构建解码参数
         decode_kwargs: dict = {
             "algorithms": [alg],
+            "audience": "authenticated",  # Supabase JWT 的标准 audience
         }
         # 当配置了 supabase_url 时，验证 iss claim
         supabase_url = APP_CONFIG.get("supabase_url", "")

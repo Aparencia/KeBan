@@ -1,15 +1,46 @@
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 import path from 'path'
+import { writeFileSync, mkdirSync } from 'fs'
 
 // 检测 Electron 桌面端构建模式
 const isElectronBuild = !!process.env.ELECTRON_BUILD;
+
+/**
+ * Vite 插件：Electron 构建时将主进程需要的 VITE_* 环境变量写入 build-config.json
+ *
+ * 生成的文件位于 dist-electron/build-config.json，随 asar 一起打包。
+ * Electron 主进程启动时读取此文件，替代直接打包 .env 文件。
+ * 这样 .env.production 仅用于 Vite 构建时，不会泄露到安装包中。
+ */
+function electronBuildConfigPlugin(): Plugin {
+  return {
+    name: 'electron-build-config',
+    applyToEnvironment: () => isElectronBuild,
+    writeBundle() {
+      const config = {
+        VITE_AI_GATEWAY_URL: process.env.VITE_AI_GATEWAY_URL || '',
+        VITE_API_BASE_URL: process.env.VITE_API_BASE_URL || '',
+      };
+      const outDir = path.resolve(__dirname, 'dist-electron');
+      mkdirSync(outDir, { recursive: true });
+      writeFileSync(
+        path.join(outDir, 'build-config.json'),
+        JSON.stringify(config, null, 2),
+        'utf-8',
+      );
+      console.log(`[electron-build-config] Generated build-config.json (gateway=${config.VITE_AI_GATEWAY_URL || '(empty)'})`);
+    },
+  };
+}
 
 export default defineConfig({
   base: isElectronBuild ? './' : '/',
   plugins: [
     react(),
+    // Electron 构建时生成 build-config.json，供主进程运行时读取环境变量
+    ...(isElectronBuild ? [electronBuildConfigPlugin()] : []),
     ...(isElectronBuild ? [] : [VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],

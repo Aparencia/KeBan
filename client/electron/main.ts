@@ -28,8 +28,11 @@ import SqliteRepository from './db/sqliteRepository.js';
 import { registerMigrationHandlers } from './db/migration.js';
 
 // ================================================================
-// .env 文件加载（Electron 主进程由 tsc 编译，不经过 Vite，
-// 需手动解析 .env 文件注入 process.env，使 VITE_* 变量可用）
+// 环境变量加载
+// ================================================================
+// 开发模式：从 .env 文件加载（与 Vite dev server 保持一致）
+// 生产模式：从 Vite 构建时生成的 build-config.json 读取
+//          （.env.production 仅用于 Vite 构建阶段，不打包进安装包）
 // ================================================================
 
 /**
@@ -64,15 +67,39 @@ function loadEnvFile(filePath: string, overrideKeys: Set<string>): void {
   }
 }
 
-// 按 Vite 约定分层加载：.env（基础）→ .env.<mode>（覆盖）
-// electron:dev 使用 --mode test，electron:build 使用 production
-{
-  const mode = process.env.NODE_ENV === 'development' ? 'test' : 'production';
+/**
+ * 从 Vite 构建时生成的 build-config.json 读取环境变量
+ * 该文件由 vite.config.ts 中的 electronBuildConfigPlugin 在 vite build 时生成，
+ * 位于 dist-electron/build-config.json，随 asar 一起打包。
+ */
+function loadBuildConfig(): void {
+  try {
+    // __dirname 在编译后为 dist-electron/electron/，build-config.json 在 dist-electron/
+    const configPath = path.resolve(__dirname, '..', 'build-config.json');
+    if (!existsSync(configPath)) return;
+    const raw = readFileSync(configPath, 'utf-8');
+    const config = JSON.parse(raw) as Record<string, string>;
+    for (const [key, value] of Object.entries(config)) {
+      // 不覆盖系统环境变量（如 cross-env 设置的值）
+      if (value && !(key in process.env)) {
+        process.env[key] = value;
+      }
+    }
+  } catch {
+    // build-config.json 加载失败不阻塞启动
+  }
+}
+
+if (isDevMode()) {
+  // 开发模式：从 .env 文件加载（electron:dev 由 cross-env 设置 NODE_ENV=development）
   // __dirname 在编译后为 dist-electron/electron/，需回退到 client/ 根目录
   const clientRoot = path.resolve(__dirname, '..', '..');
   const envKeys = new Set<string>();
   loadEnvFile(path.join(clientRoot, '.env'), envKeys);
-  loadEnvFile(path.join(clientRoot, `.env.${mode}`), envKeys);
+  loadEnvFile(path.join(clientRoot, '.env.test'), envKeys);
+} else {
+  // 生产模式：从构建时生成的 build-config.json 读取（不依赖 .env 文件）
+  loadBuildConfig();
 }
 
 // 仅开发模式禁用 Electron 安全警告，生产环境保留
@@ -140,24 +167,32 @@ if (!gotTheLock) {
     logger.info('App ready');
 
     // ================================================================
-    // SEC-005: CSP 安全策略注入
+    // SEC-005: CSP 安全策略注入（动态跟踪运行时网关 URL）
     // ================================================================
     const isDev = isDevMode();
 
     try {
-      // 动态构建 connect-src：除固定域名外，追加配置的 AI 网关和 API 地址
-      const configuredGateway = process.env.VITE_AI_GATEWAY_URL || '';
-      const configuredApi = process.env.VITE_API_BASE_URL || '';
-      const extraOrigins = new Set<string>();
-      if (configuredGateway && configuredGateway !== 'https://entropydecrease.com') {
-        extraOrigins.add(configuredGateway);
+      /**
+       * 动态构建 connect-src 白名单
+       * 每次请求时重新计算，确保运行时网关 URL 变更（如用户通过设置页修改）能及时生效
+       */
+      function buildExtraConnectSrc(): string {
+        const extraOrigins = new Set<string>();
+        // 当前运行时网关 URL（可能已被用户通过 IPC 修改）
+        const currentGateway = gatewayUrl();
+        if (currentGateway && currentGateway !== 'https://entropydecrease.com') {
+          extraOrigins.add(currentGateway);
+        }
+        // 环境变量中的 API 地址
+        const configuredApi = process.env.VITE_API_BASE_URL || '';
+        if (configuredApi && configuredApi !== 'https://entropydecrease.com') {
+          extraOrigins.add(configuredApi);
+        }
+        return extraOrigins.size > 0 ? ` ${[...extraOrigins].join(' ')}` : '';
       }
-      if (configuredApi && configuredApi !== 'https://entropydecrease.com') {
-        extraOrigins.add(configuredApi);
-      }
-      const extraConnectSrc = extraOrigins.size > 0 ? ` ${[...extraOrigins].join(' ')}` : '';
 
       session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+        const extraConnectSrc = buildExtraConnectSrc();
         // 开发环境：允许 unsafe-inline/unsafe-eval（Vite HMR 需要）
         // 生产环境：禁止 unsafe-eval，保留 unsafe-inline（Tailwind 运行时需要）
         const csp = isDev
@@ -171,7 +206,7 @@ if (!gotTheLock) {
           },
         });
       });
-      logger.info(`[SEC] CSP policy injected (${isDev ? 'development' : 'production'} mode)`);
+      logger.info(`[SEC] CSP policy injected (${isDev ? 'development' : 'production'} mode, dynamic gateway tracking enabled)`);
     } catch (err) {
       // CSP 注入失败时记录错误但不阻塞启动
       logger.error('[SEC] Failed to inject CSP policy', err);

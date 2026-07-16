@@ -93,6 +93,7 @@ export default function FeynmanSessionPage() {
   const handleEvalError = useAIErrorHandler('AI 评估失败');
 
   const explanationRef = useRef<HTMLDivElement>(null);
+  const prevStepRef = useRef<number>(1);
   const noteId = sessionId && sessionId !== 'new' ? sessionId : null;
 
   // Load note on mount
@@ -139,6 +140,35 @@ export default function FeynmanSessionPage() {
 
   const currentStep = note?.currentStep ?? 1;
   const completedSteps = Array.from({ length: currentStep - 1 }, (_, i) => i + 1);
+
+  // Track direction for directional transitions
+  const stepDirection = currentStep > prevStepRef.current ? 1 : currentStep < prevStepRef.current ? -1 : 0;
+  useEffect(() => {
+    prevStepRef.current = currentStep;
+  }, [currentStep]);
+
+  // Step transition variants (direction-aware)
+  const stepVariants = {
+    enter: (dir: number) => prefersReduced
+      ? { opacity: 0 }
+      : { opacity: 0, x: dir > 0 ? 40 : -40, scale: 0.97 },
+    center: { opacity: 1, x: 0, scale: 1 },
+    exit: (dir: number) => prefersReduced
+      ? { opacity: 0 }
+      : { opacity: 0, x: dir > 0 ? -40 : 40, scale: 0.97 },
+  };
+
+  // Stagger container for step children
+  const staggerContainer = {
+    hidden: {},
+    show: {
+      transition: { staggerChildren: 0.08, delayChildren: 0.1 },
+    },
+  };
+  const staggerItem = {
+    hidden: prefersReduced ? { opacity: 0 } : { opacity: 0, y: 12 },
+    show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: [0.22, 1, 0.36, 1] as const } },
+  };
 
   // ── Handlers ──
 
@@ -492,30 +522,33 @@ export default function FeynmanSessionPage() {
         />
         {/* 主内容 */}
         <div className="flex-1 overflow-y-auto px-kb-md pb-kb-md">
-          <AnimatePresence mode="wait">
+          <AnimatePresence mode="wait" custom={stepDirection}>
           <motion.div
             key={currentStep}
+            custom={stepDirection}
+            variants={stepVariants}
+            initial="enter"
+            animate="center"
+            exit="exit"
+            transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] as const }}
             className="max-w-2xl mx-auto"
-            initial={prefersReduced
-              ? { opacity: 0 }
-              : { opacity: 0, y: 16, scale: 0.97 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={prefersReduced
-              ? { opacity: 0 }
-              : { opacity: 0, y: -12, scale: 0.97 }}
-            transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] as const }}
           >
 
             {/* 步骤 1: 选择概念 */}
             {currentStep === 1 && (
-              <div className="flex flex-col gap-kb-md py-kb-md">
-                <div>
+              <motion.div
+                className="flex flex-col gap-kb-md py-kb-md"
+                variants={staggerContainer}
+                initial="hidden"
+                animate="show"
+              >
+                <motion.div variants={staggerItem}>
                   <h2 className="text-h2 font-semibold text-text-primary">选择要学习的概念</h2>
                   <p className="text-b2 text-text-tertiary mt-1">
                     输入一个你想要深入理解的概念名称，这将成为本次浮出水面学习的主题。
                   </p>
-                </div>
-                <div>
+                </motion.div>
+                <motion.div variants={staggerItem}>
                   <label className="text-b2 font-medium text-text-primary mb-kb-xs block">概念名称</label>
                   <div className={cn(
                     'px-3 py-2.5 rounded-kb-md',
@@ -524,8 +557,8 @@ export default function FeynmanSessionPage() {
                   )}>
                     {note?.concept || '—'}
                   </div>
-                </div>
-                <div>
+                </motion.div>
+                <motion.div variants={staggerItem}>
                   <label className="text-b2 font-medium text-text-primary mb-kb-xs block">初始讲解</label>
                   <div className={cn(
                     'relative min-h-[200px] flex flex-col',
@@ -543,8 +576,8 @@ export default function FeynmanSessionPage() {
                       )}
                     />
                   </div>
-                </div>
-                <div className={cn(
+                </motion.div>
+                <motion.div variants={staggerItem} className={cn(
                   'p-kb-md rounded-kb-lg',
                   'bg-feynman/5 border border-feynman/20',
                   'text-b2 text-text-secondary leading-relaxed',
@@ -554,20 +587,25 @@ export default function FeynmanSessionPage() {
                     选择一个你正在学习但尚未完全掌握的概念。用简单的语言向"一个完全不懂的人"解释它，
                     是检验真正理解的最佳方式。
                   </p>
-                </div>
-              </div>
+                </motion.div>
+              </motion.div>
             )}
 
             {/* 步骤 2: 讲解概念 */}
             {currentStep === 2 && (
-              <div className="flex flex-col gap-kb-md py-kb-md">
-                <div>
+              <motion.div
+                className="flex flex-col gap-kb-md py-kb-md"
+                variants={staggerContainer}
+                initial="hidden"
+                animate="show"
+              >
+                <motion.div variants={staggerItem}>
                   <h2 className="text-h2 font-semibold text-text-primary">讲解「{note?.concept || '...'}」</h2>
                   <p className="text-b2 text-text-tertiary mt-1">
                     用最简洁的语言，像教给一个完全不懂的人那样，解释这个概念的核心内容。
                   </p>
-                </div>
-                <div className={cn(
+                </motion.div>
+                <motion.div variants={staggerItem} className={cn(
                   'relative min-h-[300px] flex flex-col',
                   'border border-border/50 rounded-kb-lg overflow-hidden',
                   'bg-bg-elevated',
@@ -591,14 +629,19 @@ export default function FeynmanSessionPage() {
                     <span>失焦自动保存</span>
                     <span>{localExplanation.length} 字</span>
                   </div>
-                </div>
-              </div>
+                </motion.div>
+              </motion.div>
             )}
 
             {/* 步骤 3: 标注薄弱 */}
             {currentStep === 3 && (
-              <div className="flex flex-col gap-kb-md py-kb-md">
-                <div className="flex items-center justify-between">
+              <motion.div
+                className="flex flex-col gap-kb-md py-kb-md"
+                variants={staggerContainer}
+                initial="hidden"
+                animate="show"
+              >
+                <motion.div variants={staggerItem} className="flex items-center justify-between">
                   <div>
                     <h2 className="text-h2 font-semibold text-text-primary">标注薄弱环节</h2>
                     <p className="text-b2 text-text-tertiary mt-1">
@@ -618,10 +661,10 @@ export default function FeynmanSessionPage() {
                     <Highlighter className="w-icon-sm h-icon-sm" strokeWidth={1.5} />
                     薄弱点 ({noteWeakPoints.length})
                   </button>
-                </div>
+                </motion.div>
 
                 {/* 讲解文本展示（可选中） */}
-                <div
+                <motion.div variants={staggerItem}
                   ref={explanationRef}
                   onMouseUp={handleTextSelect}
                   onKeyUp={handleTextSelect}
@@ -635,7 +678,7 @@ export default function FeynmanSessionPage() {
                   )}
                 >
                   {renderExplanationWithHighlights()}
-                </div>
+                </motion.div>
 
                 {/* 选中文本弹窗 */}
                 {selectionPopup && (
@@ -658,19 +701,24 @@ export default function FeynmanSessionPage() {
                     </button>
                   </div>
                 )}
-              </div>
+              </motion.div>
             )}
 
             {/* 步骤 4: 简化重述 */}
             {currentStep === 4 && (
-              <div className="flex flex-col gap-kb-md py-kb-md">
-                <div>
+              <motion.div
+                className="flex flex-col gap-kb-md py-kb-md"
+                variants={staggerContainer}
+                initial="hidden"
+                animate="show"
+              >
+                <motion.div variants={staggerItem}>
                   <h2 className="text-h2 font-semibold text-text-primary">简化重述</h2>
                   <p className="text-b2 text-text-tertiary mt-1">
                     用更简洁、更通俗的语言，重新讲解这个概念——这次要确保任何人都能听懂。
                   </p>
-                </div>
-                <div className={cn(
+                </motion.div>
+                <motion.div variants={staggerItem} className={cn(
                   'relative min-h-[200px] flex flex-col',
                   'border border-border/50 rounded-kb-lg overflow-hidden',
                   'bg-bg-elevated',
@@ -694,7 +742,7 @@ export default function FeynmanSessionPage() {
                     <span>失焦自动保存</span>
                     <span>{localSummary.length} 字</span>
                   </div>
-                </div>
+                </motion.div>
 
                 {/* 完成后的自评 */}
                 {isCompleted && (
@@ -1101,7 +1149,7 @@ export default function FeynmanSessionPage() {
                     )}
                   </div>
                 )}
-              </div>
+              </motion.div>
             )}
           </motion.div>
           </AnimatePresence>
