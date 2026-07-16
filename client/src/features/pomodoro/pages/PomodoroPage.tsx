@@ -109,9 +109,9 @@ export default function PomodoroPage() {
   const mainButtonIcon = isRunning ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />;
   const prefersReduced = useReducedMotion();
 
-  const immersiveEnter = prefersReduced ? {} : { opacity: 0, scale: 0.9, filter: 'blur(8px)' };
-  const immersiveAnimate = { opacity: 1, scale: 1, filter: 'blur(0px)' };
-  const immersiveExit = prefersReduced ? {} : { opacity: 0, scale: 0.95, filter: 'blur(4px)' };
+  const immersiveEnter = prefersReduced ? {} : { opacity: 0, scale: 0.9 };
+  const immersiveAnimate = { opacity: 1, scale: 1 };
+  const immersiveExit = prefersReduced ? {} : { opacity: 0, scale: 0.95 };
   const immersiveTransition = prefersReduced ? { duration: 0 } : { duration: 0.5, ease: [0.25, 0.1, 0.25, 1] as const };
 
   return (

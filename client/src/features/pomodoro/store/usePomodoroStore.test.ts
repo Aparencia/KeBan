@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock persistence layer to avoid storage coupling
+vi.mock('@/lib/achievements/evaluator', () => ({
+  checkAchievements: vi.fn().mockResolvedValue([]),
+}));
+
 vi.mock('./usePomodoroPersistence', () => ({
   loadSettings: vi.fn().mockResolvedValue(null),
   saveSettings: vi.fn().mockResolvedValue(undefined),

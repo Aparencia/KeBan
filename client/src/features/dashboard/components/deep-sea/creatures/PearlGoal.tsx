@@ -5,7 +5,7 @@
  */
 import { motion } from 'framer-motion';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
-import type { GoalProgress } from '../../types/analytics';
+import type { GoalProgress } from '@/features/dashboard/types/analytics';
 
 interface Props {
   goals: GoalProgress[];

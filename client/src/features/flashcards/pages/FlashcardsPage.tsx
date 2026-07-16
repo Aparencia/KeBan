@@ -28,20 +28,20 @@ const pageVariants = {
   visible: { transition: { staggerChildren: 0.05, delayChildren: 0.08 } },
 };
 const headerVariants = {
-  hidden: { opacity: 0, y: -16, filter: 'blur(4px)' },
-  visible: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.45, ease: [0.25, 0.1, 0.25, 1] as const } },
+  hidden: { opacity: 0, y: -16, scale: 0.97 },
+  visible: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.45, ease: [0.25, 0.1, 0.25, 1] as const } },
 };
 const gridVariants = {
   hidden: {},
   visible: { transition: { staggerChildren: 0.06, delayChildren: 0.12 } },
 };
 const deckCardVariants = {
-  hidden: { opacity: 0, y: 20, scale: 0.92, filter: 'blur(6px)' },
+  hidden: { opacity: 0, y: 20, scale: 0.92 },
   visible: {
-    opacity: 1, y: 0, scale: 1, filter: 'blur(0px)',
+    opacity: 1, y: 0, scale: 1,
     transition: { duration: 0.4, ease: [0.22, 0.61, 0.36, 1] as const },
   },
-  exit: { opacity: 0, scale: 0.9, filter: 'blur(4px)', transition: { duration: 0.2 } },
+  exit: { opacity: 0, scale: 0.9, transition: { duration: 0.2 } },
 };
 const emptyVariants = {
   hidden: { opacity: 0, scale: 0.9 },
@@ -259,7 +259,7 @@ export default function FlashcardsPage() {
             导入牌组
           </motion.button>
           <motion.button
-            whileHover={{ scale: 1.03, boxShadow: '0 0 20px rgba(123,196,184,0.25)' }}
+            whileHover={{ scale: 1.03, filter: 'drop-shadow(0 0 8px rgba(123,196,184,0.35))' }}
             whileTap={{ scale: 0.95 }}
             className="flex items-center gap-1.5 px-4 py-1.5 rounded-full text-b2 font-medium
               text-white bg-gradient-to-r from-flashcard to-flashcard/80 shadow-lg shadow-flashcard/20

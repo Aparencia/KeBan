@@ -35,13 +35,12 @@ export function AIButton({ tooltip, children, disabled, className, ...props }: A
         <motion.div
           className="absolute inset-0 rounded-[var(--kb-radius-md)] pointer-events-none"
           animate={{
-            boxShadow: [
-              '0 0 8px rgba(147,51,234,0.15)',
-              '0 0 16px rgba(147,51,234,0.25)',
-              '0 0 8px rgba(147,51,234,0.15)',
-            ],
+            opacity: [0.15, 0.3, 0.15],
           }}
           transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut' }}
+          style={{
+            filter: 'drop-shadow(0 0 12px rgba(147,51,234,0.2))',
+          }}
         />
       )}
       {isDisabled && tooltip && (

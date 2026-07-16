@@ -6,7 +6,7 @@
 import { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
-import type { TrendPoint } from '../../types/analytics';
+import type { TrendPoint } from '@/features/dashboard/types/analytics';
 
 interface Props {
   data: TrendPoint[];

@@ -26,8 +26,8 @@ function formatTimeAgo(dateStr: string): string {
 }
 
 const itemVariants = {
-  hidden: { opacity: 0, x: 12, filter: 'blur(3px)' },
-  visible: { opacity: 1, x: 0, filter: 'blur(0px)', transition: { duration: 0.3 } },
+  hidden: { opacity: 0, x: 12, scale: 0.97 },
+  visible: { opacity: 1, x: 0, scale: 1, transition: { duration: 0.3 } },
   exit: { opacity: 0, x: -8, transition: { duration: 0.2 } },
 };
 

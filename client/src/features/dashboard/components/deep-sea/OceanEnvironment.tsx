@@ -3,8 +3,8 @@
  * @description 全局深海背景：渐变底色 + 浮力粒子 + 水压深度指示器
  * @ai-context: 纯视觉组件，fixed 定位在 z-index 最低层，不响应交互
  */
-import { useMemo } from 'react';
-import { motion, useTransform } from 'framer-motion';
+import React, { useMemo } from 'react';
+import { motion } from 'framer-motion';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import type { DepthZone } from './useDepthScroll';
 
@@ -58,17 +58,13 @@ const DEPTH_MARKERS = [
   { zone: 'midnight' as DepthZone, label: '深渊', depth: '~1000m' },
 ];
 
-export default function OceanEnvironment({ depthPercent, currentZone }: Props) {
+const OceanEnvironment = React.memo(function OceanEnvironment({ depthPercent, currentZone }: Props) {
   const prefersReduced = useReducedMotion();
   const particles = useMemo(() => generateParticles(prefersReduced ? 0 : 40), [prefersReduced]);
   const colors = ZONE_COLORS[currentZone];
 
   /** 粒子密度随深度增加 */
-  const particleOpacityMultiplier = useTransform(
-    () => depthPercent,
-    [0, 0.5, 1],
-    [0.6, 1, 1.5],
-  );
+  const particleOpacityMultiplier = 0.6 + depthPercent * 0.9;
 
   return (
     <div className="fixed inset-0 pointer-events-none overflow-hidden" style={{ zIndex: 0 }}>
@@ -98,8 +94,7 @@ export default function OceanEnvironment({ depthPercent, currentZone }: Props) {
               left: `${p.x}%`,
               width: p.size,
               height: p.size,
-              filter: p.blur ? 'blur(1px)' : 'none',
-              opacity: p.opacity * (particleOpacityMultiplier.get() as number),
+              opacity: (p.blur ? 0.7 : 1) * p.opacity * particleOpacityMultiplier,
               animation: `kb-float-up ${p.duration}s ease-in-out ${p.delay}s infinite`,
             }}
           />
@@ -134,4 +129,6 @@ export default function OceanEnvironment({ depthPercent, currentZone }: Props) {
       </div>
     </div>
   );
-}
+});
+
+export default OceanEnvironment;

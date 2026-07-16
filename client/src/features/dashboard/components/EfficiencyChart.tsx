@@ -1,4 +1,4 @@
-﻿import { useMemo } from 'react';
+import { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import {
   ResponsiveContainer,
@@ -34,8 +34,8 @@ const PIE_COLORS = [BRAND_500, SUCCESS_500, WARNING_500, ERROR_500];
 // ─── Animation helpers ───────────────────────────────────────────────────────
 
 const cardVariants = {
-  hidden: { opacity: 0, y: 20, filter: 'blur(4px)' },
-  visible: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.4, ease: [0.25, 0.1, 0.25, 1] as const } },
+  hidden: { opacity: 0, y: 20, scale: 0.97 },
+  visible: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.4, ease: [0.25, 0.1, 0.25, 1] as const } },
 };
 
 // ─── Glass Card wrapper ──────────────────────────────────────────────────────

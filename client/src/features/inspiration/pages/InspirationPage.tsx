@@ -200,7 +200,7 @@ export default function InspirationPage() {
         <div className="flex items-center justify-between mt-2">
           <span className="text-c1 text-text-tertiary">Ctrl+Enter 提交</span>
           <motion.button
-            whileHover={{ scale: 1.03, boxShadow: '0 0 16px rgba(91,138,114,0.2)' }}
+            whileHover={{ scale: 1.03, outline: '2px solid rgba(91,138,114,0.3)' }}
             whileTap={{ scale: 0.95 }}
             onClick={handleSubmit}
             disabled={!input.trim() || submitting}

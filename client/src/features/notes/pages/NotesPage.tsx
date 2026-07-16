@@ -1,4 +1,4 @@
-﻿import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button, Card, Input, Tag, EmptyState, Modal } from '@/components/ui';
 import { useToast } from '@/components/ui';
@@ -59,10 +59,10 @@ const listVariants = {
   visible: { transition: { staggerChildren: 0.04 } },
 };
 const noteCardVariants = {
-  hidden: { opacity: 0, y: 12, scale: 0.98, filter: 'blur(3px)' },
+  hidden: { opacity: 0, y: 12, scale: 0.97 },
   visible: {
-    opacity: 1, y: 0, scale: 1, filter: 'blur(0px)',
-    transition: { type: 'spring', stiffness: 350, damping: 28 },
+    opacity: 1, y: 0, scale: 1,
+    transition: { type: 'spring' as const, stiffness: 350, damping: 28 },
   },
 };
 
@@ -450,10 +450,10 @@ export default function NotesPage() {
           {selectedNote ? (
             <motion.div
               key={selectedNote.id}
-              initial={{ opacity: 0, x: 12, filter: 'blur(4px)' }}
-              animate={{ opacity: 1, x: 0, filter: 'blur(0px)' }}
-              exit={{ opacity: 0, x: -8, filter: 'blur(3px)' }}
-              transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+              initial={{ opacity: 0, x: 12, scale: 0.97 }}
+              animate={{ opacity: 1, x: 0, scale: 1 }}
+              exit={{ opacity: 0, x: -8, scale: 0.97 }}
+              transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] as const }}
               className="p-kb-md flex flex-col gap-4"
           >
             <div>

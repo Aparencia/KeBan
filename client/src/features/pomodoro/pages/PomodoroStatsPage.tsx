@@ -226,7 +226,7 @@ export default function PomodoroStatsPage() {
       {/* Page title */}
       <motion.h1
         className="text-h1 font-semibold text-text-primary mb-kb-lg"
-        variants={{ hidden: { opacity: 0, y: -12, filter: 'blur(3px)' }, visible: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.4 } } }}
+        variants={{ hidden: { opacity: 0, y: -12, scale: 0.97 }, visible: { opacity: 1, y: 0, transition: { duration: 0.4 } } }}
       >专注统计</motion.h1>
 
       {/* Time range selector - segmented control */}
@@ -257,7 +257,7 @@ export default function PomodoroStatsPage() {
         className="grid grid-cols-3 gap-kb-md mb-kb-lg"
         variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.08, delayChildren: 0.1 } } }}
       >
-        <motion.div variants={{ hidden: { opacity: 0, y: 16, filter: 'blur(4px)' }, visible: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.35 } } }}>
+        <motion.div variants={{ hidden: { opacity: 0, y: 16, scale: 0.97 }, visible: { opacity: 1, y: 0, transition: { duration: 0.35 } } }}>
         <Card variant="default" padding="md" className="relative overflow-hidden">
           <div className="absolute inset-0 opacity-0 hover:opacity-100 transition-opacity duration-500 pointer-events-none"
             style={{ background: 'linear-gradient(135deg, rgba(91,138,114,0.04) 0%, transparent 60%)' }} />
@@ -275,7 +275,7 @@ export default function PomodoroStatsPage() {
         </Card>
         </motion.div>
 
-        <motion.div variants={{ hidden: { opacity: 0, y: 16, filter: 'blur(4px)' }, visible: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.35 } } }}>
+        <motion.div variants={{ hidden: { opacity: 0, y: 16, scale: 0.97 }, visible: { opacity: 1, y: 0, transition: { duration: 0.35 } } }}>
         <Card variant="default" padding="md" className="relative overflow-hidden">
           <div className="absolute inset-0 opacity-0 hover:opacity-100 transition-opacity duration-500 pointer-events-none"
             style={{ background: 'linear-gradient(135deg, rgba(91,138,114,0.04) 0%, transparent 60%)' }} />
@@ -293,7 +293,7 @@ export default function PomodoroStatsPage() {
         </Card>
         </motion.div>
 
-        <motion.div variants={{ hidden: { opacity: 0, y: 16, filter: 'blur(4px)' }, visible: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.35 } } }}>
+        <motion.div variants={{ hidden: { opacity: 0, y: 16, scale: 0.97 }, visible: { opacity: 1, y: 0, transition: { duration: 0.35 } } }}>
         <Card variant="default" padding="md" className="relative overflow-hidden">
           <div className="absolute inset-0 opacity-0 hover:opacity-100 transition-opacity duration-500 pointer-events-none"
             style={{ background: 'linear-gradient(135deg, rgba(245,158,11,0.04) 0%, transparent 60%)' }} />
@@ -311,7 +311,7 @@ export default function PomodoroStatsPage() {
       </motion.div>
 
       {/* Bar chart - weekly focus */}
-      <motion.div variants={{ hidden: { opacity: 0, y: 20, filter: 'blur(4px)' }, visible: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.4 } } }}>
+      <motion.div variants={{ hidden: { opacity: 0, y: 20, scale: 0.97 }, visible: { opacity: 1, y: 0, transition: { duration: 0.4 } } }}>
       <Card variant="default" padding="lg" className="mb-kb-lg">
         <div className="flex items-center gap-2 mb-kb-md">
           <TrendingUp className="w-icon-sm h-icon-sm text-brand-600" strokeWidth={1.5} />
@@ -346,7 +346,7 @@ export default function PomodoroStatsPage() {
       </motion.div>
 
       {/* Heatmap - focus intensity */}
-      <motion.div variants={{ hidden: { opacity: 0, y: 20, filter: 'blur(4px)' }, visible: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.4 } } }}>
+      <motion.div variants={{ hidden: { opacity: 0, y: 20, scale: 0.97 }, visible: { opacity: 1, y: 0, transition: { duration: 0.4 } } }}>
       <Card variant="default" padding="lg" className="mb-kb-lg">
         <h2 className="text-h3 font-medium text-text-primary mb-kb-md">专注热力图</h2>
 
@@ -383,7 +383,7 @@ export default function PomodoroStatsPage() {
       </motion.div>
 
       {/* 每日番茄数柱状图 */}
-      <motion.div variants={{ hidden: { opacity: 0, y: 20, filter: 'blur(4px)' }, visible: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.4 } } }}>
+      <motion.div variants={{ hidden: { opacity: 0, y: 20, scale: 0.97 }, visible: { opacity: 1, y: 0, transition: { duration: 0.4 } } }}>
       <Card variant="default" padding="lg" className="mb-kb-lg">
         <div className="flex items-center justify-between mb-kb-md">
           <div className="flex items-center gap-2">
@@ -425,7 +425,7 @@ export default function PomodoroStatsPage() {
       </motion.div>
 
       {/* 每日专注时长折线图 */}
-      <motion.div variants={{ hidden: { opacity: 0, y: 20, filter: 'blur(4px)' }, visible: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.4 } } }}>
+      <motion.div variants={{ hidden: { opacity: 0, y: 20, scale: 0.97 }, visible: { opacity: 1, y: 0, transition: { duration: 0.4 } } }}>
       <Card variant="default" padding="lg">
         <div className="flex items-center gap-2 mb-kb-md">
           <Clock className="w-icon-sm h-icon-sm text-brand-600" strokeWidth={1.5} />

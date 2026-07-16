@@ -169,11 +169,11 @@ export default function PomodoroSettingsPage() {
     >
       <motion.h1
         className="text-h1 font-semibold text-text-primary mb-kb-lg"
-        variants={{ hidden: { opacity: 0, y: -12, filter: 'blur(3px)' }, visible: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.35 } } }}
+        variants={{ hidden: { opacity: 0, y: -12, scale: 0.97 }, visible: { opacity: 1, y: 0, transition: { duration: 0.35 } } }}
       >深潜设置</motion.h1>
 
       {/* Duration settings */}
-      <motion.div variants={{ hidden: { opacity: 0, y: 16, filter: 'blur(3px)' }, visible: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.35 } } }}>
+      <motion.div variants={{ hidden: { opacity: 0, y: 16, scale: 0.97 }, visible: { opacity: 1, y: 0, transition: { duration: 0.35 } } }}>
       <Card variant="default" padding="lg" className="mb-kb-md">
         <div className="flex items-center gap-2 mb-kb-md">
           <Timer className="w-icon-sm h-icon-sm text-pomodoro" strokeWidth={1.5} />
@@ -232,7 +232,7 @@ export default function PomodoroSettingsPage() {
       </motion.div>
 
       {/* Class mode settings */}
-      <motion.div variants={{ hidden: { opacity: 0, y: 16, filter: 'blur(3px)' }, visible: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.35 } } }}>
+      <motion.div variants={{ hidden: { opacity: 0, y: 16, scale: 0.97 }, visible: { opacity: 1, y: 0, transition: { duration: 0.35 } } }}>
       <Card variant="default" padding="lg" className="mb-kb-md">
         <div className="flex items-center gap-2 mb-kb-md">
           <GraduationCap className="w-icon-sm h-icon-sm text-brand-600" strokeWidth={1.5} />
@@ -256,7 +256,7 @@ export default function PomodoroSettingsPage() {
       </motion.div>
 
       {/* Automation settings */}
-      <motion.div variants={{ hidden: { opacity: 0, y: 16, filter: 'blur(3px)' }, visible: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.35 } } }}>
+      <motion.div variants={{ hidden: { opacity: 0, y: 16, scale: 0.97 }, visible: { opacity: 1, y: 0, transition: { duration: 0.35 } } }}>
       <Card variant="default" padding="lg" className="mb-kb-md">
         <div className="flex items-center gap-2 mb-kb-sm">
           <Zap className="w-icon-sm h-icon-sm text-semantic-warning" strokeWidth={1.5} />
@@ -281,7 +281,7 @@ export default function PomodoroSettingsPage() {
       </motion.div>
 
       {/* Notification settings */}
-      <motion.div variants={{ hidden: { opacity: 0, y: 16, filter: 'blur(3px)' }, visible: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.35 } } }}>
+      <motion.div variants={{ hidden: { opacity: 0, y: 16, scale: 0.97 }, visible: { opacity: 1, y: 0, transition: { duration: 0.35 } } }}>
       <Card variant="default" padding="lg" className="mb-kb-xl">
         <div className="flex items-center gap-2 mb-kb-sm">
           <Bell className="w-icon-sm h-icon-sm text-brand-600" strokeWidth={1.5} />
@@ -306,7 +306,7 @@ export default function PomodoroSettingsPage() {
       </motion.div>
 
       {/* AI 智能推荐 */}
-      <motion.div variants={{ hidden: { opacity: 0, y: 16, filter: 'blur(3px)' }, visible: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.35 } } }}>
+      <motion.div variants={{ hidden: { opacity: 0, y: 16, scale: 0.97 }, visible: { opacity: 1, y: 0, transition: { duration: 0.35 } } }}>
       <Card variant="default" padding="lg" className="mb-kb-xl">
         <div className="flex items-center gap-2 mb-kb-md">
           <Sparkles className="w-icon-sm h-icon-sm text-brand-500" strokeWidth={1.5} />
@@ -440,7 +440,7 @@ export default function PomodoroSettingsPage() {
       </motion.div>
 
       {/* 音效设置 */}
-      <motion.div variants={{ hidden: { opacity: 0, y: 16, filter: 'blur(3px)' }, visible: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.35 } } }}>
+      <motion.div variants={{ hidden: { opacity: 0, y: 16, scale: 0.97 }, visible: { opacity: 1, y: 0, transition: { duration: 0.35 } } }}>
       <Card variant="default" padding="lg" className="mb-kb-xl">
         <div className="flex items-center gap-2 mb-kb-sm">
           <Music className="w-icon-sm h-icon-sm text-brand-500" strokeWidth={1.5} />

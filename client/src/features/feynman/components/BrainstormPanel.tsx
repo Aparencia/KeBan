@@ -41,7 +41,7 @@ const cardVariants = {
   hidden: { opacity: 0, y: 16, scale: 0.92 },
   visible: {
     opacity: 1, y: 0, scale: 1,
-    transition: { duration: 0.45, ease: [0.34, 1.56, 0.64, 1] },
+    transition: { duration: 0.45, ease: [0.34, 1.56, 0.64, 1] as const },
   },
 };
 

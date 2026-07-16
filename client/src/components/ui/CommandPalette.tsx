@@ -141,9 +141,9 @@ export default function CommandPalette() {
               'w-[560px] max-h-[400px] flex flex-col',
               'border border-border/40',
             )}
-            initial={{ opacity: 0, scale: 0.95, y: -20, filter: 'blur(8px)' }}
-            animate={{ opacity: 1, scale: 1, y: 0, filter: 'blur(0px)' }}
-            exit={{ opacity: 0, scale: 0.95, y: -10, filter: 'blur(4px)' }}
+            initial={{ opacity: 0, scale: 0.95, y: -20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: -10 }}
             transition={{ duration: 0.25, ease: [0.25, 0.1, 0.25, 1] as const }}
             onClick={(e) => e.stopPropagation()}
             onKeyDown={handleKeyDown}

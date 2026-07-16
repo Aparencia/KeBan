@@ -409,8 +409,8 @@ export default function FeynmanSessionPage() {
       {/* 顶栏 */}
       <motion.div
         className="flex items-center gap-kb-sm px-kb-md py-3 border-b border-border/50 flex-shrink-0 relative z-10"
-        initial={{ opacity: 0, y: -8, filter: 'blur(3px)' }}
-        animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+        initial={{ opacity: 0, y: -8, scale: 0.97 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.35, delay: 0.05 }}
       >
         <button
@@ -498,11 +498,11 @@ export default function FeynmanSessionPage() {
             className="max-w-2xl mx-auto"
             initial={prefersReduced
               ? { opacity: 0 }
-              : { opacity: 0, y: 16, scale: 0.97, filter: 'blur(6px)' }}
-            animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
+              : { opacity: 0, y: 16, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={prefersReduced
               ? { opacity: 0 }
-              : { opacity: 0, y: -12, scale: 1.02, filter: 'blur(4px)' }}
+              : { opacity: 0, y: -12, scale: 0.97 }}
             transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] as const }}
           >
 
@@ -1115,9 +1115,9 @@ export default function FeynmanSessionPage() {
               'shadow-[-8px_0_24px_rgba(0,0,0,0.12)]',
               'overflow-y-auto hidden md:block',
             )}
-            initial={{ opacity: 0, x: 24, filter: 'blur(4px)' }}
-            animate={{ opacity: 1, x: 0, filter: 'blur(0px)' }}
-            exit={{ opacity: 0, x: 16, filter: 'blur(3px)' }}
+            initial={{ opacity: 0, x: 24, scale: 0.97 }}
+            animate={{ opacity: 1, x: 0, scale: 1 }}
+            exit={{ opacity: 0, x: 16, scale: 0.97 }}
             transition={{ duration: 0.25, ease: [0.25, 0.1, 0.25, 1] as const }}
           >
             <div className="p-kb-md">
@@ -1139,8 +1139,8 @@ export default function FeynmanSessionPage() {
                   {noteWeakPoints.map((wp, i) => (
                     <motion.div
                       key={wp.id}
-                      initial={{ opacity: 0, y: 8, filter: 'blur(3px)' }}
-                      animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+                      initial={{ opacity: 0, y: 8, scale: 0.97 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
                       transition={{ duration: 0.25, delay: i * 0.05 }}
                       className={cn(
                         'flex gap-2.5 p-3 rounded-kb-md',

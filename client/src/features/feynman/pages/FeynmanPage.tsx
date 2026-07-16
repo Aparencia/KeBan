@@ -1,4 +1,4 @@
-﻿import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Card, Button, Tag, Modal, Input, EmptyState, Skeleton, ContextMenu } from '@/components/ui';
 import type { ContextMenuGroup } from '@/components/ui';
@@ -39,24 +39,24 @@ const pageVariants = {
   visible: { transition: { staggerChildren: 0.04, delayChildren: 0.06 } },
 };
 const headerVariants = {
-  hidden: { opacity: 0, y: -16, filter: 'blur(4px)' },
-  visible: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.45, ease: [0.25, 0.1, 0.25, 1] as const } },
+  hidden: { opacity: 0, y: -16, scale: 0.97 },
+  visible: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.45, ease: [0.25, 0.1, 0.25, 1] as const } },
 };
 const listVariants = {
   hidden: {},
   visible: { transition: { staggerChildren: 0.05, delayChildren: 0.1 } },
 };
 const noteCardVariants = {
-  hidden: { opacity: 0, x: -20, filter: 'blur(4px)' },
+  hidden: { opacity: 0, x: -20, scale: 0.97 },
   visible: {
-    opacity: 1, x: 0, filter: 'blur(0px)',
-    transition: { type: 'spring', stiffness: 300, damping: 28 },
+    opacity: 1, x: 0, scale: 1,
+    transition: { type: 'spring' as const, stiffness: 300, damping: 28 },
   },
-  exit: { opacity: 0, x: 20, scale: 0.95, filter: 'blur(3px)', transition: { duration: 0.2 } },
+  exit: { opacity: 0, x: 20, scale: 0.95, transition: { duration: 0.2 } },
 };
 const weakBarVariants = {
   hidden: { opacity: 0, y: 20, scale: 0.95 },
-  visible: { opacity: 1, y: 0, scale: 1, transition: { type: 'spring', stiffness: 300, damping: 25, delay: 0.2 } },
+  visible: { opacity: 1, y: 0, scale: 1, transition: { type: 'spring' as const, stiffness: 300, damping: 25, delay: 0.2 } },
 };
 
 export default function FeynmanPage() {
@@ -185,7 +185,7 @@ export default function FeynmanPage() {
           <p className="text-b2 text-text-tertiary mt-0.5">用讲解检验理解，以简化证明掌握</p>
         </div>
         <motion.button
-          whileHover={{ scale: 1.03, boxShadow: '0 0 20px rgba(245,158,11,0.2)' }}
+          whileHover={{ scale: 1.03, filter: 'drop-shadow(0 0 8px rgba(245,158,11,0.3))' }}
           whileTap={{ scale: 0.95 }}
           className="flex items-center gap-1.5 px-4 py-1.5 rounded-full text-b2 font-medium
             text-white bg-gradient-to-r from-[#F59E0B] to-[#D97706] shadow-lg shadow-[#F59E0B]/20"
@@ -484,8 +484,8 @@ export default function FeynmanPage() {
                 <motion.div
                   key={wp.id}
                   variants={{
-                    hidden: { opacity: 0, y: 8, filter: 'blur(2px)' },
-                    visible: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.25 } },
+                    hidden: { opacity: 0, y: 8, scale: 0.97 },
+                    visible: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.25 } },
                   }}
                   className="flex items-start gap-3 p-3 rounded-kb-lg bg-bg-secondary/80 backdrop-blur-sm border border-border/40
                     hover:border-[#F59E0B]/30 transition-colors duration-200"

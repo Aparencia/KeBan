@@ -18,6 +18,39 @@ vi.mock('@/lib/crypto', () => ({
   },
 }));
 
+// Mock writeWithLog to avoid OfflineQueue → database import chain
+vi.mock('@/lib/storage/writeWithLog', async (importOriginal) => {
+  const { logOperation } = await import('@/lib/storage/operationLog') as any;
+  const { generateId } = await import('@/lib/utils/uuid') as any;
+  return {
+    createWithLog: async (repo: any, _entityType: string, data: any) => {
+      const id = generateId();
+      const item = { ...data, id };
+      await repo.create(item);
+      await logOperation(_entityType, id, 'create', item);
+      return id;
+    },
+    updateWithLog: async (repo: any, entityType: string, id: string, changes: any) => {
+      await repo.update(id, changes);
+      await logOperation(entityType, id, 'update', changes);
+    },
+    deleteWithLog: async (repo: any, entityType: string, id: string) => {
+      const existing = await repo.getById(id);
+      await repo.delete(id);
+      await logOperation(entityType, id, 'delete', existing);
+    },
+  };
+});
+
+// Mock SoundPlayer to avoid AudioContext in jsdom
+vi.mock('@/lib/audio/SoundPlayer', () => ({
+  soundPlayer: {
+    play: vi.fn(),
+    preload: vi.fn(),
+    preloadAll: vi.fn().mockResolvedValue(undefined),
+  },
+}));
+
 // Mock storage to isolate pure business logic
 vi.mock('@/lib/storage', () => ({
   feynmanNoteStore: {

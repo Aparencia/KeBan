@@ -6,6 +6,16 @@ import { soundPlayer } from '@/lib/audio/SoundPlayer';
 type Phase = 'work' | 'short_break' | 'long_break';
 type Mode = 'class' | 'self_study';
 
+/** 番茄钟动作信号类型（供 usePomodoroEffects 监听） */
+export type PomodoroAction =
+  | 'start'
+  | 'pause'
+  | 'exit_immersive'
+  | 'tick_5min_warning'
+  | 'tick_final'
+  | 'phase_complete'
+  | null;
+
 interface PomodoroSettings {
   workDuration: number;
   shortBreakDuration: number;
@@ -39,6 +49,16 @@ interface PomodoroState {
   aiRecommendedDuration?: number;
   /** AI 推荐理由文本 */
   aiReasoning?: string;
+
+  /** 动作信号（供 usePomodoroEffects 消费） */
+  lastAction: PomodoroAction;
+  lastActionCounter: number;
+  /** phase_complete 时附带的已完成阶段 */
+  lastCompletedPhase: Phase | null;
+  /** phase_complete 时是否完成整轮 */
+  isCycleComplete: boolean;
+  /** phase_complete 时实际持续秒数 */
+  lastSessionActualDuration: number | null;
 
   start: () => void;
   pause: () => void;
@@ -111,6 +131,11 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
     wasImmersive: false,
     aiRecommendedDuration: undefined,
     aiReasoning: undefined,
+    lastAction: null,
+    lastActionCounter: 0,
+    lastCompletedPhase: null,
+    isCycleComplete: false,
+    lastSessionActualDuration: null,
 
     initialize: async () => {
       const saved = await loadSettings();
@@ -133,12 +158,18 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
     },
 
     start: () => {
-      set({ isRunning: true, isPaused: false, sessionStartTime: Date.now() });
+      set((s) => ({
+        isRunning: true, isPaused: false, sessionStartTime: Date.now(),
+        lastAction: 'start' as PomodoroAction, lastActionCounter: s.lastActionCounter + 1,
+      }));
       soundPlayer.play('pomodoro_start');
     },
 
     pause: () => {
-      set({ isRunning: false, isPaused: true });
+      set((s) => ({
+        isRunning: false, isPaused: true,
+        lastAction: 'pause' as PomodoroAction, lastActionCounter: s.lastActionCounter + 1,
+      }));
       soundPlayer.play('pomodoro_pause');
     },
 
@@ -205,7 +236,10 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
       if (isRunning) {
         soundPlayer.play('pomodoro_pause');
       }
-      set({ isImmersive: false, wasImmersive: true, isRunning: false, isPaused: true });
+      set((s) => ({
+        isImmersive: false, wasImmersive: true, isRunning: false, isPaused: true,
+        lastAction: 'exit_immersive' as PomodoroAction, lastActionCounter: s.lastActionCounter + 1,
+      }));
     },
 
     tick: () => {
@@ -218,6 +252,7 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
         const newCount = phase === 'long_break' ? 0 : (phase === 'work' ? completedCount + 1 : completedCount);
         const nextPhase = getNextPhase(phase, completedCount, settings.longBreakInterval, mode);
         const duration = getPhaseDuration(nextPhase, settings, mode);
+        const isCycleComplete = phase === 'long_break';
 
         // Determine auto-start behavior
         let shouldAutoStart = false;
@@ -232,10 +267,11 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
         }
 
         // 记录完成的番茄会话
+        let actualDuration: number | null = null;
         if (phase === 'work') {
           const { sessionStartTime: sst } = get();
           const workMinutes = mode === 'class' ? settings.classDuration : settings.workDuration;
-          const actualDuration = sst
+          actualDuration = sst
             ? Math.round((Date.now() - sst) / 1000)
             : workMinutes * 60;
           recordSession({
@@ -282,7 +318,7 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
           }
         }
 
-        set({
+        set((s) => ({
           phase: nextPhase,
           remainingSeconds: duration,
           totalSeconds: duration,
@@ -291,7 +327,13 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
           isPaused: !shouldAutoStart,
           // 切换到新阶段时清空计时，下一个 start/resume 会重新设置
           sessionStartTime: null,
-        });
+          // 发出 phase_complete 动作信号
+          lastAction: 'phase_complete' as PomodoroAction,
+          lastActionCounter: s.lastActionCounter + 1,
+          lastCompletedPhase: phase,
+          isCycleComplete,
+          lastSessionActualDuration: actualDuration,
+        }));
       } else {
         const nextRemaining = remainingSeconds - 1;
         // BUG-005 fix: 上课模式跳过预警和滴答音
@@ -299,10 +341,18 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
           // 5 分钟预警（工作阶段）
           if (phase === 'work' && nextRemaining === 300) {
             soundPlayer.play('pomodoro_5min_warning');
+            set((s) => ({
+              lastAction: 'tick_5min_warning' as PomodoroAction,
+              lastActionCounter: s.lastActionCounter + 1,
+            }));
           }
           // 最后 10 秒滴答
           if (phase === 'work' && nextRemaining <= 10 && nextRemaining > 0) {
             soundPlayer.play('pomodoro_tick_final');
+            set((s) => ({
+              lastAction: 'tick_final' as PomodoroAction,
+              lastActionCounter: s.lastActionCounter + 1,
+            }));
           }
         }
         set({ remainingSeconds: nextRemaining });
@@ -368,6 +418,22 @@ export const usePomodoroImmersive = () =>
   usePomodoroStore(useShallow(s => ({
     isImmersive: s.isImmersive,
     wasImmersive: s.wasImmersive,
+  })));
+
+/**
+ * 动作信号 hook — 供 usePomodoroEffects 消费
+ * 返回 lastAction、lastActionCounter 及 phase_complete 所需的上下文
+ */
+export const usePomodoroActionSignal = () =>
+  usePomodoroStore(useShallow(s => ({
+    lastAction: s.lastAction,
+    lastActionCounter: s.lastActionCounter,
+    lastCompletedPhase: s.lastCompletedPhase,
+    isCycleComplete: s.isCycleComplete,
+    lastSessionActualDuration: s.lastSessionActualDuration,
+    mode: s.mode,
+    settings: s.settings,
+    currentGoal: s.currentGoal,
   })));
 
 /** 计时器显示所需的最小订阅集（复合，useShallow 防引用不等） */

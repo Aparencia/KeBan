@@ -313,7 +313,7 @@ export default function DeckDetailPage() {
       >
         {statItems.map(({ label, value, icon: Icon, color }) => (
           <motion.div key={label}
-            variants={{ hidden: { opacity: 0, y: 12, filter: 'blur(3px)' }, visible: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.3 } } }}
+            variants={{ hidden: { opacity: 0, y: 12, scale: 0.97 }, visible: { opacity: 1, y: 0, transition: { duration: 0.3 } } }}
           >
             <Card padding="sm" className="flex flex-col items-center gap-1 text-center">
               <Icon className={cn('w-icon-sm h-icon-sm', color)} strokeWidth={1.5} />
@@ -451,7 +451,7 @@ export default function DeckDetailPage() {
           >
             {cards.map((card) => (
               <motion.div key={card.id}
-                variants={{ hidden: { opacity: 0, x: -12, filter: 'blur(3px)' }, visible: { opacity: 1, x: 0, filter: 'blur(0px)', transition: { duration: 0.25 } } }}
+                variants={{ hidden: { opacity: 0, x: -12, scale: 0.97 }, visible: { opacity: 1, x: 0, transition: { duration: 0.25 } } }}
                 whileHover={prefersReduced ? undefined : { y: -3, transition: { type: 'spring', stiffness: 400, damping: 20 } }}
                 whileTap={prefersReduced ? undefined : { scale: 0.98, transition: { type: 'spring', stiffness: 500, damping: 30 } }}
               >

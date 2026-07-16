@@ -150,7 +150,7 @@ export default function InspirationConstellation({
   onFlyInComplete,
 }: InspirationConstellationProps) {
   const reducedMotion = useReducedMotion();
-  const prefersReduced = prefersReducedProp ?? reducedMotion;
+  const prefersReduced = prefersReducedProp ?? reducedMotion ?? false;
 
   // L2 降级：hooks 之后 early return
   if (degradation === 'L2') return null;

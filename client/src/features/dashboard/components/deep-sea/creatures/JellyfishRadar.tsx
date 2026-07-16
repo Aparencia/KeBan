@@ -3,10 +3,11 @@
  * @description 五维雷达以水母脉冲环形态呈现，每个维度为一条发光触手
  * @ai-context: 替代原 RadarChart.tsx，兼容 RadarDimension 数据接口
  */
-import { useMemo } from 'react';
+import React, { useMemo, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
-import type { RadarDimension } from '../../types/analytics';
+import { useInViewAnimation } from '@/hooks/useInViewAnimation';
+import type { RadarDimension } from '@/features/dashboard/types/analytics';
 
 interface Props {
   data: RadarDimension[];
@@ -34,8 +35,10 @@ function JellyfishRadarSkeleton() {
   );
 }
 
-export default function JellyfishRadar({ data, loading }: Props) {
+const JellyfishRadar = React.memo(function JellyfishRadar({ data, loading }: Props) {
   const prefersReduced = useReducedMotion();
+  const containerRef = useRef<HTMLDivElement>(null);
+  const isInView = useInViewAnimation(containerRef);
   const cx = 100, cy = 100, maxR = 70;
 
   /** 背景五边形网格（3层） */
@@ -64,6 +67,7 @@ export default function JellyfishRadar({ data, loading }: Props) {
 
   return (
     <motion.div
+      ref={containerRef}
       className="relative w-full flex flex-col items-center"
       whileHover={{ scale: 1.02 }}
       transition={{ duration: 0.4, ease: 'easeOut' }}
@@ -107,7 +111,7 @@ export default function JellyfishRadar({ data, loading }: Props) {
         />
 
         {/* 脉冲动画 */}
-        {!prefersReduced && (
+        {!prefersReduced && isInView && (
           <motion.path
             d={dataPath}
             fill="none"
@@ -145,4 +149,6 @@ export default function JellyfishRadar({ data, loading }: Props) {
       </svg>
     </motion.div>
   );
-}
+});
+
+export default JellyfishRadar;

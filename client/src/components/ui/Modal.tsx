@@ -78,9 +78,9 @@ export const Modal: React.FC<ModalProps> = ({
                     'p-kb-lg',
                     sizeClasses[size],
                   )}
-                  initial={{ opacity: 0, y: 8, filter: 'blur(4px)' }}
-                  animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-                  exit={{ opacity: 0, y: 8, filter: 'blur(2px)' }}
+                  initial={{ opacity: 0, y: 8, scale: 0.97 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 8, scale: 0.97 }}
                   transition={{ duration: 0.4, ease: [0, 0, 0.2, 1] }}
                 >
                   {/* ── 顶部渐变装饰线 ── */}

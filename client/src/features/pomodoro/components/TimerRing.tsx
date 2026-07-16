@@ -195,8 +195,8 @@ export default function TimerRing({
             fontVariantNumeric: 'tabular-nums',
           }}
           key={timeStr}
-          initial={{ opacity: 0.6, y: 2, filter: 'blur(1px)' }}
-          animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+          initial={{ opacity: 0.6, y: 2, scale: 0.97 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
           transition={{ duration: 0.15 }}
         >
           {timeStr}
