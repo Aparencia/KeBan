@@ -1,0 +1,99 @@
+/* ============================================
+   Dashboard「知识星空」专属样式
+   ============================================ */
+
+/* ── 粒子动画 ── */
+.kb-particle {
+  /* 浅色模式：琥珀/蓝色柔和粒子 */
+  background: radial-gradient(circle, var(--kb-brand-400) 0%, var(--kb-accent-400) 100%);
+  animation: kb-particle-drift var(--duration, 20s) ease-in-out infinite,
+             kb-particle-breathe 3s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+[data-theme="dark"] .kb-particle {
+  /* 深色模式：靛蓝/赛博青粒子 */
+  background: radial-gradient(circle, var(--kb-brand-400) 0%, var(--kb-cyber-cyan) 100%);
+}
+
+@keyframes kb-particle-drift {
+  0%, 100% {
+    transform: translate(0, 0);
+  }
+  25% {
+    transform: translate(calc(var(--drift-x, 20px) * 0.5), calc(var(--drift-y, 15px) * -0.3));
+  }
+  50% {
+    transform: translate(var(--drift-x, 20px), var(--drift-y, 15px));
+  }
+  75% {
+    transform: translate(calc(var(--drift-x, 20px) * 0.3), calc(var(--drift-y, 15px) * 0.7));
+  }
+}
+
+@keyframes kb-particle-breathe {
+  0%, 100% { opacity: var(--particle-opacity, 1); }
+  50% { opacity: calc(var(--particle-opacity, 1) * 0.4); }
+}
+
+/* ── 英雄区域背景渐变 ── */
+.kb-hero-gradient {
+  background: linear-gradient(
+    135deg,
+    var(--kb-accent-50) 0%,
+    var(--kb-brand-50) 40%,
+    var(--kb-bg-primary) 100%
+  );
+}
+
+[data-theme="dark"] .kb-hero-gradient {
+  background: linear-gradient(
+    135deg,
+    var(--kb-brand-50) 0%,
+    var(--kb-bg-primary) 50%,
+    var(--kb-accent-50) 100%
+  );
+}
+
+/* ── 核心数据呼吸动效 ── */
+.kb-stat-breathe {
+  animation: kb-stat-glow 3s ease-in-out infinite;
+}
+
+@keyframes kb-stat-glow {
+  0%, 100% { opacity: 1; text-shadow: none; }
+  50% { opacity: 0.88; text-shadow: 0 0 20px currentColor; }
+}
+
+/* ── 知识预览区交融渐变分割线 ── */
+.kb-section-blend::before {
+  content: '';
+  position: absolute;
+  top: -40px;
+  left: 10%;
+  right: 10%;
+  height: 80px;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    var(--kb-bg-primary) 50%,
+    transparent
+  );
+  pointer-events: none;
+  mask-image: radial-gradient(ellipse at center, black 40%, transparent 80%);
+  -webkit-mask-image: radial-gradient(ellipse at center, black 40%, transparent 80%);
+}
+
+/* ── reduced motion 降级 ── */
+@media (prefers-reduced-motion: reduce) {
+  .kb-particle {
+    animation: none !important;
+    display: none;
+  }
+  .kb-stat-breathe {
+    animation: none !important;
+  }
+  .kb-hero-gradient {
+    transition: none;
+  }
+}

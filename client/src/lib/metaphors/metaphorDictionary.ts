@@ -131,7 +131,7 @@ export function getStatusMetaphor(status: StatusKey): string {
  * getEmptyStateText('notes') // '尚未结礁，开始记录你的第一片知识珊瑚'
  */
 export function getEmptyStateText(module: EmptyStateKey): string {
-  const candidates = METAPHOR_MAP.emptyStates[module];
+  const candidates: readonly string[] = METAPHOR_MAP.emptyStates[module];
   if (!candidates || candidates.length === 0) {
     return '这里空空如也';
   }

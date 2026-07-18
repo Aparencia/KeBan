@@ -159,21 +159,7 @@ export default function FeynmanPage() {
       initial="hidden"
       animate="visible"
     >
-      {/* ── 背景环境光 ── */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        <motion.div
-          className="absolute -top-24 right-0 w-80 h-80 rounded-full opacity-[0.06]"
-          style={{ background: 'radial-gradient(circle, #F59E0B 0%, transparent 70%)' }}
-          animate={{ scale: [1, 1.2, 1], opacity: [0.06, 0.09, 0.06] }}
-          transition={{ duration: 9, repeat: Infinity, ease: 'easeInOut' }}
-        />
-        <motion.div
-          className="absolute bottom-0 -left-20 w-64 h-64 rounded-full opacity-[0.04]"
-          style={{ background: 'radial-gradient(circle, #5B8A72 0%, transparent 70%)' }}
-          animate={{ scale: [1, 1.15, 1], opacity: [0.04, 0.07, 0.04] }}
-          transition={{ duration: 11, repeat: Infinity, ease: 'easeInOut', delay: 3 }}
-        />
-      </div>
+      {/* 背景环境光 — 由3D场景提供，已移除 */}
 
       {/* ── 顶部 ── */}
       <motion.div

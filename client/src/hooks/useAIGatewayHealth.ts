@@ -43,6 +43,7 @@ const AUTO_CHECK_INTERVAL = 30_000;
 // ── 模块级缓存（跨组件共享） ──
 let cachedResult: HealthResult | null = null;
 let cachedTimestamp = 0;
+let requestId = 0; // 竞态条件保护：仅最新请求写入缓存
 const CACHE_TTL_ONLINE = 2 * 60_000;    // 在线时 2 分钟内视为有效
 const CACHE_TTL_DEGRADED = 60_000;      // 降级时 1 分钟内视为有效
 const CACHE_TTL_OFFLINE = 5 * 60_000;   // 离线时 5 分钟内视为有效，避免反复 fetch 产生控制台噪音
@@ -79,12 +80,14 @@ export function precheckGatewayHealth(): void {
     return;
   }
 
+  const currentRequestId = ++requestId;
   const start = performance.now();
   fetch(`${url}/health/quick`, {
     method: 'GET',
     signal: AbortSignal.timeout(HEALTH_CHECK_TIMEOUT),
   })
     .then(async (res) => {
+      if (currentRequestId !== requestId) return;
       const latency = Math.round(performance.now() - start);
       if (res.ok) {
         let version: string | undefined;
@@ -98,6 +101,7 @@ export function precheckGatewayHealth(): void {
           // 无法解析 JSON 但 HTTP 200，仍视为在线
           serverOk = true;
         }
+        if (currentRequestId !== requestId) return;
         cachedResult = serverOk
           ? { status: 'online', latency, version }
           : { status: 'offline', errorType: 'server_error' };
@@ -107,6 +111,7 @@ export function precheckGatewayHealth(): void {
       cachedTimestamp = Date.now();
     })
     .catch((err) => {
+      if (currentRequestId !== requestId) return;
       let errorType: HealthErrorType = 'unknown';
       if (err instanceof DOMException && err.name === 'AbortError') {
         errorType = 'timeout';

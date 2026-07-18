@@ -13,9 +13,9 @@ import type { ScreenshotData, KeyFrame } from './captureTypes';
 // ================================================================
 
 export interface SmartSamplerConfig {
-  /** 变化分数阈值，高于此值视为画面切换，默认 0.15 */
+  /** 变化分数阈值，高于此值视为画面切换，默认 0.08 */
   changeThreshold: number;
-  /** 定时间隔兜底（ms），超过则强制抓帧，默认 60000 */
+  /** 定时间隔兜底（ms），超过则强制抓帧，默认 15000 */
   periodicIntervalMs: number;
   /** JPEG 压缩质量 0–1，默认 0.7 */
   jpegQuality: number;
@@ -24,8 +24,8 @@ export interface SmartSamplerConfig {
 }
 
 const DEFAULT_CONFIG: SmartSamplerConfig = {
-  changeThreshold: 0.15,
-  periodicIntervalMs: 60_000,
+  changeThreshold: 0.08,
+  periodicIntervalMs: 15_000,
   jpegQuality: 0.7,
   maxWidth: 1280,
 };
@@ -57,9 +57,26 @@ export class SmartSampler {
       (frameData.changeScore ?? 1) >= this.config.changeThreshold;
     const periodicTrigger = elapsed >= this.config.periodicIntervalMs;
 
+    // debug 日志：每次关键帧检测结果
+    console.debug(
+      '[SmartSampler] 帧检测',
+      `changeScore=${frameData.changeScore ?? 'N/A'}`,
+      `threshold=${this.config.changeThreshold}`,
+      `hasChanged=${frameData.hasChanged}`,
+      `significantChange=${hasSignificantChange}`,
+      `elapsed=${elapsed}ms`,
+      `periodicTrigger=${periodicTrigger}`,
+    );
+
     if (!hasSignificantChange && !periodicTrigger) {
+      console.debug('[SmartSampler] 跳过帧：未满足捕获条件');
       return null;
     }
+
+    console.debug(
+      '[SmartSampler] 捕获关键帧',
+      periodicTrigger && !hasSignificantChange ? '(兜底触发)' : '(变化触发)',
+    );
 
     const changeType: KeyFrame['changeType'] = this.classifyChange(
       frameData,

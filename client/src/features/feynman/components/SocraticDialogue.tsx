@@ -1,14 +1,15 @@
 /**
- * 苏格拉底追问对话 UI — Phase 2
- * 多轮对话 + 四维度评分雷达图
+ * 苏格拉底追问对话 UI — 苏格拉底对话风格重构
+ * 品牌色聊天气泡 + AI思考波浪动画 + 多维反馈卡片
  */
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
+import { Send, ChevronDown, ChevronUp, Sparkles, TrendingUp, AlertCircle, Lightbulb } from 'lucide-react';
 import { AIThinkingIndicator } from '@/components/ui/AIThinkingIndicator';
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer } from 'recharts';
 import { cn } from '@/lib/utils';
+import { SPRING } from '@/lib/animation/springConfig';
 import type { SocraticRound, DimensionScore } from '../types';
 
 interface SocraticDialogueProps {
@@ -57,6 +58,74 @@ function DimensionRadar({ dimensions }: { dimensions: DimensionScore }) {
   );
 }
 
+/** 多维反馈卡片 — 优势/盲区/建议 */
+function MultiFeedbackCard({ round }: { round: SocraticRound }) {
+  if (!round.dimensions) return null;
+  const dims = round.dimensions;
+  const strengths = (Object.keys(DIMENSION_LABELS) as (keyof DimensionScore)[]).filter(k => dims[k] >= 7);
+  const weaknesses = (Object.keys(DIMENSION_LABELS) as (keyof DimensionScore)[]).filter(k => dims[k] < 5);
+
+  return (
+    <motion.div
+      className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-3"
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={SPRING.gentle}
+    >
+      {/* 优势 */}
+      <div className="p-2.5 rounded-kb-lg bg-emerald-500/8 border border-emerald-400/20">
+        <div className="flex items-center gap-1.5 mb-1.5">
+          <TrendingUp className="w-3.5 h-3.5 text-emerald-500" strokeWidth={1.5} />
+          <span className="text-c1 font-semibold text-emerald-600 dark:text-emerald-400">优势</span>
+        </div>
+        {strengths.length > 0 ? (
+          <div className="flex flex-wrap gap-1">
+            {strengths.map(k => (
+              <span key={k} className="text-c1 px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
+                {DIMENSION_LABELS[k]}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <span className="text-c1 text-text-tertiary">继续努力</span>
+        )}
+      </div>
+
+      {/* 盲区 */}
+      <div className="p-2.5 rounded-kb-lg bg-amber-500/8 border border-amber-400/20">
+        <div className="flex items-center gap-1.5 mb-1.5">
+          <AlertCircle className="w-3.5 h-3.5 text-amber-500" strokeWidth={1.5} />
+          <span className="text-c1 font-semibold text-amber-600 dark:text-amber-400">盲区</span>
+        </div>
+        {weaknesses.length > 0 ? (
+          <div className="flex flex-wrap gap-1">
+            {weaknesses.map(k => (
+              <span key={k} className="text-c1 px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-700 dark:text-amber-300">
+                {DIMENSION_LABELS[k]}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <span className="text-c1 text-text-tertiary">表现不错!</span>
+        )}
+      </div>
+
+      {/* 建议 */}
+      <div className="p-2.5 rounded-kb-lg bg-brand-500/8 border border-brand-400/20">
+        <div className="flex items-center gap-1.5 mb-1.5">
+          <Lightbulb className="w-3.5 h-3.5 text-brand-500" strokeWidth={1.5} />
+          <span className="text-c1 font-semibold text-brand-600 dark:text-brand-400">建议</span>
+        </div>
+        {round.hints.length > 0 ? (
+          <p className="text-c1 text-text-secondary line-clamp-2">{round.hints[0]}</p>
+        ) : (
+          <span className="text-c1 text-text-tertiary">保持节奏</span>
+        )}
+      </div>
+    </motion.div>
+  );
+}
+
 function RoundBubble({ round, isLatest }: { round: SocraticRound; isLatest: boolean }) {
   const [detailOpen, setDetailOpen] = useState(false);
 
@@ -65,54 +134,66 @@ function RoundBubble({ round, isLatest }: { round: SocraticRound; isLatest: bool
       className="flex flex-col gap-kb-sm"
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35 }}
+      transition={SPRING.default}
     >
-      {/* AI 问题气泡（左侧）— text-b2 = 14px */}
-      <div className="flex items-start gap-2 max-w-[85%]">
-        <div className="w-7 h-7 rounded-kb-full bg-brand-500/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-          <Sparkles className="w-3.5 h-3.5 text-brand-500" strokeWidth={1.5} />
-        </div>
+      {/* AI 问题气泡（左侧）— 品牌色背景圆角气泡 */}
+      <div className="flex items-start gap-2.5 max-w-[88%]">
+        <motion.div
+          className="w-8 h-8 rounded-full bg-gradient-to-br from-brand-400 to-brand-600 flex items-center justify-center flex-shrink-0 mt-0.5 shadow-sm shadow-brand-500/20"
+          whileHover={{ scale: 1.1 }}
+        >
+          <Sparkles className="w-4 h-4 text-white" strokeWidth={1.5} />
+        </motion.div>
         <div className={cn(
-          'px-3.5 py-2.5 rounded-kb-lg rounded-tl-sm',
-          'bg-bg-secondary text-b2 text-text-primary leading-relaxed',
+          'px-4 py-3 rounded-2xl rounded-tl-md',
+          'bg-brand-50/80 dark:bg-brand-950/40 border border-brand-200/30 dark:border-brand-700/30',
+          'text-b2 text-text-primary leading-relaxed',
+          'shadow-sm',
         )}>
           {round.aiQuestion}
         </div>
       </div>
 
-      {/* 用户回答气泡（右侧）— 15px + 左侧品牌色描边 */}
+      {/* 用户回答气泡（右侧） */}
       {round.userAnswer && (
-        <div className="flex items-start gap-2 max-w-[85%] self-end flex-row-reverse">
+        <motion.div
+          className="flex items-start gap-2 max-w-[85%] self-end"
+          initial={{ opacity: 0, x: 10 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={SPRING.default}
+        >
           <div
             className={cn(
-              'px-3.5 py-2.5 rounded-kb-lg rounded-tr-sm',
-              'bg-brand-50 text-text-primary leading-relaxed',
-              'border-l-2 border-brand-400/40',
+              'px-4 py-3 rounded-2xl rounded-tr-md',
+              'bg-bg-elevated border border-border/40',
+              'text-text-primary leading-relaxed shadow-sm',
             )}
             style={{ fontSize: '15px' }}
           >
             {round.userAnswer}
           </div>
-        </div>
+        </motion.div>
       )}
 
-      {/* AI 反馈 — 摘要始终可见，详细评分折叠 */}
+      {/* AI 反馈 */}
       {round.aiFeedback && (
-        <div className="ml-9">
-          {/* 始终可见的反馈摘要 */}
+        <div className="ml-10">
           <p className="text-b2 text-text-secondary leading-relaxed mb-2">
             {round.aiFeedback}
           </p>
 
-          {/* 有维度评分时显示折叠入口 */}
+          {/* 多维反馈卡片 */}
+          {round.dimensions && <MultiFeedbackCard round={round} />}
+
+          {/* 详细评分折叠 */}
           {round.dimensions && (
             <>
               <button
                 onClick={() => setDetailOpen(!detailOpen)}
-                className="flex items-center gap-1 text-c1 text-brand-500 hover:text-brand-600 transition-colors mb-1"
+                className="flex items-center gap-1 text-c1 text-brand-500 hover:text-brand-600 transition-colors mt-2 mb-1"
               >
                 {detailOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                {detailOpen ? '收起详细评分' : '查看详细评分'}
+                {detailOpen ? '收起详细评分' : '查看雷达图'}
               </button>
 
               <AnimatePresence>
@@ -127,7 +208,6 @@ function RoundBubble({ round, isLatest }: { round: SocraticRound; isLatest: bool
                     exit={{ height: 0, opacity: 0 }}
                     transition={{ duration: 0.25 }}
                   >
-                    {/* 四维度评分 */}
                     <div className="flex items-center gap-4">
                       <DimensionRadar dimensions={round.dimensions} />
                       <div className="flex flex-col gap-1.5">
@@ -149,16 +229,6 @@ function RoundBubble({ round, isLatest }: { round: SocraticRound; isLatest: bool
                         ))}
                       </div>
                     </div>
-
-                    {/* 提示 */}
-                    {round.hints.length > 0 && (
-                      <div className="mt-3 pt-3 border-t border-border/20">
-                        <p className="text-c1 text-text-tertiary mb-1">思考提示：</p>
-                        {round.hints.map((h, i) => (
-                          <p key={i} className="text-c1 text-text-secondary">💡 {h}</p>
-                        ))}
-                      </div>
-                    )}
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -179,13 +249,29 @@ function RoundBubble({ round, isLatest }: { round: SocraticRound; isLatest: bool
   );
 }
 
-function SkeletonPulse() {
+/** AI 思考中的波浪动画 */
+function AIThinkingWave() {
   return (
-    <div className="flex items-start gap-2 max-w-[85%]">
-      <div className="w-7 h-7 rounded-kb-full bg-bg-tertiary animate-pulse" />
-      <div className="flex-1 space-y-2">
-        <div className="h-4 bg-bg-tertiary rounded-kb-sm animate-pulse w-3/4" />
-        <div className="h-4 bg-bg-tertiary rounded-kb-sm animate-pulse w-1/2" />
+    <div className="flex items-start gap-2.5 max-w-[85%]">
+      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-brand-400 to-brand-600 flex items-center justify-center flex-shrink-0 mt-0.5 shadow-sm shadow-brand-500/20">
+        <Sparkles className="w-4 h-4 text-white" strokeWidth={1.5} />
+      </div>
+      <div className="px-4 py-3 rounded-2xl rounded-tl-md bg-brand-50/80 dark:bg-brand-950/40 border border-brand-200/30 dark:border-brand-700/30">
+        <div className="flex items-center gap-1.5">
+          {[0, 1, 2].map(i => (
+            <motion.div
+              key={i}
+              className="w-2 h-2 rounded-full bg-brand-500"
+              animate={{ y: [0, -6, 0], opacity: [0.5, 1, 0.5] }}
+              transition={{
+                duration: 0.8,
+                repeat: Infinity,
+                delay: i * 0.15,
+                ease: 'easeInOut',
+              }}
+            />
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -217,9 +303,14 @@ export default function SocraticDialogue({
           第 {currentRound}/{maxRounds} 轮
         </span>
         {completed && (
-          <span className="px-2.5 py-0.5 rounded-kb-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-c1 font-semibold">
+          <motion.span
+            className="px-2.5 py-0.5 rounded-kb-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-c1 font-semibold"
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={SPRING.bouncy}
+          >
             ✓ 追问完成
-          </span>
+          </motion.span>
         )}
       </div>
 
@@ -229,17 +320,23 @@ export default function SocraticDialogue({
           <RoundBubble key={round.roundNumber} round={round} isLatest={i === rounds.length - 1} />
         ))}
 
-        {/* 加载骨架 */}
-        {loading && <SkeletonPulse />}
+        {/* AI 思考波浪动画 */}
+        {loading && <AIThinkingWave />}
       </div>
 
-      {/* 输入区（追问未完成时显示） */}
+      {/* 输入区（追问未完成时显示）— 底部固定风格 */}
       {!completed && (
-        <div className={cn(
-          'flex items-end gap-2 p-2 rounded-kb-lg',
-          'border border-border/50 bg-bg-elevated',
-          'focus-within:border-brand-500/50 focus-within:shadow-[var(--kb-shadow-brand)] transition-all duration-kb-fast',
-        )}>
+        <motion.div
+          className={cn(
+            'flex items-end gap-2 p-3 rounded-2xl',
+            'border border-border/40 bg-bg-elevated/80 backdrop-blur-sm',
+            'focus-within:border-brand-400/50 focus-within:shadow-[0_0_16px_rgba(59,130,246,0.08)]',
+            'transition-all duration-300',
+          )}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={SPRING.gentle}
+        >
           <textarea
             value={answer}
             onChange={e => setAnswer(e.target.value)}
@@ -251,19 +348,21 @@ export default function SocraticDialogue({
               'text-b2 text-text-primary placeholder:text-text-tertiary/60',
             )}
           />
-          <button
+          <motion.button
             onClick={handleSubmit}
             disabled={!answer.trim() || loading}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.92 }}
             className={cn(
-              'p-2.5 rounded-kb-md transition-all duration-kb-fast',
+              'p-2.5 rounded-xl transition-all duration-200',
               answer.trim() && !loading
-                ? 'bg-brand-500 text-white hover:bg-brand-600 active:scale-95'
+                ? 'bg-brand-500 text-white shadow-md shadow-brand-500/25 hover:bg-brand-600'
                 : 'bg-bg-tertiary text-text-tertiary cursor-not-allowed',
             )}
           >
             {loading ? <AIThinkingIndicator size={4} gap={3} /> : <Send className="w-4 h-4" strokeWidth={1.5} />}
-          </button>
-        </div>
+          </motion.button>
+        </motion.div>
       )}
     </div>
   );

@@ -1,5 +1,6 @@
 import { lazy, Suspense } from 'react';
 import { motion } from 'framer-motion';
+import { SPRING } from '@/lib/animation/springConfig';
 import ProfileSettings from './settings/ProfileSettings';
 import AppearanceSettings from './settings/AppearanceSettings';
 import SoundSettings from './settings/SoundSettings';
@@ -10,13 +11,76 @@ const AIProviderSettings = lazy(() => import('./settings/AIProviderSettings'));
 const DataSettings = lazy(() => import('./settings/DataSettings'));
 const AboutSettings = lazy(() => import('./settings/AboutSettings'));
 
+/** stagger fadeInUp 变体 */
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.06,
+      delayChildren: 0.04,
+    },
+  },
+};
+
+const sectionVariants = {
+  hidden: { opacity: 0, y: 16 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: SPRING.default,
+  },
+};
+
 /** 轻量骨架 fallback */
 function SettingsSectionSkeleton() {
   return (
-    <div className="rounded-[var(--kb-radius-lg)] border border-border/30 bg-bg-elevated/50 p-4 animate-pulse">
-      <div className="h-4 w-24 bg-bg-tertiary rounded mb-3" />
-      <div className="h-3 w-full bg-bg-tertiary rounded" />
+    <div
+      className="border border-brand-200/15 dark:border-brand-800/20 bg-bg-elevated/60 backdrop-blur-sm p-5 animate-pulse"
+      style={{ borderRadius: '18px 12px 16px 14px' }}
+    >
+      <div className="h-4 w-28 bg-bg-tertiary rounded mb-3" />
+      <div className="h-3 w-full bg-bg-tertiary rounded mb-2" />
+      <div className="h-3 w-3/4 bg-bg-tertiary rounded" />
     </div>
+  );
+}
+
+/** 设置分组卡片 — 不对称圆角 + 品牌色微光边框 */
+function SettingsSection({ children, index = 0 }: { children: React.ReactNode; index?: number }) {
+  // 基于 index 的不对称圆角变化
+  const radii = [
+    '18px 12px 16px 14px',
+    '14px 18px 12px 16px',
+    '16px 14px 18px 12px',
+    '12px 16px 14px 18px',
+    '18px 14px 12px 16px',
+    '14px 12px 18px 14px',
+    '16px 18px 14px 12px',
+  ];
+  const radius = radii[index % radii.length];
+
+  return (
+    <motion.div
+      variants={sectionVariants}
+      className="relative border border-brand-200/15 dark:border-brand-800/20 bg-bg-elevated/70 backdrop-blur-sm p-0.5 overflow-hidden"
+      style={{ borderRadius: radius }}
+    >
+      {/* 品牌色微光边框效果 */}
+      <div
+        className="absolute inset-0 opacity-[0.03] pointer-events-none"
+        style={{
+          background: 'linear-gradient(135deg, rgba(91,138,114,0.4) 0%, transparent 50%, rgba(91,138,114,0.2) 100%)',
+          borderRadius: radius,
+        }}
+      />
+      <div
+        className="relative bg-bg-elevated/90 dark:bg-bg-elevated/80 p-5"
+        style={{ borderRadius: `calc(${radius.split(' ')[0]} - 2px) calc(${radius.split(' ')[1]} - 2px) calc(${radius.split(' ')[2]} - 2px) calc(${radius.split(' ')[3]} - 2px)` }}
+      >
+        {children}
+      </div>
+    </motion.div>
   );
 }
 
@@ -26,28 +90,43 @@ export default function SettingsPage() {
       className="flex flex-col h-full overflow-y-auto"
       initial="hidden"
       animate="visible"
-      variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.05, delayChildren: 0.06 } } }}
+      variants={containerVariants}
     >
       <motion.div
         className="px-kb-md py-kb-md"
-        variants={{ hidden: { opacity: 0, y: -8 }, visible: { opacity: 1, y: 0, transition: { duration: 0.3 } } }}
+        variants={sectionVariants}
       >
-        <h1 className="text-h1 font-semibold text-text-primary">设置</h1>
-        <p className="text-b2 text-text-tertiary mt-0.5">个性化你的学习体验</p>
+        <h1 className="text-h1 font-semibold text-text-primary">学习工坊</h1>
+        <p className="text-b2 text-text-tertiary mt-1">
+          打造专属你的学习空间，每一处调整都是对效率的精雕细琢
+        </p>
       </motion.div>
 
-      <div className="flex-1 px-kb-md pb-kb-lg space-y-kb-md max-w-2xl w-full mx-auto">
-        <ProfileSettings />
-        <AppearanceSettings />
-        <SoundSettings />
-        <ModeSettings />
+      <div className="flex-1 px-kb-md pb-kb-lg space-y-[var(--kb-beat)] max-w-2xl w-full mx-auto">
+        <SettingsSection index={0}>
+          <ProfileSettings />
+        </SettingsSection>
+        <SettingsSection index={1}>
+          <AppearanceSettings />
+        </SettingsSection>
+        <SettingsSection index={2}>
+          <SoundSettings />
+        </SettingsSection>
+        <SettingsSection index={3}>
+          <ModeSettings />
+        </SettingsSection>
         <Suspense fallback={<SettingsSectionSkeleton />}>
-          <AIProviderSettings />
-          <DataSettings />
-          <AboutSettings />
+          <SettingsSection index={4}>
+            <AIProviderSettings />
+          </SettingsSection>
+          <SettingsSection index={5}>
+            <DataSettings />
+          </SettingsSection>
+          <SettingsSection index={6}>
+            <AboutSettings />
+          </SettingsSection>
         </Suspense>
       </div>
     </motion.div>
   );
 }
-

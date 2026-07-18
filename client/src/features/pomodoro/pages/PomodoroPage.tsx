@@ -2,7 +2,6 @@
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Play, Pause, RotateCcw, SkipForward, GraduationCap, BookOpen, Clock, Volume2, VolumeX, Focus } from 'lucide-react';
-import { Button } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { db } from '@/lib/storage';
 import TimerRing from '../components/TimerRing';
@@ -14,6 +13,8 @@ import { useShallow } from 'zustand/react/shallow';
 import { useAudioPlayer } from '@/lib/audio/useAudioPlayer';
 import { audioTracks, loadAudioPreferences, saveAudioPreferences } from '@/lib/audio/audioConfig';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
+import { usePomodoroEffects } from '../hooks/usePomodoroEffects';
+import { SPRING, BEAT } from '@/lib/animation/springConfig';
 import type { AudioPreferences } from '@/lib/audio/audioConfig';
 
 const WHITE_NOISE_FADE_MS = 1000;
@@ -27,6 +28,8 @@ export default function PomodoroPage() {
     start, pause, resume, reset, skip, setMode, setCurrentGoal,
     enterImmersive, exitImmersive, tick,
   } = usePomodoroStore(useShallow(s => s));
+
+  usePomodoroEffects();
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [goalModalOpen, setGoalModalOpen] = useState(false);
@@ -91,6 +94,8 @@ export default function PomodoroPage() {
   const handleGoalSubmit = async (goal: string) => {
     setCurrentGoal(goal);
     setGoalModalOpen(false);
+    // 使用微任务确保上述setState完成后再触发store更新
+    await Promise.resolve();
     start();
     enterImmersive();
     if (rememberGoal) {
@@ -105,7 +110,6 @@ export default function PomodoroPage() {
     }
   };
 
-  const mainButtonLabel = isRunning ? '暂停' : isPaused ? '继续' : '开始';
   const mainButtonIcon = isRunning ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />;
   const prefersReduced = useReducedMotion();
 
@@ -114,52 +118,48 @@ export default function PomodoroPage() {
   const immersiveExit = prefersReduced ? {} : { opacity: 0, scale: 0.95 };
   const immersiveTransition = prefersReduced ? { duration: 0 } : { duration: 0.5, ease: [0.25, 0.1, 0.25, 1] as const };
 
+  // 能量条数据 — 用 completedCount 生成
+  const energyBars = useMemo(() => {
+    return Array.from({ length: settings.longBreakInterval }, (_, i) => ({
+      filled: i < completedCount,
+      index: i,
+    }));
+  }, [completedCount, settings.longBreakInterval]);
+
   return (
-    <AnimatePresence mode="wait">
+    <AnimatePresence mode="popLayout">
       {isImmersive ? (
         createPortal(
           <motion.div
             key="immersive"
             className="fixed inset-0 z-40 flex flex-col overflow-hidden"
-            style={{ background: 'linear-gradient(180deg, #1C1B19 0%, #242320 50%, #1C1B19 100%)' }}
             initial={immersiveEnter}
             animate={immersiveAnimate}
             exit={immersiveExit}
             transition={immersiveTransition}
           >
-            <div className="pt-6"><SlideToExit onExit={exitImmersive} /></div>
-            {currentGoal && (
-              <p className="text-center text-[12px] text-white/30 mt-2 truncate px-16">{currentGoal}</p>
-            )}
-            <div className="flex-1 flex items-center justify-center">
-              <ImmersiveTimer />
-            </div>
+            <div className="absolute top-6 left-0 right-0 z-10"><SlideToExit onExit={exitImmersive} /></div>
+            <ImmersiveTimer />
           </motion.div>,
           document.body,
         )
       ) : (
         <motion.div
           key="normal"
-          className="flex flex-col items-center min-h-[calc(100vh-12rem)] px-4 py-8 relative"
+          className="flex flex-col items-center justify-center min-h-0 flex-1 px-4 py-12 relative"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.3 }}
         >
-          {/* 背景环境光 */}
-          <div className="fixed inset-0 pointer-events-none -z-10 overflow-hidden">
-            <div
-              className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full kb-ambient-glow"
-              style={{ background: `radial-gradient(circle, ${phase === 'work' ? 'rgba(91,138,114,0.06)' : phase === 'short_break' ? 'rgba(123,196,184,0.06)' : 'rgba(107,155,210,0.06)'} 0%, transparent 70%)` }}
-            />
-          </div>
+          {/* 背景环境光 — 由3D场景提供，已移除 */}
 
           {/* Mode tabs — 胶囊切换 */}
           <motion.div
-            className="flex items-center gap-0.5 p-1 bg-bg-secondary/80 backdrop-blur-sm rounded-full border border-border/30"
+            className="flex items-center gap-0.5 p-1 bg-bg-secondary/60 backdrop-blur-sm rounded-full border border-border/20"
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1, duration: 0.3 }}
+            transition={{ delay: 0.1, ...SPRING.gentle }}
           >
             {([
               { key: 'class' as const, label: '上课模式', sub: `${settings.classDuration}min`, Icon: GraduationCap },
@@ -180,7 +180,7 @@ export default function PomodoroPage() {
                   <motion.div
                     layoutId="pomo-mode-bg"
                     className="absolute inset-0 rounded-full bg-brand-500"
-                    transition={{ type: 'spring', stiffness: 350, damping: 30 }}
+                    transition={SPRING.default}
                   />
                 )}
                 <span className="relative flex items-center gap-1.5">
@@ -194,7 +194,7 @@ export default function PomodoroPage() {
 
           {/* 模式提示 */}
           <motion.div
-            className="mt-3 flex items-center gap-1.5 text-[11px] text-text-tertiary/70"
+            className="mt-3 flex items-center gap-1.5 text-[11px] text-text-tertiary/60"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.2 }}
@@ -203,17 +203,24 @@ export default function PomodoroPage() {
             <span>{mode === 'class' ? `课堂 ${settings.classDuration}min · 短休 ${settings.shortBreakDuration}min` : `专注 ${settings.workDuration}min · 连续番茄+长休`}</span>
           </motion.div>
 
-          <div className="flex-1" />
+          <div className="flex-1 min-h-[3rem]" />
 
           {/* Timer Ring */}
           <motion.div
             className="my-8 relative"
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.15, duration: 0.4, ease: [0.25, 0.1, 0.25, 1] as const }}
+            transition={{ delay: 0.15, ...SPRING.gentle }}
           >
             {currentGoal && (
-              <p className="text-[12px] text-text-tertiary text-center mb-3 truncate max-w-[280px]">{currentGoal}</p>
+              <motion.p
+                className="text-[12px] text-text-tertiary/70 text-center mb-3 truncate max-w-[280px]"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.4 }}
+              >
+                {currentGoal}
+              </motion.p>
             )}
             <TimerRing
               totalSeconds={totalSeconds}
@@ -223,35 +230,37 @@ export default function PomodoroPage() {
             />
           </motion.div>
 
-          {/* Session dots */}
+          {/* 能量条 — 横向展示 */}
           <motion.div
-            className="flex items-center gap-2 mb-8"
+            className="flex items-center gap-1.5 mb-8"
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.25 }}
+            transition={{ delay: 0.25, ...SPRING.gentle }}
           >
-            {Array.from({ length: settings.longBreakInterval }).map((_, i) => (
+            {energyBars.map(({ filled, index }) => (
               <motion.div
-                key={i}
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ delay: 0.3 + i * 0.05, type: 'spring', stiffness: 400 }}
+                key={index}
                 className={cn(
-                  'w-2.5 h-2.5 rounded-full transition-all duration-300',
-                  i < completedCount
+                  'h-2 rounded-full transition-all',
+                  `duration-[${BEAT.x2}ms]`,
+                  filled
                     ? 'bg-brand-500 shadow-[0_0_8px_rgba(91,138,114,0.4)]'
-                    : 'border-2 border-border/40',
+                    : 'bg-border/30',
                 )}
+                style={{ width: filled ? '24px' : '16px' }}
+                initial={{ scaleX: 0 }}
+                animate={{ scaleX: 1 }}
+                transition={{ delay: 0.3 + index * 0.05, ...SPRING.bouncy }}
               />
             ))}
-            <span className="text-[11px] text-text-tertiary ml-1 font-mono tabular-nums">
+            <span className="text-[11px] text-text-tertiary/60 ml-2 font-mono tabular-nums">
               {completedCount}/{settings.longBreakInterval}
             </span>
           </motion.div>
 
           {/* 白噪音控制 */}
           <motion.div
-            className="flex items-center gap-2 mb-8 px-4 py-2 bg-bg-elevated/60 backdrop-blur-sm rounded-full border border-border/30"
+            className="flex items-center gap-2 mb-8 px-4 py-2 bg-bg-elevated/40 backdrop-blur-sm rounded-full border border-border/20"
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
@@ -268,7 +277,7 @@ export default function PomodoroPage() {
                 ? <Volume2 className="w-4 h-4" strokeWidth={1.5} />
                 : <VolumeX className="w-4 h-4" strokeWidth={1.5} />}
             </motion.button>
-            <span className="text-[11px] text-text-tertiary select-none">🎵 {whiteNoiseTrack.nameZh}</span>
+            <span className="text-[11px] text-text-tertiary select-none">{whiteNoiseTrack.nameZh}</span>
             <input
               type="range" min={0} max={1} step={0.05}
               value={audioPrefs.whiteNoiseVolume}
@@ -277,30 +286,29 @@ export default function PomodoroPage() {
             />
           </motion.div>
 
-          {/* Controls */}
+          {/* Controls — 居中大按钮 + 品牌色光晕 */}
           <motion.div
             className="flex items-center gap-4 mb-8"
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.35 }}
+            transition={{ delay: 0.35, ...SPRING.gentle }}
           >
             <motion.button
               whileTap={{ scale: 0.9, rotate: -180 }}
               onClick={reset}
-              className="w-10 h-10 rounded-full border border-border/40 flex items-center justify-center text-text-tertiary hover:text-text-secondary hover:border-text-tertiary/50 transition-all duration-200"
+              className="w-10 h-10 rounded-full border border-border/30 flex items-center justify-center text-text-tertiary hover:text-text-secondary hover:border-border/50 transition-all duration-200"
             >
               <RotateCcw className="w-4 h-4" strokeWidth={1.5} />
             </motion.button>
 
             <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
+              whileHover={{ scale: 1.05, boxShadow: '0 8px 32px rgba(91,138,114,0.45)' }}
+              whileTap={{ scale: 0.97 }}
               onClick={handleMainButton}
               className={cn(
-                'w-14 h-14 rounded-full flex items-center justify-center',
+                'w-16 h-16 rounded-full flex items-center justify-center',
                 'bg-brand-500 text-white',
-                'shadow-[0_4px_16px_rgba(91,138,114,0.35)]',
-                'hover:shadow-[0_6px_24px_rgba(91,138,114,0.45)]',
+                'shadow-[0_4px_20px_rgba(91,138,114,0.35),0_0_40px_rgba(91,138,114,0.15)]',
                 'transition-shadow duration-300',
               )}
             >
@@ -310,7 +318,7 @@ export default function PomodoroPage() {
             <motion.button
               whileTap={{ scale: 0.9, x: 3 }}
               onClick={skip}
-              className="w-10 h-10 rounded-full border border-border/40 flex items-center justify-center text-text-tertiary hover:text-text-secondary hover:border-text-tertiary/50 transition-all duration-200"
+              className="w-10 h-10 rounded-full border border-border/30 flex items-center justify-center text-text-tertiary hover:text-text-secondary hover:border-border/50 transition-all duration-200"
             >
               <SkipForward className="w-4 h-4" strokeWidth={1.5} />
             </motion.button>
@@ -325,7 +333,7 @@ export default function PomodoroPage() {
               whileHover={{ scale: 1.03 }}
               whileTap={{ scale: 0.97 }}
               onClick={() => enterImmersive()}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-medium text-text-tertiary hover:text-text-primary hover:bg-bg-secondary/60 transition-all duration-200 mb-6"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-medium text-text-tertiary hover:text-text-primary hover:bg-bg-secondary/40 transition-all duration-200 mb-6"
             >
               <Focus className="w-4 h-4" strokeWidth={1.5} />
               进入专注模式

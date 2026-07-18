@@ -6,6 +6,8 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { soundPlayer } from '@/lib/audio/SoundPlayer';
+import { useToast } from '@/components/ui/Toast';
+import { requireGatewayUrl } from '@/lib/ai/config';
 import {
   CaptureManager,
   captureEventBus,
@@ -482,6 +484,7 @@ export interface CaptureSidebarProps {
 }
 
 export function CaptureSidebar({ onInsertText }: CaptureSidebarProps) {
+  const { toast } = useToast();
   const [collapsed, setCollapsed] = useState(false);
   const [windows, setWindows] = useState<WindowInfo[]>([]);
   const [windowsLoading, setWindowsLoading] = useState(false);
@@ -511,7 +514,7 @@ export function CaptureSidebar({ onInsertText }: CaptureSidebarProps) {
   const [videoFilePath, setVideoFilePath] = useState<string | null>(null);
 
   // 渲染端音频资源引用（getUserMedia stream + AudioContext）
-  const audioCleanupRef = useRef<(() => void) | null>(null);
+  const audioCleanupRef = useRef<(() => void | Promise<void>) | null>(null);
 
   // 帧超时保底重启回调引用（供 CaptureManager 调用）
   const frameRestartRef = useRef<(() => void) | null>(null);
@@ -526,6 +529,8 @@ export function CaptureSidebar({ onInsertText }: CaptureSidebarProps) {
     const winId = selectedWindow.id;
     const interval = config.screenshotInterval;
     frameRestartRef.current = async () => {
+      // Bug #16: 检查当前是否仍在 capturing 状态，避免停止后触发重启
+      if (status !== 'capturing') return;
       try {
         // eslint-disable-next-line no-console -- 保底重启警告
         console.warn('[CaptureSidebar] 帧超时，自动重启截图采集');
@@ -537,7 +542,7 @@ export function CaptureSidebar({ onInsertText }: CaptureSidebarProps) {
         console.error('[CaptureSidebar] 保底重启失败:', err);
       }
     };
-  }, [selectedWindow, config.screenshotInterval]);
+  }, [selectedWindow, config.screenshotInterval, status]);
 
   // CaptureManager 单例，传入帧超时回调
   const captureManager = useMemo(
@@ -724,11 +729,12 @@ export function CaptureSidebar({ onInsertText }: CaptureSidebarProps) {
             sourceNode.connect(processor);
             processor.connect(audioCtx.destination);
 
-            audioCleanupRef.current = () => {
+            audioCleanupRef.current = async () => {
+              processor.onaudioprocess = null;
               processor.disconnect();
               sourceNode.disconnect();
               stream.getTracks().forEach((t) => t.stop());
-              void audioCtx.close();
+              await audioCtx.close();
             };
           } catch (err) {
             // eslint-disable-next-line no-console -- 音频管道启动失败
@@ -739,14 +745,14 @@ export function CaptureSidebar({ onInsertText }: CaptureSidebarProps) {
     );
 
     const offStop = window.electronAPI.on('audio_capture_do_stop', () => {
-      audioCleanupRef.current?.();
+      void audioCleanupRef.current?.();
       audioCleanupRef.current = null;
     });
 
     return () => {
       offStart();
       offStop();
-      audioCleanupRef.current?.();
+      void audioCleanupRef.current?.();
       audioCleanupRef.current = null;
     };
   }, []);
@@ -784,6 +790,20 @@ export function CaptureSidebar({ onInsertText }: CaptureSidebarProps) {
       setStats({ frames: 0, extracted: 0 });
       setSegments([]);
       setSelectedIds(new Set());
+
+      // 预检网关连通性
+      try {
+        const gatewayUrl = requireGatewayUrl();
+        const healthResp = await fetch(`${gatewayUrl}/health`, {
+          method: 'HEAD',
+          signal: AbortSignal.timeout(5000),
+        });
+        if (!healthResp.ok) {
+          toast({ type: 'warning', message: 'AI网关不可用，采集可继续但课后分析可能失败' });
+        }
+      } catch {
+        toast({ type: 'warning', message: '无法连接AI网关，请检查网络。采集仍可进行，课后分析需要网络。' });
+      }
 
       // @ai-context Path C 全程录制：走独立 IPC 通道，不启动截图/音频流水线
       if (capturePath === 'full_record') {
@@ -904,7 +924,7 @@ export function CaptureSidebar({ onInsertText }: CaptureSidebarProps) {
       await window.electronAPI.invoke('audio_capture_stop');
 
       // 清理渲染端音频管道（如有）
-      audioCleanupRef.current?.();
+      await audioCleanupRef.current?.();
       audioCleanupRef.current = null;
 
       // 停止 CaptureManager 会话
@@ -998,7 +1018,16 @@ export function CaptureSidebar({ onInsertText }: CaptureSidebarProps) {
       const result = await analyzeSession(fullBundle, { language: config.language });
       setAnalysisResult(result);
     } catch (err) {
-      setAnalysisError(err instanceof Error ? err.message : '未知分析错误');
+      // 错误分类展示
+      if (err instanceof TypeError && err.message.includes('fetch')) {
+        setAnalysisError('无法连接AI网关，请检查网络');
+      } else if (err instanceof DOMException && err.name === 'AbortError') {
+        setAnalysisError('分析超时，请重试或缩短录制时长');
+      } else if (err instanceof Error && err.message.includes('HTTP')) {
+        setAnalysisError('服务端错误：' + err.message);
+      } else {
+        setAnalysisError(err instanceof Error ? err.message : '未知分析错误');
+      }
     } finally {
       setIsAnalyzing(false);
     }
@@ -1020,7 +1049,16 @@ export function CaptureSidebar({ onInsertText }: CaptureSidebarProps) {
       });
       setAnalysisResult(result);
     } catch (err) {
-      setAnalysisError(err instanceof Error ? err.message : '未知分析错误');
+      // 错误分类展示
+      if (err instanceof TypeError && err.message.includes('fetch')) {
+        setAnalysisError('无法连接AI网关，请检查网络');
+      } else if (err instanceof DOMException && err.name === 'AbortError') {
+        setAnalysisError('分析超时，请重试或缩短录制时长');
+      } else if (err instanceof Error && err.message.includes('HTTP')) {
+        setAnalysisError('服务端错误：' + err.message);
+      } else {
+        setAnalysisError(err instanceof Error ? err.message : '未知分析错误');
+      }
     } finally {
       setIsAnalyzing(false);
     }

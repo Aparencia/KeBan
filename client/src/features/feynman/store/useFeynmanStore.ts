@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { feynmanNoteStore, feynmanSummaryStore, feynmanWeakPointStore } from '@/lib/storage';
 import { createWithLog, updateWithLog, deleteWithLog } from '@/lib/storage/writeWithLog';
+import { db } from '@/lib/storage/database';
 import type { FeynmanNote, FeynmanSummary, FeynmanWeakPoint } from '@/types/models';
 import { soundPlayer } from '@/lib/audio/SoundPlayer';
 
@@ -21,6 +22,7 @@ interface FeynmanState {
   weakPoints: Record<string, FeynmanWeakPoint[]>;          // noteId → weakPoints[]
   currentNoteId: string | null;
   isLoading: boolean;
+  error: string | null;
 
   // 会话操作
   loadNotes: () => Promise<void>;
@@ -65,6 +67,7 @@ export const useFeynmanStore = create<FeynmanState>((set, get) => {
     weakPoints: {},
     currentNoteId: null,
     isLoading: false,
+    error: null,
 
     // ── 会话操作 ────────────────────────────────────────────
 
@@ -83,7 +86,7 @@ export const useFeynmanStore = create<FeynmanState>((set, get) => {
     },
 
     loadNote: async (id: string) => {
-      set({ isLoading: true });
+      set({ isLoading: true, error: null });
       try {
         const [note, summaries, weakPoints] = await Promise.all([
           feynmanNoteStore.getById(id),
@@ -103,8 +106,10 @@ export const useFeynmanStore = create<FeynmanState>((set, get) => {
               ? [...state.notes, note]
               : state.notes,
         }));
-      } catch {
-        set({ isLoading: false });
+      } catch (e) {
+        const errorMsg = e instanceof Error ? e.message : String(e);
+        console.error('[FeynmanStore] loadNote failed:', e);
+        set({ isLoading: false, error: errorMsg });
       }
     },
 
@@ -142,11 +147,16 @@ export const useFeynmanStore = create<FeynmanState>((set, get) => {
       const summaries = await feynmanSummaryStore.where('noteId', id);
       const weakPoints = await feynmanWeakPointStore.where('noteId', id);
 
-      await Promise.all([
-        deleteWithLog(feynmanNoteStore, 'feynmanNotes', id),
-        ...summaries.map((s: FeynmanSummary) => deleteWithLog(feynmanSummaryStore, 'feynmanSummaries', s.id!)),
-        ...weakPoints.map((w: FeynmanWeakPoint) => deleteWithLog(feynmanWeakPointStore, 'feynmanWeakPoints', w.id!)),
-      ]);
+      // Bug #7: 使用 Dexie 事务包裹所有删除操作确保原子性
+      await db.transaction('rw', [db.feynmanNotes, db.feynmanSummaries, db.feynmanWeakPoints, db.operationLog], async () => {
+        await deleteWithLog(feynmanNoteStore, 'feynmanNotes', id);
+        for (const s of summaries) {
+          await deleteWithLog(feynmanSummaryStore, 'feynmanSummaries', s.id!);
+        }
+        for (const w of weakPoints) {
+          await deleteWithLog(feynmanWeakPointStore, 'feynmanWeakPoints', w.id!);
+        }
+      });
 
       set((state) => {
         const summaries2 = { ...state.summaries };

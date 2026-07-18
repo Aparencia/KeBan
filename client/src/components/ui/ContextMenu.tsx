@@ -145,7 +145,7 @@ export const ContextMenu = <C,>({
       <RadixContextMenu.Portal>
         <RadixContextMenu.Content
           avoidCollisions={false}
-          onOpenAutoFocus={(e: Event) => e.preventDefault()}
+          onCloseAutoFocus={(e: Event) => e.preventDefault()}
           className={cn(
             'z-[9999] bg-bg-elevated/90 backdrop-blur-2xl border border-border/50 rounded-kb-md shadow-xl py-1 min-w-[160px]',
           )}

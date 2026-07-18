@@ -131,7 +131,7 @@ SYSTEM_PROMPT = "你是一个专业的学习内容提取助手，擅长从截图
 class VisionExtractChain:
     """视觉内容提取链"""
 
-    def __init__(self, provider: AIProvider, model: str = "glm-4v-flash"):
+    def __init__(self, provider: AIProvider, model: str = "glm-4.6v-flash"):
         self.provider = provider
         self.model = model
 

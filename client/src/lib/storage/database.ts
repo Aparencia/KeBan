@@ -7,6 +7,7 @@ import type {
   StudyCheckIn, Achievement, PomodoroGoal, WindowCapture,
   Consent, UserProfile, Inspiration, SearchIndexEntry
 } from '@/types/models';
+import type { ClassroomNote } from './classroomNoteStore';
 
 export class KeBanDatabase extends Dexie {
   pomodoroSessions!: Table<PomodoroSession, string>;
@@ -31,6 +32,7 @@ export class KeBanDatabase extends Dexie {
   userProfile!: Table<UserProfile, string>;
   inspirations!: Table<Inspiration, string>;
   searchIndex!: Table<SearchIndexEntry, number>;
+  classroomNotes!: Table<ClassroomNote, string>;
 
   constructor() {
     super('keban');
@@ -115,11 +117,20 @@ export class KeBanDatabase extends Dexie {
         'appSettings',
       ];
 
+      // Bug #17: 记录迁移结果，关键表失败时 throw
+      const migrationResults = new Map<string, { success: boolean; error?: unknown }>();
+      const criticalTables = new Set(['flashcards', 'notes']);
+
       for (const tableName of tables) {
         try {
           await migrateTable(tableName);
+          migrationResults.set(tableName, { success: true });
         } catch (e) {
           console.warn(`[DB] Failed to migrate table ${tableName}:`, e);
+          migrationResults.set(tableName, { success: false, error: e });
+          if (criticalTables.has(tableName)) {
+            throw new Error(`[DB] Critical table "${tableName}" migration failed: ${e instanceof Error ? e.message : String(e)}`);
+          }
         }
       }
 
@@ -198,6 +209,11 @@ export class KeBanDatabase extends Dexie {
     // 新增 sortStatus 索引，支持灵感分拣状态查询
     this.version(11).stores({
       inspirations: 'id, createdAt, updatedAt, sortStatus, [tags.content_nature+tags.cognitive_depth+tags.subject]',
+    });
+
+    // v1.2.0: 新增课堂笔记表（课堂助手 AI 分析结果持久化）
+    this.version(12).stores({
+      classroomNotes: 'id, sessionId, sourceType, createdAt',
     });
   }
 }

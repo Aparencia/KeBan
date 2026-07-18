@@ -127,7 +127,7 @@ export function sm2(card: SM2CardInput, rating: Rating, options?: SM2Options): S
 
   // Golden error：高自信答错时缩短间隔
   const multiplier = options?.goldenErrorMultiplier;
-  if (multiplier !== undefined && multiplier >= 0 && multiplier < 1) {
+  if (multiplier !== undefined && multiplier > 0 && multiplier < 1) {
     newInterval = Math.max(1, Math.round(newInterval * multiplier));
   }
 

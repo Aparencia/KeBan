@@ -16,6 +16,7 @@ export const AI_ERROR_MESSAGES: Record<AIErrorCode, string> = {
   cors_error: '跨域请求被拒绝，请检查网关 CORS 配置',
   content_filter: '内容未通过安全审核，请修改后重试',
   invalid_response: 'AI 返回了无效的结果',
+  invalid_input: '输入内容格式不正确，请检查后重试',
   content_too_short: '输入内容太短，请补充后再试',
   no_api_key: '请先配置 API Key 后使用 AI 功能',
   offline: '此功能需要联网，请检查网络连接后重试',

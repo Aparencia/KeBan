@@ -119,6 +119,11 @@ module.exports = {
         'kb-lg': 'var(--kb-space-lg)',
         'kb-xl': 'var(--kb-space-xl)',
         'kb-2xl': 'var(--kb-space-2xl)',
+        'rhythm-xs': 'var(--kb-rhythm-xs)',
+        'rhythm-sm': 'var(--kb-rhythm-sm)',
+        'rhythm-md': 'var(--kb-rhythm-md)',
+        'rhythm-lg': 'var(--kb-rhythm-lg)',
+        'rhythm-xl': 'var(--kb-rhythm-xl)',
       },
       borderRadius: {
         'kb-sm': 'var(--kb-radius-sm)',
@@ -143,6 +148,11 @@ module.exports = {
         'kb-fast': 'var(--kb-duration-fast)',
         'kb-normal': 'var(--kb-duration-normal)',
         'kb-slow': 'var(--kb-duration-slow)',
+        'beat-xs': 'var(--kb-beat-xs)',
+        'beat': 'var(--kb-beat)',
+        'beat-x2': 'var(--kb-beat-x2)',
+        'beat-x3': 'var(--kb-beat-x3)',
+        'beat-x5': 'var(--kb-beat-x5)',
       },
       transitionTimingFunction: {
         'kb-default': 'var(--kb-ease-default)',
@@ -181,6 +191,9 @@ module.exports = {
       },
       strokeWidth: {
         'kb-icon': 'var(--kb-icon-stroke-width)',
+      },
+      perspective: {
+        'kb': 'var(--kb-perspective)',
       },
     },
   },

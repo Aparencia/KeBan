@@ -38,7 +38,7 @@ export default function SocraticSessionPage() {
 
   return (
     <motion.div
-      className="flex flex-col h-[calc(100vh-4rem)] relative"
+      className="flex flex-col h-full relative"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.3 }}

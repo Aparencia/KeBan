@@ -62,6 +62,8 @@ const ALLOWED_CHANNELS = [
   'storage:get-active-path',
   // 退出前同步完成通知
   'sync:quit-complete',
+  // 文件读取（课堂助手视频分析）
+  'fs:read-file',
   // Path C 视频录制 IPC channel
   'video_record_start',
   'video_record_stop',

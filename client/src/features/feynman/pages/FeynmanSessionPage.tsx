@@ -329,7 +329,7 @@ export default function FeynmanSessionPage() {
 
   if (isLoading) {
     return (
-      <div className="flex flex-col h-[calc(100vh-4rem)]">
+      <div className="flex flex-col h-full">
         <div className="flex items-center gap-kb-sm px-kb-md py-3 border-b border-border/50">
           <Skeleton variant="circular" width={32} height={32} />
           <Skeleton variant="text" width={200} />
@@ -346,7 +346,7 @@ export default function FeynmanSessionPage() {
 
   if (!note && noteId) {
     return (
-      <div className="flex flex-col h-[calc(100vh-4rem)] items-center justify-center">
+      <div className="flex flex-col h-full items-center justify-center">
         <EmptyState
           title="会话未找到"
           description="该学习会话可能已被删除"
@@ -412,7 +412,7 @@ export default function FeynmanSessionPage() {
 
   return (
     <motion.div
-      className="flex flex-col h-[calc(100vh-4rem)] relative"
+      className="flex flex-col h-full relative"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.3 }}

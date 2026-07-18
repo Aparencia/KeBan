@@ -18,28 +18,42 @@ export async function getNextVersion(): Promise<number> {
   return logs.length > 0 ? (logs[0].version || 0) + 1 : 1;
 }
 
-// 增强版 logOperation：自动填充 version、deviceId
-export async function logOperation(
+// Bug #18: payload 参数改为泛型，JSON.stringify 包裹 try-catch
+// Bug #20: 使用 Dexie 事务包裹 getNextVersion + add 操作确保版本号原子性
+export async function logOperation<T extends Record<string, unknown>>(
   entityType: string,
   entityId: string,
   operation: 'create' | 'update' | 'delete',
-  payload?: any,
+  payload?: T,
   patch?: string
 ): Promise<void> {
-  const version = await getNextVersion();
   const deviceId = getDeviceId();
 
-  await db.operationLog.add({
-    id: generateId(),
-    entityType,
-    entityId,
-    operation,
-    payload: payload ? JSON.stringify(payload) : undefined,
-    patch,
-    createdAt: new Date(),
-    synced: false,
-    version,
-    deviceId,
+  let serializedPayload: string | undefined;
+  if (payload) {
+    try {
+      serializedPayload = JSON.stringify(payload);
+    } catch (e) {
+      console.error('[OperationLog] Failed to serialize payload:', e);
+      serializedPayload = undefined;
+    }
+  }
+
+  // Bug #20: 使用事务确保 getNextVersion + add 原子性
+  await db.transaction('rw', db.operationLog, async () => {
+    const version = await getNextVersion();
+    await db.operationLog.add({
+      id: generateId(),
+      entityType,
+      entityId,
+      operation,
+      payload: serializedPayload,
+      patch,
+      createdAt: new Date(),
+      synced: false,
+      version,
+      deviceId,
+    });
   });
 }
 

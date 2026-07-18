@@ -58,8 +58,8 @@ AI_PROVIDERS: dict = {
         "base_url": "https://open.bigmodel.cn/api/paas/v4",
         "api_key": os.getenv("GLM_API_KEY", ""),
         "models": {
-            "free": "glm-4-flash",           # 永久免费，Alpha 验证用
-            "vision": "glm-4v-flash",        # 多模态视觉（免费）
+            "free": "glm-4.6v-flash",       # 免费，多模态（文本+视觉），128K 上下文
+            "vision": "glm-4.6v-flash",     # 多模态视觉（免费），128K 上下文
             "asr": "glm-4-audio",            # 语音转文字
         },
     },

@@ -136,21 +136,7 @@ export default function InspirationPage() {
       initial="hidden"
       animate="visible"
     >
-      {/* ── 背景环境光 ── */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        <motion.div
-          className="absolute -top-20 -right-20 w-80 h-80 rounded-full opacity-[0.05]"
-          style={{ background: 'radial-gradient(circle, #9333EA 0%, transparent 70%)' }}
-          animate={{ scale: [1, 1.15, 1], opacity: [0.05, 0.08, 0.05] }}
-          transition={{ duration: 9, repeat: Infinity, ease: 'easeInOut' }}
-        />
-        <motion.div
-          className="absolute -bottom-16 -left-16 w-64 h-64 rounded-full opacity-[0.04]"
-          style={{ background: 'radial-gradient(circle, #06B6D4 0%, transparent 70%)' }}
-          animate={{ scale: [1, 1.2, 1], opacity: [0.04, 0.07, 0.04] }}
-          transition={{ duration: 11, repeat: Infinity, ease: 'easeInOut', delay: 3 }}
-        />
-      </div>
+      {/* 背景环境光 — 由3D场景提供，已移除 */}
 
       {/* ── Header ── */}
       <motion.div className="flex items-center gap-3 relative z-10" variants={headerVariants}>
@@ -177,12 +163,12 @@ export default function InspirationPage() {
         </motion.button>
       </motion.div>
 
-      {/* ── Quick input area ── */}
+      {/* ── Quick input area — 磨砂玻璃 + focus 光效 ── */}
       <motion.div
         variants={inputVariants}
         className={cn(
-          'relative bg-bg-secondary/60 backdrop-blur-xl border border-border/30 rounded-[var(--kb-radius-xl)] p-kb-md',
-          'focus-within:border-purple-400/40 focus-within:shadow-lg focus-within:shadow-purple-500/5',
+          'relative bg-bg-secondary/40 backdrop-blur-2xl border border-white/12 dark:border-white/6 rounded-[var(--kb-radius-xl)] p-kb-md',
+          'focus-within:border-purple-400/50 focus-within:shadow-[0_0_24px_rgba(147,51,234,0.1)]',
           'transition-all duration-300',
         )}
       >

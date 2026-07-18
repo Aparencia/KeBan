@@ -139,7 +139,7 @@ class TestResolveModelName:
 
     def test_primary_provider_uses_routing_slot(self):
         """主 Provider 使用 MODEL_ROUTING 指定的 slot"""
-        assert _resolve_model_name("glm", "summarize") == "glm-4-flash"
+        assert _resolve_model_name("glm", "summarize") == "glm-4.6v-flash"
         assert _resolve_model_name("deepseek", "evaluate") == "deepseek-chat"
         assert _resolve_model_name("qwen", "transcribe") == "paraformer-v2"
 
@@ -148,11 +148,11 @@ class TestResolveModelName:
         # summarize 主 Provider 是 glm；fallback 到 qwen 时，qwen 没有 summary slot，应使用 free
         assert _resolve_model_name("qwen", "summarize") == "qwen-plus"
         # evaluate 主 Provider 是 deepseek；fallback 到 glm 时应使用 free
-        assert _resolve_model_name("glm", "evaluate") == "glm-4-flash"
+        assert _resolve_model_name("glm", "evaluate") == "glm-4.6v-flash"
 
     def test_unknown_feature_uses_free_slot(self):
         """未知 feature 使用 Provider 的 free slot 或第一个可用模型"""
-        assert _resolve_model_name("glm", "unknown_feature") == "glm-4-flash"
+        assert _resolve_model_name("glm", "unknown_feature") == "glm-4.6v-flash"
         assert _resolve_model_name("qwen", "unknown_feature") == "qwen-plus"
 
 
@@ -211,8 +211,8 @@ class TestGetProviderForFeature:
 
         provider, model_name = get_provider_for_feature(app, "summarize")
         assert provider is mock_provider
-        # summarize → glm.free → glm-4-flash
-        assert model_name == "glm-4-flash"
+        # summarize → glm.free → glm-4.6v-flash
+        assert model_name == "glm-4.6v-flash"
 
     def test_fallback_when_provider_not_initialized(self):
         """目标 Provider 未初始化时回退到 fallback"""
@@ -235,7 +235,7 @@ class TestGetProviderForFeature:
         assert provider is fallback_provider
 
     def test_evaluate_returns_glm_model(self):
-        """evaluate feature 默认返回 glm-4-flash（MODEL_ROUTING 主 Provider 为 glm）"""
+        """evaluate feature 默认返回 glm-4.6v-flash（MODEL_ROUTING 主 Provider 为 glm）"""
         from unittest.mock import MagicMock
         mock_provider = MagicMock()
         mock_provider.api_key = "valid-key"
@@ -243,7 +243,7 @@ class TestGetProviderForFeature:
 
         provider, model_name = get_provider_for_feature(app, "evaluate")
         assert provider is mock_provider
-        assert model_name == "glm-4-flash"
+        assert model_name == "glm-4.6v-flash"
 
 
 # ────────────────────────────────────────────────────────────
@@ -254,9 +254,9 @@ class TestGetProviderForFeature:
 class TestConfigAssertions:
     """配置值精确断言（JWT 算法、API Key 校验、超时配置、Fallback 链尾）"""
 
-    def test_jwt_algorithm_is_hs256(self):
-        """APP_CONFIG jwt_algorithm 必须为 HS256（RS256 → HS256 修复验证）"""
-        assert APP_CONFIG["jwt_algorithm"] == "HS256"
+    def test_jwt_algorithm_is_es256(self):
+        """APP_CONFIG jwt_algorithm 必须为 ES256（与 Supabase JWKS 一致）"""
+        assert APP_CONFIG["jwt_algorithm"] == "ES256"
 
     def test_is_valid_api_key_rejects_placeholder(self):
         """占位符 API Key 应被识别为无效"""

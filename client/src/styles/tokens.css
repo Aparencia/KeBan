@@ -89,6 +89,20 @@
   --kb-space-xl: 2rem;      /* 32px */
   --kb-space-2xl: 3rem;     /* 48px */
 
+  /* 节奏间距（有机布局专用） */
+  --kb-rhythm-xs: 0.75rem;   /* 12px */
+  --kb-rhythm-sm: 1.25rem;   /* 20px */
+  --kb-rhythm-md: 2rem;      /* 32px */
+  --kb-rhythm-lg: 3rem;      /* 48px */
+  --kb-rhythm-xl: 4.5rem;    /* 72px */
+
+  /* 节拍时长 */
+  --kb-beat-xs: 60ms;
+  --kb-beat: 120ms;
+  --kb-beat-x2: 240ms;
+  --kb-beat-x3: 360ms;
+  --kb-beat-x5: 600ms;
+
   /* 圆角系统（大圆角，柔和风格） */
   --kb-radius-sm: 0.5rem;      /* 8px */
   --kb-radius-md: 0.75rem;     /* 12px */

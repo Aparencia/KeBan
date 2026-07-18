@@ -9,7 +9,7 @@ import type { AppMode } from '@/lib/mode/ModeManager';
 
 const modeConfig: Record<AppMode, { label: string; icon: React.FC<React.SVGProps<SVGSVGElement> & { strokeWidth?: number | string }>; color: string; bg: string }> = {
   local: { label: '本地', icon: HardDrive, color: 'text-text-tertiary', bg: 'bg-bg-secondary' },
-  hybrid: { label: '混合', icon: Cloud, color: 'text-brand-500', bg: 'bg-brand-50' },
+  hybrid: { label: '联网', icon: Cloud, color: 'text-brand-500', bg: 'bg-brand-50' },
   full: { label: '云端', icon: Globe, color: 'text-brand-600', bg: 'bg-brand-50' },
 };
 

@@ -140,8 +140,8 @@ class TestModelResponseError:
         assert "格式错误" in err.message
 
     def test_detail_fields(self):
-        err = ModelResponseError("glm-4-flash", "空响应")
-        assert err.detail["model"] == "glm-4-flash"
+        err = ModelResponseError("glm-4.6v-flash", "空响应")
+        assert err.detail["model"] == "glm-4.6v-flash"
         assert err.detail["reason"] == "空响应"
 
     def test_inherits_from_ai_error(self):

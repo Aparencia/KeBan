@@ -5,7 +5,6 @@
 import { useState, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Send } from 'lucide-react';
-import { IMMERSIVE_EASE } from '../constants';
 
 interface GlassInspirationCardProps {
   /** 提交回调 */
@@ -40,15 +39,15 @@ function GlassInspirationCard({ onSubmit, onClose, submitting }: GlassInspiratio
 
   return (
     <motion.div
-      className="relative w-full max-w-sm rounded-[var(--kb-radius-xl)] overflow-hidden shadow-2xl"
-      style={{ boxShadow: 'var(--kb-shadow-brand)' }}
-      initial={{ opacity: 0, y: 20, scale: 0.95 }}
+      className="relative w-full max-w-sm rounded-[var(--kb-radius-xl)] overflow-hidden"
+      style={{ boxShadow: '0 0 32px rgba(139, 92, 246, 0.15), 0 8px 40px rgba(0,0,0,0.12)' }}
+      initial={{ opacity: 0, y: 20, scale: 0.92 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: -10, scale: 0.95 }}
-      transition={{ duration: 0.4, ease: IMMERSIVE_EASE }}
+      transition={{ type: 'spring', stiffness: 400, damping: 25 }}
     >
-      {/* 玻璃拟态覆盖层 — pointer-events-none 避免拦截输入区事件 */}
-      <div className="absolute inset-0 z-[1] bg-bg-elevated/60 backdrop-blur-xl border border-border/40 pointer-events-none" />
+      {/* 玻璃拟态覆盖层 — 强化磨砂效果 */}
+      <div className="absolute inset-0 z-[1] bg-bg-elevated/40 backdrop-blur-2xl border border-white/15 dark:border-white/8 pointer-events-none" />
 
       {/* 内容区 */}
       <div className="relative z-10 p-kb-lg">

@@ -107,14 +107,15 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
         allCards.filter((c) => c.repetitions === 0),
       );
 
-      // Bug 5b: 去重保障——确保每张卡片在会话中只出现一次
-      const seenIds = new Set<string>();
-      const dedupe = (cards: Flashcard[]) =>
-        cards.filter((c) => {
+      // Bug #9: 每次 dedupe 使用独立的 Set，dedupedNew 继承 dedupedDue 的 ID
+      const dedupe = (cards: Flashcard[], inheritIds?: Set<string>) => {
+        const seenIds = new Set<string>(inheritIds);
+        return cards.filter((c) => {
           if (!c.id || seenIds.has(c.id)) return false;
           seenIds.add(c.id);
           return true;
         });
+      };
 
       // 组装会话卡片列表
       let sessionCards: Flashcard[];
@@ -124,7 +125,9 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
       } else {
         // 到期卡不足：补充新卡，总量不超过 MAX_SESSION_CARDS
         const dedupedDue = dedupe(dueCards);
-        const dedupedNew = dedupe(newCards);
+        // dedupedNew 继承 dedupedDue 的 ID，确保不会重复选入到期卡
+        const dueIds = new Set(dedupedDue.map((c) => c.id!));
+        const dedupedNew = dedupe(newCards, dueIds);
         const needNew = Math.min(
           MAX_SESSION_CARDS - dedupedDue.length,
           dedupedNew.length,

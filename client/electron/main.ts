@@ -28,6 +28,24 @@ import SqliteRepository from './db/sqliteRepository.js';
 import { registerMigrationHandlers } from './db/migration.js';
 
 // ================================================================
+// 性能优化：启用 GPU 光栅化与零拷贝
+// ================================================================
+app.commandLine.appendSwitch('enable-gpu-rasterization');
+app.commandLine.appendSwitch('enable-zero-copy');
+app.commandLine.appendSwitch('enable-features', 'WebGLDraftExtensions,SharedArrayBuffer');
+
+// Windows: ANGLE + Direct3D 11
+if (process.platform === 'win32') {
+  app.commandLine.appendSwitch('use-angle', 'gl');
+  app.commandLine.appendSwitch('enable-d3d11', '1');
+}
+
+// macOS: Metal
+if (process.platform === 'darwin') {
+  app.commandLine.appendSwitch('enable-metal', '1');
+}
+
+// ================================================================
 // 环境变量加载
 // ================================================================
 // 开发模式：从 .env 文件加载（与 Vite dev server 保持一致）
@@ -232,6 +250,21 @@ if (!gotTheLock) {
 
     // AI 网关地址同步（渲染进程 → 主进程）
     safeHandle('ai:set-gateway-url', async (_event, url: string) => {
+      // SEC: URL 白名单验证 — 仅允许受信任的域名
+      const allowedDomains = ['entropydecrease.com', 'localhost', '127.0.0.1'];
+      let parsedUrl: URL;
+      try {
+        parsedUrl = new URL(url);
+      } catch {
+        throw new Error('无效的网关 URL 格式');
+      }
+      if (!allowedDomains.some(d => parsedUrl.hostname === d || parsedUrl.hostname.endsWith('.' + d))) {
+        throw new Error('不允许的网关域名');
+      }
+      if (parsedUrl.protocol !== 'https:' && parsedUrl.hostname !== 'localhost' && parsedUrl.hostname !== '127.0.0.1') {
+        throw new Error('生产环境必须使用 HTTPS');
+      }
+
       await setRuntimeGatewayUrl(url);
       return { success: true };
     });
@@ -243,6 +276,20 @@ if (!gotTheLock) {
 
     safeHandle('get-default-storage-path', async () => {
       return app.getPath('userData');
+    });
+
+    // 文件读取 IPC handler（仅允许读取应用数据目录或临时目录下的文件）
+    safeHandle('fs:read-file', async (_event, filePath: string) => {
+      const appDataPath = app.getPath('userData');
+      const tempPath = app.getPath('temp');
+      const resolvedPath = path.resolve(filePath);
+
+      if (!resolvedPath.startsWith(appDataPath) && !resolvedPath.startsWith(tempPath)) {
+        throw new Error('不允许读取该路径的文件');
+      }
+
+      const buffer = await readFile(resolvedPath);
+      return buffer.buffer; // 返回 ArrayBuffer
     });
 
     safeHandle('dialog:selectDirectory', async (_event, options?: { title?: string; defaultPath?: string }) => {
@@ -296,9 +343,13 @@ if (!gotTheLock) {
         if (!migrationResult.success) {
           logger.error('[Storage] Migration failed:', migrationResult.error);
           // 回滚：重新打开旧路径
-          const oldDbPath = path.join(normalizedOld, 'keban.db');
-          reinitialize(oldDbPath);
-          initializeSchema(getConnection());
+          try {
+            const oldDbPath = path.join(normalizedOld, 'keban.db');
+            reinitialize(oldDbPath);
+            initializeSchema(getConnection());
+          } catch (rollbackErr) {
+            logger.error('[Storage] Rollback after migration failure also failed!', rollbackErr);
+          }
           return { success: false, error: migrationResult.error };
         }
 
@@ -307,9 +358,13 @@ if (!gotTheLock) {
         if (!verifyDatabaseIntegrity(newDbPath)) {
           logger.error('[Storage] Integrity check failed for new database');
           // 回滚
-          const oldDbPath = path.join(normalizedOld, 'keban.db');
-          reinitialize(oldDbPath);
-          initializeSchema(getConnection());
+          try {
+            const oldDbPath = path.join(normalizedOld, 'keban.db');
+            reinitialize(oldDbPath);
+            initializeSchema(getConnection());
+          } catch (rollbackErr) {
+            logger.error('[Storage] Rollback after integrity check failure also failed!', rollbackErr);
+          }
           return { success: false, error: '新数据库完整性校验失败，已回滚到原路径' };
         }
 

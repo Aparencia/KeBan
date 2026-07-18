@@ -52,8 +52,8 @@ export function CustomTitlebar({ className }: CustomTitlebarProps) {
   return (
     <div
       className={cn(
-        'drag-region flex items-center h-9 select-none',
-        'bg-bg-secondary border-b border-border-default',
+        'drag-region relative z-50 flex items-center h-9 select-none',
+        'bg-bg-secondary/60 backdrop-blur-md border-b border-border-default/50',
         className,
       )}
     >

@@ -1,4 +1,4 @@
-import { defineConfig, type Plugin } from 'vite'
+import { defineConfig, type Plugin, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 import path from 'path'
@@ -19,9 +19,12 @@ function electronBuildConfigPlugin(): Plugin {
     name: 'electron-build-config',
     applyToEnvironment: () => isElectronBuild,
     writeBundle() {
+      // 使用 Vite 的 loadEnv 加载 .env 文件（与 Vite 构建行为一致）
+      // loadEnv 按约定加载：.env → .env.production → 系统环境变量（后者覆盖前者）
+      const env = loadEnv('production', process.cwd(), '');
       const config = {
-        VITE_AI_GATEWAY_URL: process.env.VITE_AI_GATEWAY_URL || '',
-        VITE_API_BASE_URL: process.env.VITE_API_BASE_URL || '',
+        VITE_AI_GATEWAY_URL: env.VITE_AI_GATEWAY_URL || '',
+        VITE_API_BASE_URL: env.VITE_API_BASE_URL || '',
       };
       const outDir = path.resolve(__dirname, 'dist-electron');
       mkdirSync(outDir, { recursive: true });
@@ -119,6 +122,23 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+    },
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        // Vite 8 使用 rolldown 作为打包引擎，其 manualChunks 仅支持函数形式，
+        // 不再支持对象形式（对象形式会抛出 "manualChunks is not a function"）。
+        // 这里改用函数形式，按 node_modules 包名精确分组，保持与原对象配置一致的拆包意图。
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return
+          const p = id.replace(/\\/g, '/')
+          if (/\/node_modules\/(react|react-dom|react-router|react-router-dom|scheduler)\//.test(p)) return 'vendor-react'
+          if (/\/node_modules\/(zustand|dexie)\//.test(p)) return 'vendor-state'
+          if (/\/node_modules\/(framer-motion|recharts)\//.test(p)) return 'vendor-ui'
+          if (/\/node_modules\/@tiptap\//.test(p)) return 'vendor-editor'
+        },
+      },
     },
   },
   // electron-updater 是纯 ESM 模块，仅 Electron 主进程使用，

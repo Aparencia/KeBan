@@ -29,10 +29,10 @@ function formatInterval(days: number): string {
 }
 
 const ratingStyles = [
-  { label: 'Again', rating: Rating.Again, color: 'bg-[#F43F5E] hover:bg-rose-700' },
-  { label: 'Hard', rating: Rating.Hard, color: 'bg-[#F59E0B] hover:bg-amber-600' },
-  { label: 'Good', rating: Rating.Good, color: 'bg-[#10B981] hover:bg-emerald-600' },
-  { label: 'Easy', rating: Rating.Easy, color: 'bg-brand-600 hover:bg-brand-700' },
+  { label: 'Again', rating: Rating.Again, color: 'bg-gradient-to-b from-rose-500 to-rose-600 hover:from-rose-600 hover:to-rose-700', glow: 'shadow-[0_4px_16px_rgba(244,63,94,0.35)]' },
+  { label: 'Hard', rating: Rating.Hard, color: 'bg-gradient-to-b from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700', glow: 'shadow-[0_4px_16px_rgba(245,158,11,0.3)]' },
+  { label: 'Good', rating: Rating.Good, color: 'bg-gradient-to-b from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700', glow: 'shadow-[0_4px_16px_rgba(16,185,129,0.3)]' },
+  { label: 'Easy', rating: Rating.Easy, color: 'bg-gradient-to-b from-brand-500 to-brand-600 hover:from-brand-600 hover:to-brand-700', glow: 'shadow-[0_4px_16px_rgba(59,130,246,0.3)]' },
 ];
 
 export default function StudySessionPage() {
@@ -305,7 +305,7 @@ export default function StudySessionPage() {
   // No cards available
   if (total === 0 && !isActive) {
     return (
-      <div className="flex flex-col h-[calc(100vh-4rem)] bg-bg-secondary">
+      <div className="flex flex-col h-full">
         <div className="flex items-center gap-kb-sm px-kb-md py-3 flex-shrink-0">
           <button
             onClick={() => navigate(`/flashcards/${deckId}`)}
@@ -332,7 +332,7 @@ export default function StudySessionPage() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-4rem)] bg-bg-secondary">
+    <div className="flex flex-col h-full">
       {/* 顶栏 */}
       <div className="flex items-center gap-kb-sm px-kb-md py-3 flex-shrink-0">
         <button
@@ -541,31 +541,31 @@ export default function StudySessionPage() {
                 </div>
               )}
               <div className="grid grid-cols-4 gap-2">
-                {ratingStyles.map(({ label, rating, color }, i) => (
+                {ratingStyles.map(({ label, rating, color, glow }, i) => (
                   <motion.button
                     ref={(el) => { btnRefs.current[i] = el; }}
                     key={label}
                     onClick={(e) => { handleBtnClick(i, e); handleRate(rating); }}
                     onMouseEnter={() => setHoveredRating(i)}
                     onMouseLeave={() => setHoveredRating(null)}
-                    initial={prefersReduced ? false : { y: 20, opacity: 0 }}
-                    animate={{ y: 0, opacity: 1 }}
+                    initial={prefersReduced ? false : { y: 20, opacity: 0, scale: 0.9 }}
+                    animate={{ y: 0, opacity: 1, scale: 1 }}
                     transition={
                       prefersReduced
                         ? { duration: 0.01 }
-                        : { type: 'spring', stiffness: 400, damping: 25, delay: i * 0.05 }
+                        : { type: 'spring', stiffness: 400, damping: 22, delay: i * 0.06 }
                     }
-                    whileHover={{ scale: 1.04 }}
-                    whileTap={{ scale: 0.96 }}
+                    whileHover={{ scale: 1.06, y: -2 }}
+                    whileTap={{ scale: 0.9 }}
                     className={cn(
                       'relative overflow-hidden flex flex-col items-center gap-0.5 py-3 rounded-kb-lg',
                       'text-white font-semibold text-b2',
-                      'transition-[background-color,box-shadow] duration-kb-fast',
-                      'shadow-kb-sm',
+                      'transition-shadow duration-200',
                       color,
+                      glow,
                     )}
                   >
-                    <span className="text-c1 opacity-75">{formatInterval(intervalValues[i])}</span>
+                    <span className="text-c1 opacity-80">{formatInterval(intervalValues[i])}</span>
                     {label}
                   </motion.button>
                 ))}

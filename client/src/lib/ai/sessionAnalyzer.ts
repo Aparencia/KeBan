@@ -6,6 +6,7 @@
 import { supabase } from '@/lib/auth/supabaseClient';
 import { requireGatewayUrl } from '@/lib/ai/config';
 import { getActiveUserKey } from '@/lib/ai/apiKeyManager';
+import { classroomNoteStore } from '@/lib/storage/classroomNoteStore';
 import type { SessionBundle } from '@/lib/capture/captureTypes';
 
 // ================================================================
@@ -103,11 +104,28 @@ export async function analyzeSession(
 
     const data = (await response.json()) as AnalyzeResponsePayload;
 
-    return {
+    const result: AnalyzeResult = {
       content: data.content,
       keyframesAnalyzed: data.keyframes_analyzed,
       modelUsed: data.model_used,
     };
+
+    // 自动持久化分析结果
+    try {
+      await classroomNoteStore.create({
+        sessionId: crypto.randomUUID(),
+        title: `课堂笔记 ${new Date().toLocaleString('zh-CN')}`,
+        content: result.content,
+        keyframesAnalyzed: result.keyframesAnalyzed,
+        modelUsed: result.modelUsed,
+        sourceType: 'smart',
+        duration: bundle.duration / 1000,
+      });
+    } catch (e) {
+      console.warn('[sessionAnalyzer] 笔记持久化失败:', e);
+    }
+
+    return result;
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') {
       throw new Error('分析请求超时（120秒），请检查网络连接后重试');
@@ -135,9 +153,9 @@ export async function analyzeVideo(
 ): Promise<AnalyzeResult> {
   const gatewayUrl = requireGatewayUrl();
 
-  // Electron 渲染进程通过 file:// 协议读取本地视频文件
-  const fileResponse = await fetch(`file://${filePath}`);
-  const blob = await fileResponse.blob();
+  // 通过 IPC 读取本地视频文件（file:// 协议被 Chromium 安全策略阻止）
+  const fileBuffer: ArrayBuffer = await window.electronAPI!.invoke('fs:read-file', filePath) as ArrayBuffer;
+  const blob = new Blob([fileBuffer], { type: 'video/webm' });
 
   const formData = new FormData();
   formData.append('video_file', blob, filePath.split(/[\\/]/).pop() ?? 'recording.webm');
@@ -178,11 +196,28 @@ export async function analyzeVideo(
     }
 
     const data = (await response.json()) as AnalyzeResponsePayload;
-    return {
+    const result: AnalyzeResult = {
       content: data.content,
       keyframesAnalyzed: data.keyframes_analyzed,
       modelUsed: data.model_used,
     };
+
+    // 自动持久化分析结果
+    try {
+      await classroomNoteStore.create({
+        sessionId: crypto.randomUUID(),
+        title: `视频笔记 ${new Date().toLocaleString('zh-CN')}`,
+        content: result.content,
+        keyframesAnalyzed: result.keyframesAnalyzed,
+        modelUsed: result.modelUsed,
+        sourceType: 'video',
+        duration: options?.duration ?? 0,
+      });
+    } catch (e) {
+      console.warn('[sessionAnalyzer] 视频笔记持久化失败:', e);
+    }
+
+    return result;
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') {
       throw new Error('视频分析请求超时（300秒），请检查网络连接后重试');

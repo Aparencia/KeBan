@@ -96,3 +96,46 @@ export function safeHandle<T extends any[]>(
 
   ipcMain.handle(channel, wrappedHandler as any);
 }
+
+// ================================================================
+// IPC 消息批量化（渲染进程侧防抖工具）
+// ================================================================
+
+/**
+ * IPC 消息防抖：相同 channel 的连续调用在一帧内合并为最后一次请求。
+ *
+ * 适用于渲染进程频繁触发的 IPC 调用（如窗口 resize 事件、输入状态同步等），
+ * 通过 queueMicrotask 将同一事件循环内的多次调用合并为最后一次。
+ *
+ * @param channel - IPC 频道名称
+ * @param handler - 实际处理函数（仅处理最后一次请求的参数）
+ * @ai-context 用于高频 IPC 场景（如滚动位置同步、窗口状态更新）
+ */
+export function safeHandleBatched<T extends any[]>(
+  channel: string,
+  handler: TypedHandler<T>,
+): void {
+  let pendingArgs: { event: Electron.IpcMainInvokeEvent; args: T } | null = null;
+  let scheduled = false;
+
+  const batchedHandler: TypedHandler<T> = (event, ...args) => {
+    pendingArgs = { event, args };
+
+    if (!scheduled) {
+      scheduled = true;
+      queueMicrotask(async () => {
+        scheduled = false;
+        if (pendingArgs) {
+          const { event: ev, args: a } = pendingArgs;
+          pendingArgs = null;
+          return handler(ev, ...a);
+        }
+      });
+    }
+
+    // 返回一个 resolved promise（批量化场景调用方不依赖即时返回值）
+    return Promise.resolve(undefined);
+  };
+
+  safeHandle(channel, batchedHandler);
+}

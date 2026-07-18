@@ -37,7 +37,7 @@ export function useAIFeature(featureKey: string): {
   const retry = useCallback(() => setTick(t => t + 1), []);
 
   const fallback = resolveFallback(featureKey);
-  const isAvailable = fallback.level !== 'FEATURE_HIDDEN' as boolean;
+  const isAvailable = fallback.level !== 'FEATURE_HIDDEN';
 
   return { fallback, isAvailable, isOnline, retry };
 }

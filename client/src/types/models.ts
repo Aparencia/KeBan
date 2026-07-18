@@ -41,7 +41,7 @@ export interface SortSuggestion {
   confidence: number;
   reason: string;
   /** AI 推荐的后续操作描述 */
-  suggestedAction: string;
+  suggestedAction?: string;
 }
 
 // 番茄钟会话记录

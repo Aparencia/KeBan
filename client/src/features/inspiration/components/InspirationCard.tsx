@@ -1,7 +1,7 @@
 /**
  * 萤火海沟 — 灵感萤火球（Orb）组件
- * @ai-context 灵感列表中的单个萤火球，支持收缩态（球体）与展开态（信息卡）。
- * 收缩态展示截断文本+发光+呼吸动画；展开态展示完整内容+标签+操作。
+ * @ai-context 半透明磨砂玻璃风格，不同标签色调区分。
+ * 新灵感以「弹入+发光」方式出现，悬浮时上浮+光泽增强。
  * 使用 Framer Motion layoutId 实现球→卡的形变过渡。
  */
 
@@ -25,6 +25,7 @@ import { useOrbExpand } from '../hooks/useOrbExpand';
 import TagChip from './TagChip';
 import TagEditPopover from './TagEditPopover';
 import AISortPanel from './AISortPanel';
+import { SPRING, scaleIn } from '@/lib/animation/springConfig';
 
 // ─────────────────────────────────────────────────────────────
 // 收缩态球体
@@ -54,8 +55,8 @@ function OrbCollapsed({ item, batchMode, selected, onToggleSelect, onExpand, bre
     <motion.div
       layoutId={`orb-${item.id}`}
       onClick={onExpand}
-      whileHover={{ scale: 1.1 }}
-      transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+      whileHover={{ scale: 1.12, y: -4, boxShadow: `0 0 20px ${glowColor}` }}
+      transition={SPRING.bouncy}
       className="relative cursor-pointer select-none group"
       style={{
         width: size,
@@ -65,9 +66,9 @@ function OrbCollapsed({ item, batchMode, selected, onToggleSelect, onExpand, bre
         ...(todoClip ? { clipPath: TODO_CLIP_PATH } : {}),
       }}
     >
-      {/* 球体背景 */}
+      {/* 球体背景 — 磨砂玻璃 */}
       <div className={cn(
-        'absolute inset-0 bg-bg-secondary/40 backdrop-blur-md border border-border/20',
+        'absolute inset-0 bg-bg-secondary/30 backdrop-blur-xl border border-white/10 dark:border-white/5',
         shape,
       )} />
 
@@ -149,8 +150,8 @@ function OrbExpanded({ item, onClose }: OrbExpandedProps) {
       layoutId={`orb-${item.id}`}
       data-orb-expanded="true"
       onClick={(e) => e.stopPropagation()}
-      className="w-72 bg-bg-secondary/80 backdrop-blur-xl border border-border/30 rounded-[var(--kb-radius-xl)] p-4 relative z-20"
-      style={{ boxShadow: `0 0 24px ${getOrbGlowColor(item.tags.content_nature)}40` }}
+      className="w-72 bg-bg-secondary/50 backdrop-blur-2xl border border-white/15 dark:border-white/8 rounded-[var(--kb-radius-xl)] p-4 relative z-20"
+      style={{ boxShadow: `0 0 28px ${getOrbGlowColor(item.tags.content_nature)}50, 0 8px 32px rgba(0,0,0,0.1)` }}
     >
       {/* 关闭按钮 */}
       <button
@@ -232,6 +233,8 @@ function InspirationCardInner({ item, batchMode, selected, onToggleSelect }: Ins
       variants={cardVariants}
       exit={cardVariants.exit}
       className="group relative"
+      initial={scaleIn.initial}
+      animate={scaleIn.animate}
     >
       {isExpanded ? (
         <OrbExpanded item={item} onClose={collapseOrb} />

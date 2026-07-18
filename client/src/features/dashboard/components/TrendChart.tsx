@@ -71,8 +71,8 @@ const TrendChart: React.FC<Props> = ({ data, loading }) => {
             fontSize: 11,
             color: 'var(--kb-text-primary)',
           }}
-          labelFormatter={(l: string) => `日期: ${l}`}
-          formatter={(v: number) => [`${v} 分钟`, '学习时长']}
+          labelFormatter={(l) => `日期: ${l}`}
+          formatter={(v) => [`${Number(v)} 分钟`, '学习时长']}
         />
         <Area
           type="monotone"

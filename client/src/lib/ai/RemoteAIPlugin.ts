@@ -15,6 +15,21 @@ import { aiClient } from '../http/apiClient';
  * 请求字段做 camelCase → snake_case 转换以匹配后端 Pydantic model；
  * 响应字段从 snake_case 映射回前端 camelCase 类型。
  */
+
+/**
+ * 将后端返回的评分规范化到 0-10 范围
+ * - 后端可能返回 0-10 或 0-100 范围的分数
+ * - 0-100 范围（>10）缩放到 0-10
+ * - 0-10 范围直接使用
+ * - 边界值 clamp 到 [0, 10]
+ */
+function normalizeScore(raw: number): number {
+  if (raw > 100) return 10;
+  if (raw > 10) return Math.round((raw / 10) * 10) / 10; // 0-100 → 0-10, 保留1位小数
+  if (raw < 0) return 0;
+  return raw;
+}
+
 export class RemoteAIPlugin implements AIPlugin {
   private timeout: number;
 
@@ -113,10 +128,10 @@ export class RemoteAIPlugin implements AIPlugin {
       );
 
       return {
-        overallScore: result.overall_score > 10 ? result.overall_score / 10 : result.overall_score,
+        overallScore: normalizeScore(result.overall_score),
         dimensions: result.dimensions.map(d => ({
           name: d.dimension,
-          score: d.score,
+          score: normalizeScore(d.score),
           feedback: d.feedback,
         })),
         suggestions: result.improvements,

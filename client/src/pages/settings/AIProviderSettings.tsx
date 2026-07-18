@@ -113,7 +113,7 @@ export default function AIProviderSettings() {
   /** 模态窗口取消：回退到标准模式并持久化 */
   const handleModalCancel = () => {
     setShowApiModal(false);
-    const fallbackConfig = { ...aiConfig, provider: 'glm' };
+    const fallbackConfig = { ...aiConfig, provider: 'glm' as const };
     setAIConfig(fallbackConfig);
     saveAIConfigAction();
   };

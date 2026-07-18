@@ -41,35 +41,45 @@ export default function AppearanceSettings() {
 
   return (
     <Card padding="md" className="flex flex-col gap-kb-md">
-      <h2 className="text-b1 font-semibold text-text-primary">外观设置</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-b1 font-semibold text-text-primary">外观设置</h2>
+        <span className="text-b3 text-text-tertiary px-2 py-0.5 rounded-[var(--kb-radius-sm)] bg-bg-tertiary/50">
+          当前：{theme === 'dark' ? '极夜深海' : '晨曦浮光'} · {density === 'compact' ? '紧凑' : density === 'loose' ? '宽松' : '标准'}
+        </span>
+      </div>
 
-      {/* 主题切换 */}
+      {/* 主题切换 — 渐变预览背景 */}
       <div className="flex flex-col gap-kb-sm">
         <label className="text-b2 font-medium text-text-secondary">主题模式</label>
         <div className="grid grid-cols-2 gap-3">
           {([
-            { key: 'light' as const, label: '晨曦浮光', icon: Sun, desc: '清爽明亮，适合日间使用' },
-            { key: 'dark' as const, label: '极夜深海', icon: Moon, desc: '护眼舒适，适合夜间使用' },
-          ]).map(({ key, label, icon: Icon, desc }) => (
+            { key: 'light' as const, label: '晨曦浮光', icon: Sun, desc: '清爽明亮，适合日间使用', gradient: 'linear-gradient(135deg, #fefcf3 0%, #f8f4ec 50%, #fefefe 100%)' },
+            { key: 'dark' as const, label: '极夜深海', icon: Moon, desc: '护眼舒适，适合夜间使用', gradient: 'linear-gradient(135deg, #0f172a 0%, #10182c 50%, #1a2332 100%)' },
+          ]).map(({ key, label, icon: Icon, desc, gradient }) => (
             <button
               key={key}
               onClick={() => setTheme(key)}
               className={cn(
-                'flex flex-col items-start gap-2 p-4 rounded-kb-lg',
-                'border-2 transition-all duration-kb-normal',
+                'relative flex flex-col items-start gap-2 p-4 rounded-[var(--kb-radius-lg)] overflow-hidden',
+                'border-2 transition-all duration-300',
                 'hover:-translate-y-0.5',
                 theme === key
-                  ? 'border-brand-500 bg-brand-50 shadow-kb-sm'
-                  : 'border-border/50 bg-bg-elevated hover:border-brand-300',
+                  ? 'border-brand-500 shadow-[0_0_0_1px_rgba(91,138,114,0.1),0_4px_16px_-4px_rgba(91,138,114,0.2)]'
+                  : 'border-border/50 hover:border-brand-300',
               )}
             >
+              {/* 渐变预览背景 */}
+              <div
+                className="absolute inset-0 opacity-30"
+                style={{ background: gradient }}
+              />
               <div className={cn(
-                'w-9 h-9 rounded-kb-md flex items-center justify-center',
+                'relative w-9 h-9 rounded-[var(--kb-radius-md)] flex items-center justify-center',
                 theme === key ? 'bg-brand-100 text-brand-600' : 'bg-bg-tertiary text-text-secondary',
               )}>
                 <Icon className="w-5 h-5" strokeWidth={1.5} />
               </div>
-              <div className="text-left">
+              <div className="relative text-left">
                 <p className={cn(
                   'text-b2 font-medium',
                   theme === key ? 'text-brand-700' : 'text-text-primary',
@@ -92,9 +102,9 @@ export default function AppearanceSettings() {
               key={key}
               onClick={() => handleDensityChange(key)}
               className={cn(
-                'flex items-center justify-center gap-2 py-2.5 px-3 rounded-kb-md',
+                'flex items-center justify-center gap-2 py-2.5 px-3 rounded-[var(--kb-radius-md)]',
                 'border-2 text-b2 font-medium',
-                'transition-all duration-kb-fast',
+                'transition-all duration-200',
                 density === key
                   ? 'border-brand-500 bg-brand-50 text-brand-700'
                   : 'border-border/50 bg-bg-elevated text-text-secondary hover:border-brand-300 hover:bg-bg-tertiary',

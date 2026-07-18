@@ -118,7 +118,7 @@ function StudyTrendChart({ sessions }: { sessions: PomodoroSession[] }) {
                 fontSize: 12,
                 boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
               }}
-              formatter={(value: number) => [`${value} 分钟`, '学习时长']}
+              formatter={(value) => [`${Number(value)} 分钟`, '学习时长']}
             />
             <Line
               type="monotone"
@@ -183,7 +183,7 @@ function ModuleTimePieChart({
               outerRadius={80}
               paddingAngle={3}
               dataKey="value"
-              label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+              label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
               animationBegin={200}
               animationDuration={800}
             >
@@ -204,7 +204,7 @@ function ModuleTimePieChart({
                 fontSize: 12,
                 boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
               }}
-              formatter={(value: number) => [`${value} 分钟`, '']}
+              formatter={(value) => [`${Number(value)} 分钟`, '']}
             />
           </PieChart>
         </ResponsiveContainer>

@@ -209,8 +209,8 @@ async def test_fn_receives_correct_model_name():
         return {"content": "ok"}
 
     await call_with_fallback(app, "summarize", fn)
-    # summarize → glm.free → glm-4-flash
-    assert "glm-4-flash" in received_models
+    # summarize → glm.free → glm-4.6v-flash
+    assert "glm-4.6v-flash" in received_models
 
 
 @pytest.mark.asyncio

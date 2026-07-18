@@ -849,3 +849,78 @@ body::before {
 [data-free-canvas]::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.25); border-radius: 6px; }
 [data-free-canvas]::-webkit-scrollbar-track { background: transparent; }
 [data-theme="dark"] [data-free-canvas]::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); }
+
+/* ═══════════════════════════════════════════
+   设计令牌系统升级 · Phase 1
+   动效节拍 · Rhythm Grid · 3D空间化 · 物理弹簧
+   ═══════════════════════════════════════════ */
+
+/* ── 全局动效节拍系统 ── */
+:root {
+  /* 动效节拍系统（120ms基准） */
+  --kb-beat-xs: 60ms;
+  --kb-beat: 120ms;
+  --kb-beat-x2: 240ms;
+  --kb-beat-x3: 360ms;
+  --kb-beat-x5: 600ms;
+
+  /* 动态Rhythm Grid间距 */
+  --kb-rhythm-xs: clamp(4px, 0.5vw, 8px);
+  --kb-rhythm-sm: clamp(8px, 1vw, 12px);
+  --kb-rhythm-md: clamp(16px, 1.5vw, 24px);
+  --kb-rhythm-lg: clamp(24px, 2vw, 32px);
+  --kb-rhythm-xl: clamp(32px, 3vw, 48px);
+
+  /* 3D透视基准 */
+  --kb-perspective: 1200px;
+  --kb-z-near: 50px;
+  --kb-z-far: -200px;
+
+  /* 物理弹簧参数 */
+  --kb-spring-default: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --kb-spring-bouncy: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --kb-spring-gentle: cubic-bezier(0.23, 1, 0.32, 1);
+
+  /* 模块交融渐变 */
+  --kb-blend-radius: 80px;
+  --kb-blend-opacity: 0.15;
+}
+
+/* ── 深色模式独立设计升级 ── */
+[data-theme="dark"] {
+  /* 品牌色切换：蓝→靛蓝（更深邃神秘） */
+  --kb-brand-500: #6366F1;
+  --kb-brand-600: #4F46E5;
+  --kb-brand-400: #818CF8;
+
+  /* 辅助色切换：琥珀→赛博青（冷暖对比） */
+  --kb-accent-500: #06B6D4;
+  --kb-accent-400: #22D3EE;
+  --kb-accent-600: #0891B2;
+
+  /* 独立阴影系统（黑色投影 + 蓝光弥散双层） */
+  --kb-shadow-sm: 0 1px 3px rgba(12,21,36,0.4), 0 0 8px rgba(99,102,241,0.05);
+  --kb-shadow-md: 0 4px 12px rgba(12,21,36,0.5), 0 0 16px rgba(99,102,241,0.08);
+  --kb-shadow-lg: 0 8px 24px rgba(12,21,36,0.6), 0 0 24px rgba(99,102,241,0.12);
+  --kb-shadow-brand: 0 4px 16px rgba(99,102,241,0.25);
+  --kb-shadow-accent: 0 4px 16px rgba(6,182,212,0.2);
+
+  /* 文字优化：深色模式加粗+加行高 */
+  --kb-font-weight-body: 500;
+  --kb-line-height-body: 2.0;
+  --kb-letter-spacing-heading: 0.5px;
+
+  /* 主题切换动画 */
+  transition:
+    background-color var(--kb-beat-x3) var(--kb-spring-gentle),
+    color var(--kb-beat-x2) var(--kb-spring-gentle);
+}
+
+/* ── 日落/日出过渡动画 ── */
+body, .theme-transition * {
+  transition:
+    background-color var(--kb-beat-x3) var(--kb-spring-gentle),
+    color var(--kb-beat-x2) var(--kb-spring-gentle),
+    border-color var(--kb-beat-x2) var(--kb-spring-gentle),
+    box-shadow var(--kb-beat-x3) var(--kb-spring-gentle);
+}

@@ -11,6 +11,7 @@ import { useSidebarStore } from '@/stores/useSidebarStore';
 import { useCaptureStore } from '@/stores/useCaptureStore';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { useTheme } from '@/hooks/useTheme';
+import { SPRING, BEAT } from '@/lib/animation/springConfig';
 import FeedbackPanel from './FeedbackPanel';
 
 /* ── 导航配置 ── */
@@ -69,7 +70,7 @@ export default function Sidebar() {
   const { theme, toggleTheme } = useTheme();
 
   // TODO: 接入真实学习进度数据
-  const progressItems: { subject: string; progress: number }[] = [];
+  const _progressItems: { subject: string; progress: number }[] = [];
   const ghostTasks = useMemo<string[]>(() => pickRandom(ghostTaskPool, 2), []);
 
   // 设置页 chunk 预加载：hover/focus 时提前下载，导航时瞬间渲染
@@ -97,13 +98,27 @@ export default function Sidebar() {
     <>
       <aside
         className={cn(
-          'hidden md:flex flex-col flex-shrink-0',
-          'bg-bg-primary/80 backdrop-blur-2xl border-r border-border/40',
+          'hidden md:flex flex-col flex-shrink-0 relative',
           'h-full sticky top-0 z-50',
           'transition-[width] duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1)]',
           collapsed ? 'w-14' : 'w-[240px]',
         )}
+        style={{
+          background: theme === 'dark'
+            ? 'linear-gradient(90deg, var(--kb-bg-primary) 0%, color-mix(in srgb, var(--kb-bg-primary) 97%, white) 100%)'
+            : 'linear-gradient(90deg, #ffffff 0%, #fffcf9 100%)',
+        }}
       >
+        {/* 侧边栏与主内容之间的渐变过渡带 */}
+        <div
+          className="absolute right-0 top-0 bottom-0 w-[4px] pointer-events-none z-10"
+          style={{
+            background: theme === 'dark'
+              ? 'linear-gradient(90deg, rgba(255,255,255,0.03) 0%, transparent 100%)'
+              : 'linear-gradient(90deg, rgba(0,0,0,0.03) 0%, transparent 100%)',
+          }}
+        />
+
         {/* ── 用户信息 ── */}
         <div className={cn(
           'flex items-center gap-2.5 px-4 h-12 flex-shrink-0',
@@ -152,7 +167,7 @@ export default function Sidebar() {
           {!collapsed && (
             <motion.div
               initial={{ opacity: 0 }}
-              animate={{ opacity: 0.6 }}
+              animate={{ opacity: 0.5 }}
               transition={{ delay: 0.1 }}
               className="text-[10px] text-text-tertiary font-medium tracking-[0.08em] uppercase px-2.5 pt-3 pb-1"
             >
@@ -171,14 +186,14 @@ export default function Sidebar() {
           {!collapsed && (
             <motion.div
               initial={{ opacity: 0 }}
-              animate={{ opacity: 0.6 }}
+              animate={{ opacity: 0.5 }}
               transition={{ delay: 0.15 }}
               className="text-[10px] text-text-tertiary font-medium tracking-[0.08em] uppercase px-2.5 pt-4 pb-1"
             >
               学习
             </motion.div>
           )}
-          {collapsed && <div className="my-1 mx-1.5 border-t border-border/30" />}
+          {collapsed && <div className="my-1 mx-1.5 border-t border-border/20" />}
           {navSection2.map(({ to, label, icon: Icon, shortcut, dotColor }, i) => (
             <SidebarItem
               key={to} to={to} label={label} icon={Icon}
@@ -193,6 +208,7 @@ export default function Sidebar() {
             variants={sidebarItemVariants}
             initial="hidden"
             animate="visible"
+            whileTap={{ scale: 0.98 }}
             onClick={handleCaptureClick}
             title={collapsed ? '回声定位' : undefined}
             className={cn(
@@ -200,20 +216,21 @@ export default function Sidebar() {
               collapsed ? 'justify-center px-0 py-1.5 mx-0' : 'px-2.5 py-[7px]',
               captureOpen && isOnNotes
                 ? 'bg-brand-50 text-brand-600 dark:bg-brand-900/20 dark:text-brand-400'
-                : 'text-text-secondary hover:text-text-primary hover:bg-black/[0.03] dark:hover:bg-white/[0.04]',
+                : 'text-text-secondary/60 hover:text-text-primary hover:bg-brand-500/5 hover:scale-[1.02]',
             )}
+            style={{ transition: `all ${BEAT.xs}ms ease` }}
           >
-            <Clapperboard className="w-[18px] h-[18px] flex-shrink-0 opacity-60" strokeWidth={1.5} />
+            <Clapperboard className="w-[18px] h-[18px] flex-shrink-0" strokeWidth={1.5} />
             {!collapsed && <span className="text-[13px] flex-1 text-left">回声定位</span>}
           </motion.button>
 
           {/* Section: 更多 */}
           {!collapsed && (
-            <div className="text-[10px] text-text-tertiary font-medium tracking-[0.08em] uppercase px-2.5 pt-4 pb-1 opacity-60">
+            <div className="text-[10px] text-text-tertiary font-medium tracking-[0.08em] uppercase px-2.5 pt-4 pb-1 opacity-50">
               更多
             </div>
           )}
-          {collapsed && <div className="my-1 mx-1.5 border-t border-border/30" />}
+          {collapsed && <div className="my-1 mx-1.5 border-t border-border/20" />}
           {navSection3.map(({ to, label, icon: Icon, shortcut }, i) => (
             <SidebarItem
               key={to} to={to} label={label} icon={Icon}
@@ -225,7 +242,7 @@ export default function Sidebar() {
           {/* Ghost Tasks — Zeigarnik Effect */}
           {!collapsed && (
             <>
-              <div className="text-[10px] text-text-tertiary font-medium tracking-[0.08em] uppercase px-2.5 pt-5 pb-1 opacity-60">
+              <div className="text-[10px] text-text-tertiary font-medium tracking-[0.08em] uppercase px-2.5 pt-5 pb-1 opacity-50">
                 待继续
               </div>
               {ghostTasks.map((task, i) => (
@@ -237,7 +254,7 @@ export default function Sidebar() {
                   className="flex items-center gap-2 px-3 py-[5px] cursor-default group/ghost"
                 >
                   <span className="w-1.5 h-1.5 rounded-full bg-accent-400/40 flex-shrink-0 animate-pulse" />
-                  <span className="text-[11px] text-text-tertiary/60 truncate group-hover/ghost:text-text-secondary transition-colors duration-200 italic">
+                  <span className="text-[11px] text-text-tertiary/50 truncate group-hover/ghost:text-text-secondary transition-colors duration-200 italic">
                     {task}
                   </span>
                 </motion.div>
@@ -248,21 +265,21 @@ export default function Sidebar() {
 
         {/* ── 底部区域 ── */}
         <div className={cn(
-          'border-t border-border/30 flex-shrink-0',
+          'border-t border-border/20 flex-shrink-0',
           collapsed ? 'px-1 py-2' : 'px-3 py-2.5',
         )}>
           {collapsed ? (
             <div className="flex flex-col items-center gap-1.5">
               <button
                 onClick={toggleTheme}
-                className="w-7 h-7 flex items-center justify-center rounded-[4px] text-text-secondary hover:text-text-primary hover:bg-black/[0.03] dark:hover:bg-white/[0.04] transition-colors duration-200 active:scale-90"
+                className="w-7 h-7 flex items-center justify-center rounded-[4px] text-text-secondary hover:text-text-primary hover:bg-brand-500/5 transition-colors duration-200 active:scale-90"
                 title="切换主题"
               >
                 {theme === 'light' ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
               </button>
               <button
                 onClick={toggle}
-                className="w-7 h-7 flex items-center justify-center rounded-[4px] text-text-secondary hover:text-text-primary hover:bg-black/[0.03] dark:hover:bg-white/[0.04] transition-colors duration-200 active:scale-90"
+                className="w-7 h-7 flex items-center justify-center rounded-[4px] text-text-secondary hover:text-text-primary hover:bg-brand-500/5 transition-colors duration-200 active:scale-90"
                 title="展开侧边栏"
               >
                 <ChevronRight className="w-3.5 h-3.5" />
@@ -272,27 +289,28 @@ export default function Sidebar() {
             <div className="flex items-center gap-1.5 whitespace-nowrap">
               <button
                 onClick={toggleTheme}
-                className="flex items-center gap-1.5 text-[11px] text-text-tertiary px-2 py-1 rounded-[4px] hover:text-text-secondary hover:bg-black/[0.03] dark:hover:bg-white/[0.04] transition-all duration-200 active:scale-95 whitespace-nowrap"
+                className="flex items-center gap-1.5 text-[11px] text-text-tertiary px-2 py-1 rounded-[4px] hover:text-text-secondary hover:bg-brand-500/5 transition-all duration-200 active:scale-95 whitespace-nowrap"
               >
                 {theme === 'light' ? <Sun className="w-3 h-3" /> : <Moon className="w-3 h-3" />}
                 主题
               </button>
               <button
                 onClick={() => setFeedbackOpen(true)}
-                className="flex items-center gap-1.5 text-[11px] text-text-tertiary px-2 py-1 rounded-[4px] hover:text-text-secondary hover:bg-black/[0.03] dark:hover:bg-white/[0.04] transition-all duration-200 active:scale-95 whitespace-nowrap"
+                className="flex items-center gap-1.5 text-[11px] text-text-tertiary px-2 py-1 rounded-[4px] hover:text-text-secondary hover:bg-brand-500/5 transition-all duration-200 active:scale-95 whitespace-nowrap"
               >
                 <MessageSquare className="w-3 h-3" />
                 反馈
               </button>
               <NavLink
                 to="/settings"
+                end
                 onMouseEnter={prefetchSettings}
                 onFocus={prefetchSettings}
                 className={({ isActive }) => cn(
                   'flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-[4px] transition-all duration-200 ml-auto active:scale-95 whitespace-nowrap',
                   isActive
                     ? 'text-brand-600 dark:text-brand-400'
-                    : 'text-text-tertiary hover:text-text-secondary hover:bg-black/[0.03] dark:hover:bg-white/[0.04]',
+                    : 'text-text-tertiary hover:text-text-secondary hover:bg-brand-500/5',
                 )}
               >
                 <Settings className="w-3 h-3" />
@@ -300,7 +318,7 @@ export default function Sidebar() {
               </NavLink>
               <button
                 onClick={toggle}
-                className="w-6 h-6 flex items-center justify-center rounded-[4px] text-text-secondary hover:text-text-primary hover:bg-black/[0.03] dark:hover:bg-white/[0.04] transition-colors duration-200 active:scale-90"
+                className="w-6 h-6 flex items-center justify-center rounded-[4px] text-text-secondary hover:text-text-primary hover:bg-brand-500/5 transition-colors duration-200 active:scale-90"
                 title="收起侧边栏"
               >
                 <ChevronLeft className="w-3 h-3" />
@@ -341,35 +359,52 @@ function SidebarItem({ to, label, icon: Icon, shortcut, dotColor, collapsed, end
         title={collapsed ? label : undefined}
         className={({ isActive }) =>
           cn(
-            'flex items-center gap-2 rounded-[var(--kb-radius-sm)] relative transition-all duration-200 group',
+            'flex items-center gap-2 rounded-[var(--kb-radius-sm)] relative group',
             collapsed ? 'justify-center px-0 py-1.5 mx-0' : 'px-2.5 py-[7px]',
             isActive
-              ? 'bg-brand-50/80 text-brand-600 font-medium dark:bg-brand-900/15 dark:text-brand-400 shadow-[inset_0_0_0_1px_rgba(91,138,114,0.1)]'
-              : 'text-text-secondary hover:text-text-primary hover:bg-black/[0.03] dark:hover:bg-white/[0.04]',
+              ? 'text-text-primary font-medium'
+              : 'text-text-secondary/60 hover:text-text-primary hover:bg-brand-500/5 hover:scale-[1.02]',
+            'transition-all duration-200',
           )
         }
+        style={{ transition: `all ${BEAT.xs}ms ease` }}
       >
         {({ isActive }) => (
           <>
-            {/* Active 指示器 — 2px 绿色竖线 + 发光 */}
+            {/* Active 指示器 — 3px 品牌色竖线 + 圆角 + layoutId 平滑跟随 */}
             {isActive && (
               <motion.span
                 layoutId="sidebar-active-indicator"
-                className="absolute left-0 top-1/2 -translate-y-1/2 w-[2px] h-4 bg-brand-500 rounded-[1px] shadow-[0_0_6px_rgba(91,138,114,0.4)]"
-                transition={{ type: 'spring', stiffness: 350, damping: 30 }}
+                className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-brand-500 rounded-full"
+                style={{ boxShadow: '0 0 8px rgba(91,138,114,0.5)' }}
+                transition={SPRING.default}
               />
             )}
-            <span className="w-[18px] h-[18px] flex items-center justify-center flex-shrink-0 opacity-60 group-hover:opacity-100 transition-opacity duration-200">
+            <span className={cn(
+              'w-[18px] h-[18px] flex items-center justify-center flex-shrink-0 transition-opacity duration-200',
+              isActive ? 'opacity-100' : 'opacity-60 group-hover:opacity-100',
+            )}>
               <Icon className="w-[18px] h-[18px]" strokeWidth={1.5} />
             </span>
             {/* 模块色点 */}
             {dotColor && !collapsed && (
-              <span className={cn('w-1.5 h-1.5 rounded-full flex-shrink-0 opacity-50 group-hover:opacity-100 transition-opacity duration-200', dotColor)} />
+              <span className={cn(
+                'w-1.5 h-1.5 rounded-full flex-shrink-0 transition-opacity duration-200',
+                isActive ? 'opacity-80' : 'opacity-40 group-hover:opacity-80',
+                dotColor,
+              )} />
             )}
-            {!collapsed && <span className="text-[13px] flex-1 truncate">{label}</span>}
+            {!collapsed && (
+              <span className={cn(
+                'text-[13px] flex-1 truncate transition-opacity duration-200',
+                isActive ? 'opacity-100' : 'opacity-60 group-hover:opacity-100',
+              )}>
+                {label}
+              </span>
+            )}
             {/* 快捷键提示 — hover 显示 */}
             {shortcut && !collapsed && (
-              <kbd className="text-[10px] text-text-tertiary/60 bg-bg-secondary/50 px-1.5 py-0.5 rounded-[3px] font-mono opacity-0 group-hover:opacity-100 transition-all duration-200 translate-y-0.5 group-hover:translate-y-0">
+              <kbd className="text-[10px] text-text-tertiary/50 bg-bg-secondary/40 px-1.5 py-0.5 rounded-[3px] font-mono opacity-0 group-hover:opacity-100 transition-all duration-200 translate-y-0.5 group-hover:translate-y-0">
                 {shortcut}
               </kbd>
             )}

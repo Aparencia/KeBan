@@ -48,6 +48,39 @@ const AUTOSAVE_DEBOUNCE_MS = 500;
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'failed';
 
+/** 保存成功微粒子动效 — 3-5个品牌色粒子从中心扩散 */
+function SaveParticles({ show }: { show: boolean }) {
+  if (!show) return null;
+  const particles = Array.from({ length: 4 }, (_, i) => {
+    const angle = (i / 4) * Math.PI * 2 + Math.random() * 0.5;
+    const dist = 12 + Math.random() * 8;
+    return {
+      x: Math.cos(angle) * dist,
+      y: Math.sin(angle) * dist,
+      delay: i * 30,
+      size: 3 + Math.random() * 2,
+    };
+  });
+  return (
+    <span className="absolute inset-0 pointer-events-none overflow-visible flex items-center justify-center">
+      {particles.map((p, i) => (
+        <span
+          key={i}
+          className="absolute rounded-full bg-brand-500 animate-[particle-burst_200ms_ease-out_forwards]"
+          style={{
+            width: p.size,
+            height: p.size,
+            '--px': `${p.x}px`,
+            '--py': `${p.y}px`,
+            animationDelay: `${p.delay}ms`,
+            opacity: 0.9,
+          } as React.CSSProperties}
+        />
+      ))}
+    </span>
+  );
+}
+
 interface ToolbarButtonProps {
   icon: React.FC<React.SVGProps<SVGSVGElement> & { strokeWidth?: number | string }>;
   label: string;
@@ -452,7 +485,7 @@ export default function NoteEditPage() {
     <div className="flex h-full">
     <div className="flex flex-col flex-1 min-w-0 overflow-hidden" data-free-canvas-wrapper>
       {/* 顶部栏 */}
-      <div className="relative z-10 flex items-center gap-kb-sm px-kb-md py-3 border-b border-border/50 flex-shrink-0 bg-bg-primary">
+      <div className="relative z-10 flex items-center gap-kb-sm px-kb-md py-3 border-b border-border/50 flex-shrink-0">
         <button
           onClick={() => navigate('/notes')}
           className="p-1.5 rounded-kb-full text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-kb-fast"
@@ -474,7 +507,7 @@ export default function NoteEditPage() {
         />
 
         <span className={cn(
-          'text-b3 transition-opacity duration-300 flex-shrink-0',
+          'relative text-b3 transition-opacity duration-300 flex-shrink-0',
           saveStatus === 'idle' && 'opacity-0',
           saveStatus === 'saving' && 'text-text-tertiary opacity-100',
           saveStatus === 'saved' && 'text-semantic-success opacity-100',
@@ -483,6 +516,7 @@ export default function NoteEditPage() {
           {saveStatus === 'saving' && '保存中...'}
           {saveStatus === 'saved' && '已保存'}
           {saveStatus === 'failed' && '保存失败'}
+          <SaveParticles show={saveStatus === 'saved'} />
         </span>
 
         <button
@@ -543,9 +577,11 @@ export default function NoteEditPage() {
         </AIButton>
       </div>
 
-      {/* 工具栏（康奈尔/自由画布模式隐藏） */}
+      {/* 工具栏（康奈尔/自由画布模式隐藏）— 极简浮动条 */}
       {note?.template !== 'cornell' && note?.template !== 'free' && (
-      <div className="flex items-center gap-1 px-kb-md py-2 border-b border-border/40 flex-shrink-0 overflow-x-auto">
+      <div
+        className="sticky top-0 z-20 mx-auto mt-2 flex items-center gap-1 px-4 py-1.5 rounded-[var(--kb-radius-lg)] border border-border/20 flex-shrink-0 overflow-x-auto max-w-fit bg-bg-elevated/70 backdrop-blur-xl shadow-[0_2px_16px_-4px_rgba(0,0,0,0.06)] opacity-70 hover:opacity-100 transition-opacity duration-300"
+      >
         <ToolbarButton icon={Undo2} label="撤销" onClick={() => editor?.chain().focus().undo().run()} />
         <ToolbarButton icon={Redo2} label="重做" onClick={() => editor?.chain().focus().redo().run()} />
         <ToolbarDivider />
@@ -698,9 +734,9 @@ export default function NoteEditPage() {
           />
         </div>
       ) : (
-      <div className="flex-1 overflow-y-auto px-kb-md py-kb-lg">
+      <div className="flex-1 overflow-y-auto px-kb-md py-kb-lg bg-[rgba(255,253,250,0.3)] dark:bg-[rgba(16,24,44,0.5)]">
         <div
-          className="max-w-3xl mx-auto"
+          className="max-w-[720px] mx-auto"
           onContextMenu={(e) => {
             // 仅当 TipTap 编辑器有文本选中时显示自定义菜单
             if (!editor || note?.template === 'cornell') return;
@@ -780,17 +816,18 @@ export default function NoteEditPage() {
         }}
       />
 
-      {/* AI 摘要结果弹窗 */}
+      {/* AI 摘要结果浮层 — 半透明玻璃态 */}
       {summaryModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-kb-md">
           <div
-            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            className="absolute inset-0 bg-black/30 backdrop-blur-md"
             onClick={() => setSummaryModalOpen(false)}
             aria-hidden
           />
           <div className={cn(
-            'relative w-full max-w-lg bg-bg-elevated rounded-kb-xl shadow-kb-lg',
-            'border border-border/40 p-kb-lg',
+            'relative w-full max-w-lg bg-bg-elevated/90 backdrop-blur-xl rounded-[20px_12px_18px_14px] shadow-[0_24px_80px_-12px_rgba(0,0,0,0.25)]',
+            'border border-brand-200/20 dark:border-brand-800/30 p-kb-lg',
+            'animate-in fade-in slide-in-from-bottom-4 duration-300',
           )}>
             <button
               onClick={() => setSummaryModalOpen(false)}
@@ -891,18 +928,47 @@ export default function NoteEditPage() {
                   </div>
                 )}
 
-                {/* 通用操作区 */}
-                <div className="border-t border-border/30 pt-3 mt-1 flex items-center gap-2">
+                {/* 操作区 — 接受 / 拒绝 / 重试 三按钮 */}
+                <div className="border-t border-border/30 pt-4 mt-2 flex items-center gap-3">
+                  <button
+                    onClick={() => handleInsertNote('end')}
+                    className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-[var(--kb-radius-md)] text-b2 font-medium bg-brand-500 text-white hover:bg-brand-600 active:scale-[0.97] transition-all duration-200 shadow-[0_2px_12px_-2px_rgba(91,138,114,0.4)]"
+                  >
+                    <Check className="w-4 h-4" strokeWidth={2} />
+                    接受
+                  </button>
+                  <button
+                    onClick={() => setSummaryModalOpen(false)}
+                    className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-[var(--kb-radius-md)] text-b2 font-medium bg-bg-secondary text-text-secondary border border-border/50 hover:bg-bg-tertiary hover:text-text-primary active:scale-[0.97] transition-all duration-200"
+                  >
+                    <X className="w-4 h-4" strokeWidth={1.5} />
+                    拒绝
+                  </button>
+                  <button
+                    onClick={handleRegenerate}
+                    disabled={aiLoading}
+                    className={cn(
+                      'flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-[var(--kb-radius-md)] text-b2 font-medium bg-bg-secondary text-text-secondary border border-border/50 hover:bg-bg-tertiary hover:text-text-primary active:scale-[0.97] transition-all duration-200',
+                      aiLoading && 'opacity-60 cursor-not-allowed',
+                    )}
+                  >
+                    <RefreshCw className={cn('w-4 h-4', aiLoading && 'animate-spin')} strokeWidth={1.5} />
+                    重试
+                  </button>
+                </div>
+
+                {/* 次级操作 */}
+                <div className="flex items-center gap-2 mt-3">
                   <div className="relative">
                     <button
                       onClick={() => setInsertMenuOpen(!insertMenuOpen)}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-kb-md text-b2 font-medium bg-bg-secondary text-text-secondary border border-border/50 hover:bg-bg-tertiary hover:text-text-primary active:scale-95 transition-all duration-kb-fast"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--kb-radius-md)] text-b3 font-medium text-text-tertiary hover:text-text-secondary hover:bg-bg-tertiary/50 transition-all duration-200"
                     >
-                      插入笔记
-                      <ChevronDown className="w-3.5 h-3.5" strokeWidth={1.5} />
+                      插入到指定位置
+                      <ChevronDown className="w-3 h-3" strokeWidth={1.5} />
                     </button>
                     {insertMenuOpen && (
-                      <div className="absolute bottom-full left-0 mb-1 w-36 bg-bg-elevated rounded-kb-md shadow-kb-md border border-border/40 py-1 z-10">
+                      <div className="absolute bottom-full left-0 mb-1 w-36 bg-bg-elevated rounded-[var(--kb-radius-md)] shadow-kb-md border border-border/40 py-1 z-10">
                         <button onClick={() => handleInsertNote('cursor')} className="w-full text-left px-3 py-2 text-b2 text-text-secondary hover:bg-bg-tertiary hover:text-text-primary transition-colors">光标位置</button>
                         <button onClick={() => handleInsertNote('start')} className="w-full text-left px-3 py-2 text-b2 text-text-secondary hover:bg-bg-tertiary hover:text-text-primary transition-colors">笔记开头</button>
                         <button onClick={() => handleInsertNote('end')} className="w-full text-left px-3 py-2 text-b2 text-text-secondary hover:bg-bg-tertiary hover:text-text-primary transition-colors">笔记末尾</button>
@@ -911,30 +977,18 @@ export default function NoteEditPage() {
                   </div>
 
                   <button
-                    onClick={handleRegenerate}
-                    disabled={aiLoading}
-                    title="重新生成摘要"
-                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-kb-md text-b2 font-medium bg-bg-secondary text-text-secondary border border-border/50 hover:bg-bg-tertiary hover:text-text-primary active:scale-95 transition-all duration-kb-fast ${
-                      aiLoading ? 'opacity-60 cursor-not-allowed' : ''
-                    }`}
+                    onClick={handleCopySummary}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--kb-radius-md)] text-b3 font-medium text-text-tertiary hover:text-text-secondary hover:bg-bg-tertiary/50 transition-all duration-200"
                   >
-                    {aiLoading ? (
-                      <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                      </svg>
-                    ) : (
-                      <RefreshCw className="w-3.5 h-3.5" strokeWidth={1.5} />
-                    )}
-                    重新生成
+                    <Copy className="w-3 h-3" strokeWidth={1.5} />
+                    复制
                   </button>
 
                   <button
                     onClick={handleExport}
-                    title="导出摘要"
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-kb-md text-b2 font-medium bg-bg-secondary text-text-secondary border border-border/50 hover:bg-bg-tertiary hover:text-text-primary active:scale-95 transition-all duration-kb-fast"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--kb-radius-md)] text-b3 font-medium text-text-tertiary hover:text-text-secondary hover:bg-bg-tertiary/50 transition-all duration-200"
                   >
-                    <Download className="w-3.5 h-3.5" strokeWidth={1.5} />
+                    <Download className="w-3 h-3" strokeWidth={1.5} />
                     导出
                   </button>
                 </div>

@@ -1,0 +1,28 @@
+/**
+ * 质量控制器 — 根据性能等级动态调整场景参数
+ * 在 Canvas 内使用，作为子组件
+ */
+import { useThree } from '@react-three/fiber';
+import { useEffect } from 'react';
+import { usePerformanceStore } from './PerformanceMonitor';
+
+export function QualityController() {
+  const { gl } = useThree();
+  const tier = usePerformanceStore((s) => s.tier);
+
+  useEffect(() => {
+    switch (tier) {
+      case 'high':
+        gl.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        break;
+      case 'medium':
+        gl.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+        break;
+      case 'low':
+        gl.setPixelRatio(1);
+        break;
+    }
+  }, [tier, gl]);
+
+  return null;
+}

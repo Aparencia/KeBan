@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Button, Card, Input, Tag, EmptyState, Modal } from '@/components/ui';
+import { Button, Card, Tag, EmptyState, Modal } from '@/components/ui';
 import { useToast } from '@/components/ui';
 import { ContextMenu } from '@/components/ui/ContextMenu';
 import type { ContextMenuGroup } from '@/components/ui/ContextMenu';
@@ -56,15 +56,42 @@ function stripHtml(html: string): string {
 /* ── 动画 variants ── */
 const listVariants = {
   hidden: {},
-  visible: { transition: { staggerChildren: 0.04 } },
+  visible: { transition: { staggerChildren: 0.06 } },
 };
 const noteCardVariants = {
-  hidden: { opacity: 0, y: 12, scale: 0.97 },
+  hidden: { opacity: 0, y: 16, scale: 0.96 },
   visible: {
     opacity: 1, y: 0, scale: 1,
-    transition: { type: 'spring' as const, stiffness: 350, damping: 28 },
+    transition: { type: 'spring' as const, stiffness: 300, damping: 28 },
   },
 };
+
+/** 为每张卡片生成稳定的随机倾斜角度（基于 id hash） */
+function cardTilt(id: string): number {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = ((h << 5) - h + id.charCodeAt(i)) | 0;
+  return ((h % 10) - 5) * 0.1; // ±0.5deg
+}
+
+/** 不对称圆角样式（基于 id hash） */
+function asymmetricRadius(id: string): string {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = ((h << 5) - h + id.charCodeAt(i)) | 0;
+  const base = 12;
+  const tl = base + (Math.abs(h % 7));
+  const tr = base + (Math.abs((h >> 4) % 6));
+  const br = base + (Math.abs((h >> 8) % 8));
+  const bl = base + (Math.abs((h >> 12) % 5));
+  return `${tl}px ${tr}px ${br}px ${bl}px`;
+}
+
+/** 3D鼠标追踪倾斜 — 计算 rotateX/Y */
+function calc3DTilt(e: React.MouseEvent<HTMLDivElement>, el: HTMLDivElement): { rx: number; ry: number } {
+  const rect = el.getBoundingClientRect();
+  const x = (e.clientX - rect.left) / rect.width - 0.5;
+  const y = (e.clientY - rect.top) / rect.height - 0.5;
+  return { rx: -y * 5, ry: x * 5 }; // ±2.5deg max
+}
 
 function colorForType(template: string): string {
   switch (template) {
@@ -208,7 +235,7 @@ export default function NotesPage() {
   }, [handleSelectNote, handleTogglePin, handleDuplicateNote, handleExportNote, handleDeleteNote, toast, summarize, aiGenerateCards, handleSummarizeError, handleFlashcardError]);
 
   return (
-    <div className="flex h-[calc(100vh-3rem)] overflow-hidden">
+    <div className="flex h-full overflow-hidden">
       {/* ── 左栏：文件夹 ── */}
       <AnimatePresence>
         {sidebarOpen && (
@@ -311,12 +338,28 @@ export default function NotesPage() {
         {/* 列表 */}
         <div className="flex-1 overflow-y-auto px-4 py-3">
           {filteredNotes.length === 0 ? (
-            <div className="flex items-center justify-center min-h-[40vh]">
-              <EmptyState
-                icon={<FileText className="w-12 h-12" strokeWidth={1.2} />}
-                title="礁石尚在沉睡"
-                description="开始记录你的第一个想法，让思维的珊瑚慢慢生长"
-              />
+            <div className="flex flex-col items-center justify-center min-h-[50vh] gap-6 select-none">
+              {/* 优雅空状态插图 */}
+              <div className="relative w-32 h-32 flex items-center justify-center">
+                <div className="absolute inset-0 rounded-[var(--kb-radius-xl)] bg-gradient-to-br from-brand-100/60 to-accent-100/40 dark:from-brand-900/20 dark:to-accent-900/10 rotate-6" />
+                <div className="absolute inset-2 rounded-[var(--kb-radius-lg)] bg-gradient-to-tl from-brand-50/80 to-white/60 dark:from-brand-950/30 dark:to-bg-elevated/50 -rotate-3 backdrop-blur-sm" />
+                <FileText className="relative w-14 h-14 text-brand-400/70" strokeWidth={1} />
+              </div>
+              <div className="text-center max-w-xs">
+                <h3 className="text-h2 font-semibold text-text-primary mb-2">创建第一个知识块</h3>
+                <p className="text-b2 text-text-tertiary leading-relaxed">
+                  每一个想法都值得被记录。开始构建属于你的知识宇宙，让思维的碎片在这里交织生长。
+                </p>
+              </div>
+              <motion.button
+                whileHover={{ scale: 1.03, y: -2 }}
+                whileTap={{ scale: 0.97 }}
+                onClick={() => setTemplateOpen(true)}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-[var(--kb-radius-lg)] bg-brand-500 text-white text-b2 font-medium shadow-[0_4px_20px_-4px_rgba(91,138,114,0.4)] hover:shadow-[0_8px_30px_-4px_rgba(91,138,114,0.5)] transition-shadow duration-300"
+              >
+                <Plus className="w-4 h-4" strokeWidth={2} />
+                开始创作
+              </motion.button>
             </div>
           ) : filteredNotes.length > 50 ? (
             <VirtualList
@@ -364,36 +407,47 @@ export default function NotesPage() {
               )}
             />
           ) : (
-            <motion.div variants={listVariants} initial="hidden" animate="visible" className="space-y-2">
-              {filteredNotes.map((note) => (
+            <motion.div variants={listVariants} initial="hidden" animate="visible" className="space-y-1">
+              {filteredNotes.map((note, idx) => (
                 <motion.div
                   key={note.id}
                   variants={noteCardVariants}
-                  whileHover={{
-                    y: -4,
-                    rotateX: 1,
-                    rotateY: -1,
-                    transition: { type: 'spring', stiffness: 400, damping: 25 },
+                  style={{
+                    perspective: '1200px',
+                    transform: `rotate(${cardTilt(note.id!)}deg)`,
                   }}
-                  style={{ perspective: '800px' }}
+                  className="relative"
                 >
-                  <Card
-                    hoverable
-                    padding="md"
-                    onClick={() => handleSelectNote(note.id!)}
-                    onContextMenu={(e) => handleNoteContextMenu(e, note)}
+                  {/* 卡片间交融渐变过渡 */}
+                  {idx > 0 && (
+                    <div className="absolute -top-3 left-4 right-4 h-6 bg-gradient-to-b from-transparent via-brand-50/5 to-transparent dark:via-brand-900/5 pointer-events-none rounded-full blur-sm" />
+                  )}
+                  <div
                     className={cn(
-                      'group relative transition-all duration-300',
-                      'hover:-translate-y-[2px] hover:shadow-[0_4px_16px_-4px_rgba(0,0,0,0.08)]',
+                      'group relative p-4 border border-border/30 bg-bg-elevated/80 backdrop-blur-sm cursor-pointer',
+                      'transition-all duration-300',
+                      'hover:shadow-[0_8px_32px_-8px_rgba(91,138,114,0.12),0_0_0_1px_rgba(91,138,114,0.06)]',
+                      'hover:border-brand-300/40',
                       selectedNoteId === note.id && 'border-brand-400/60 bg-brand-50/20 shadow-[inset_0_0_0_1px_rgba(91,138,114,0.08)]',
                     )}
+                    style={{ borderRadius: asymmetricRadius(note.id!) }}
+                    onClick={() => handleSelectNote(note.id!)}
+                    onContextMenu={(e) => handleNoteContextMenu(e, note)}
+                    onMouseMove={(e) => {
+                      const el = e.currentTarget;
+                      const { rx, ry } = calc3DTilt(e, el);
+                      el.style.transform = `perspective(1200px) rotateX(${rx}deg) rotateY(${ry}deg) translateZ(4px)`;
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = 'perspective(1200px) rotateX(0deg) rotateY(0deg) translateZ(0px)';
+                    }}
                   >
                     {/* 左侧色条 — 模板色 + 微发光 */}
                     <div
-                      className="absolute left-0 top-2 bottom-2 w-[3px] rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                      className="absolute left-0 top-3 bottom-3 w-[3px] rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300"
                       style={{
                         background: colorForType(note.template),
-                        boxShadow: `0 0 8px ${colorForType(note.template)}40`,
+                        boxShadow: `0 0 10px ${colorForType(note.template)}50`,
                       }}
                     />
                     <div className="flex items-start justify-between gap-3">
@@ -403,10 +457,10 @@ export default function NotesPage() {
                           {note.template === 'todo' && <ListTodo className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" strokeWidth={1.5} />}
                           <h3 className="text-[14px] font-medium text-text-primary truncate">{note.title}</h3>
                         </div>
-                        <p className="text-[13px] text-text-secondary mt-1 line-clamp-2 leading-relaxed">
+                        <p className="text-[13px] text-text-secondary mt-1.5 line-clamp-2 leading-relaxed">
                           {stripHtml(note.content)}
                         </p>
-                        <div className="flex items-center gap-2 mt-2 flex-wrap">
+                        <div className="flex items-center gap-2 mt-2.5 flex-wrap">
                           <Tag color="note">{templateLabels[note.template as NoteTemplate]}</Tag>
                           {note.tags.map((tag) => (
                             <Tag key={tag} color="default">{tag}</Tag>
@@ -429,7 +483,7 @@ export default function NotesPage() {
                         <MoreVertical className="w-4 h-4 text-text-secondary" strokeWidth={1.5} />
                       </motion.button>
                     </div>
-                  </Card>
+                  </div>
                 </motion.div>
               ))}
             </motion.div>

@@ -1,12 +1,13 @@
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
+import { SPRING } from '@/lib/animation/springConfig';
 import type { Confidence } from '@/types/models';
 import { AlertTriangle, Minus, CheckCircle } from 'lucide-react';
 
 /**
- * 三档自信度选择器
- * v0.9.0: 在评分前选择自信度，传递给 rateCard
+ * 三档自信度选择器 — 时空竞技场
+ * 色彩编码 + scale点击反馈 + 呼吸光效
  */
 
 interface ConfidenceOption {
@@ -16,6 +17,7 @@ interface ConfidenceOption {
   color: string;
   activeBg: string;
   activeBorder: string;
+  glowColor: string;
   icon: React.ReactNode;
 }
 
@@ -27,6 +29,7 @@ const options: ConfidenceOption[] = [
     color: 'text-amber-500',
     activeBg: 'bg-amber-500/10',
     activeBorder: 'border-amber-400/50',
+    glowColor: 'shadow-[0_0_12px_rgba(245,158,11,0.25)]',
     icon: <AlertTriangle className="w-4 h-4" strokeWidth={1.5} />,
   },
   {
@@ -36,6 +39,7 @@ const options: ConfidenceOption[] = [
     color: 'text-blue-500',
     activeBg: 'bg-blue-500/10',
     activeBorder: 'border-blue-400/50',
+    glowColor: 'shadow-[0_0_12px_rgba(59,130,246,0.25)]',
     icon: <Minus className="w-4 h-4" strokeWidth={2} />,
   },
   {
@@ -45,6 +49,7 @@ const options: ConfidenceOption[] = [
     color: 'text-emerald-500',
     activeBg: 'bg-emerald-500/10',
     activeBorder: 'border-emerald-400/50',
+    glowColor: 'shadow-[0_0_12px_rgba(16,185,129,0.25)]',
     icon: <CheckCircle className="w-4 h-4" strokeWidth={1.5} />,
   },
 ];
@@ -74,15 +79,16 @@ export function ConfidenceSelector({ value, onChange, disabled = false }: Confid
               transition={
                 prefersReduced
                   ? { duration: 0.01 }
-                  : { type: 'spring', stiffness: 400, damping: 28, delay: i * 0.04 }
+                  : { ...SPRING.bouncy, delay: i * 0.04 }
               }
-              whileHover={{ scale: 1.03 }}
-              whileTap={{ scale: 0.97 }}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.92 }}
               className={cn(
-                'relative flex flex-col items-center gap-1 py-2.5 px-2 rounded-kb-md border transition-all duration-200',
+                'relative flex flex-col items-center gap-1 py-2.5 px-2 rounded-kb-md border',
+                'transition-all duration-200',
                 'disabled:opacity-50 disabled:cursor-not-allowed',
                 isActive
-                  ? `${opt.activeBg} ${opt.activeBorder} shadow-kb-sm`
+                  ? `${opt.activeBg} ${opt.activeBorder} ${opt.glowColor}`
                   : 'bg-bg-secondary border-border/40 hover:bg-bg-tertiary/40',
               )}
             >
@@ -90,7 +96,7 @@ export function ConfidenceSelector({ value, onChange, disabled = false }: Confid
                 <motion.div
                   layoutId="confidence-active"
                   className={cn('absolute inset-0 rounded-kb-md border-2', opt.activeBorder)}
-                  transition={prefersReduced ? { duration: 0.01 } : { type: 'spring', stiffness: 350, damping: 30 }}
+                  transition={prefersReduced ? { duration: 0.01 } : SPRING.default}
                 />
               )}
               <span className={cn('relative z-10', isActive ? opt.color : 'text-text-tertiary')}>

@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
+import { SPRING } from '@/lib/animation/springConfig';
 
 export type FlipCardGlow = 'correct' | 'wrong' | null;
 
@@ -20,14 +21,19 @@ interface FlipCardProps {
 export function FlipCard({ front, back, isFlipped, onFlip, onFlipEnd, exiting, glow }: FlipCardProps) {
   const prefersReduced = useReducedMotion();
 
-  const glowRing =
+  // 3D 响应动效：正确上浮 + 光晕，错误下沉 + 暗淡
+  const glowClass =
     glow === 'correct'
-      ? 'ring-2 ring-emerald-400/40 shadow-[0_0_24px_rgba(16,185,129,0.2)]'
+      ? 'ring-2 ring-emerald-400/50 shadow-[0_0_32px_rgba(16,185,129,0.35)]'
       : glow === 'wrong'
-        ? 'ring-2 ring-rose-400/40 shadow-[0_0_24px_rgba(244,63,94,0.2)]'
+        ? 'ring-2 ring-rose-400/50 shadow-[0_0_32px_rgba(244,63,94,0.3)]'
         : isFlipped
-          ? 'ring-2 ring-brand-400/30 shadow-[0_0_20px_rgba(59,130,246,0.15)]'
+          ? 'ring-1 ring-brand-400/30 shadow-[0_0_20px_rgba(59,130,246,0.12)]'
           : '';
+
+  // 评分响应的 Y 位移和透明度
+  const responseY = glow === 'correct' ? -10 : glow === 'wrong' ? 10 : 0;
+  const responseOpacity = glow === 'wrong' ? 0.75 : 1;
 
   return (
     <div
@@ -43,18 +49,26 @@ export function FlipCard({ front, back, isFlipped, onFlip, onFlipEnd, exiting, g
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onFlip(); } }}
     >
       <motion.div
-        className={cn('relative w-full', glowRing)}
+        className={cn(
+          'relative w-full rounded-kb-xl transition-shadow duration-300',
+          glowClass,
+        )}
         style={{
           transformStyle: 'preserve-3d',
           willChange: 'transform',
-          minHeight: '200px',
-          borderRadius: 'inherit',
+          minHeight: '220px',
         }}
-        animate={{ rotateY: isFlipped ? 180 : 0 }}
+        animate={{
+          rotateY: isFlipped ? 180 : 0,
+          translateZ: isFlipped ? 30 : 0,
+          scale: isFlipped ? 1.02 : 1,
+          y: responseY,
+          opacity: responseOpacity,
+        }}
         transition={
           prefersReduced
             ? { duration: 0.01 }
-            : { type: 'spring', stiffness: 200, damping: 20 }
+            : SPRING.bouncy
         }
         onAnimationComplete={() => {
           if (!exiting) onFlipEnd?.();
@@ -64,14 +78,14 @@ export function FlipCard({ front, back, isFlipped, onFlip, onFlipEnd, exiting, g
         <div
           className={cn(
             'absolute inset-0 flex items-center justify-center p-kb-xl',
-            'bg-bg-elevated rounded-kb-xl border border-border/50 shadow-kb-md',
+            'bg-bg-elevated rounded-kb-xl border border-border/40 shadow-kb-md',
             'backdrop-blur-sm',
           )}
           style={{ backfaceVisibility: 'hidden' }}
         >
           <div className="flex flex-col items-center gap-kb-sm text-center">
             <p className="text-[1.25rem] font-semibold text-text-primary leading-relaxed">{front}</p>
-            <p className="text-c1 text-text-tertiary">点击翻转查看答案</p>
+            <p className="text-c1 text-text-tertiary/70">点击翻转查看答案</p>
           </div>
         </div>
 
@@ -79,7 +93,7 @@ export function FlipCard({ front, back, isFlipped, onFlip, onFlipEnd, exiting, g
         <div
           className={cn(
             'absolute inset-0 flex items-center justify-center p-kb-xl',
-            'bg-brand-50/60 rounded-kb-xl border border-brand-200/40 shadow-kb-md',
+            'bg-brand-50/60 dark:bg-brand-950/30 rounded-kb-xl border border-brand-200/40 dark:border-brand-700/30 shadow-kb-md',
           )}
           style={{
             backfaceVisibility: 'hidden',

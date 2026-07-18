@@ -196,7 +196,7 @@ export function registerCaptureHandlers(): void {
 
   ipcMain.on(
     'audio_capture_chunk',
-    (_event, data: { audioBuffer: ArrayBuffer; sampleRate: number; channels: number; durationMs: number }) => {
+    (_event, data: unknown) => {
       // SEC-005: sender 验证，仅接受主窗口的音频数据
       const mainId = getMainWindowId();
       if (mainId !== null && _event.sender.id !== mainId) {
@@ -206,8 +206,23 @@ export function registerCaptureHandlers(): void {
         );
         return;
       }
+
+      // SEC: 运行时类型断言 — 防止恶意或格式错误的数据
+      if (
+        !data ||
+        typeof data !== 'object' ||
+        !('audioBuffer' in data) ||
+        typeof (data as Record<string, unknown>).sampleRate !== 'number' ||
+        typeof (data as Record<string, unknown>).channels !== 'number' ||
+        typeof (data as Record<string, unknown>).durationMs !== 'number'
+      ) {
+        logger.warn('[IPC] audio_capture_chunk: invalid data format, dropping chunk');
+        return;
+      }
+
+      const chunk = data as { audioBuffer: ArrayBuffer; sampleRate: number; channels: number; durationMs: number };
       if (activeAudioCapture && activeAudioCapture.isCapturing) {
-        activeAudioCapture.handleRendererChunk(data);
+        activeAudioCapture.handleRendererChunk(chunk);
       }
     },
   );

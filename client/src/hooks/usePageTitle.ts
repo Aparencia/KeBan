@@ -73,9 +73,10 @@ export function useBreadcrumb(): { crumbs: BreadcrumbItem[]; title: string } {
     accumulated += `/${segment}`;
 
     // 跳过纯 ID 段（UUID / 数字 ID）
+    // Bug #19: 数字 ID 限制 1-20 位，排除 4 位年份（2020-2030）
     const isId =
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(segment) ||
-      /^\d+$/.test(segment);
+      (/^\d{1,20}$/.test(segment) && !/^20[2-3]\d$/.test(segment));
 
     if (isId) continue;
 

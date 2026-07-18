@@ -5,7 +5,7 @@
  */
 import { useRef, useCallback, useEffect } from 'react';
 import type { DepthZone } from '@/features/dashboard/components/deep-sea/useDepthScroll';
-import { useReducedMotion } from './useReducedMotion';
+import { useReducedMotion } from '@/hooks/useReducedMotion';
 
 /** 各层音效参数：频率、增益、滤波 */
 const ZONE_AUDIO: Record<DepthZone, { freq: number; gain: number; filterFreq: number }> = {
@@ -23,19 +23,24 @@ export function useAmbientSound(currentZone: DepthZone) {
   const enabledRef = useRef(false);
   const prefersReduced = useReducedMotion();
 
+  // Bug #14: 通过 ref 访问 currentZone，避免 useCallback 依赖变化重建导致多 AudioContext
+  const currentZoneRef = useRef(currentZone);
+  currentZoneRef.current = currentZone;
+
   /** 初始化 Audio 上下文（需用户手势触发） */
   const initAudio = useCallback(() => {
     if (ctxRef.current) return;
+    const zone = currentZoneRef.current;
     const ctx = new AudioContext();
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     const filter = ctx.createBiquadFilter();
 
     osc.type = 'sine';
-    osc.frequency.value = ZONE_AUDIO[currentZone].freq;
+    osc.frequency.value = ZONE_AUDIO[zone].freq;
 
     filter.type = 'lowpass';
-    filter.frequency.value = ZONE_AUDIO[currentZone].filterFreq;
+    filter.frequency.value = ZONE_AUDIO[zone].filterFreq;
     filter.Q.value = 1;
 
     gain.gain.value = 0;
@@ -49,7 +54,7 @@ export function useAmbientSound(currentZone: DepthZone) {
     oscRef.current = osc;
     gainRef.current = gain;
     filterRef.current = filter;
-  }, [currentZone]);
+  }, []);
 
   /** 切换启用/静音 */
   const toggle = useCallback(() => {
@@ -66,9 +71,9 @@ export function useAmbientSound(currentZone: DepthZone) {
     }
 
     enabledRef.current = !enabledRef.current;
-    const targetGain = enabledRef.current ? ZONE_AUDIO[currentZone].gain : 0;
+    const targetGain = enabledRef.current ? ZONE_AUDIO[currentZoneRef.current].gain : 0;
     gain.gain.linearRampToValueAtTime(targetGain, ctx.currentTime + 0.5);
-  }, [currentZone, initAudio, prefersReduced]);
+  }, [initAudio, prefersReduced]);
 
   /** 深度层切换时平滑过渡音色 */
   useEffect(() => {

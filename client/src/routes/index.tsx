@@ -3,6 +3,18 @@ import { createHashRouter } from 'react-router-dom';
 import type { RouteObject } from 'react-router-dom';
 import AppLayout from '@/components/layout/AppLayout';
 import { AuthGuard } from '@/lib/auth/AuthGuard';
+import { prefetchRoute } from '@/utils/scheduler';
+
+// 在应用启动后空闲期预加载核心模块
+if (typeof window !== 'undefined') {
+  window.addEventListener('load', () => {
+    setTimeout(() => {
+      prefetchRoute(() => import('@/features/dashboard/pages/DashboardPage'));
+      prefetchRoute(() => import('@/features/notes/pages/NoteEditPage'));
+      prefetchRoute(() => import('@/features/pomodoro/pages/PomodoroPage'));
+    }, 2000); // 启动2秒后开始预加载
+  });
+}
 
 // Lazy-loaded pages
 const Dashboard = lazy(() => import('@/features/dashboard/pages/DashboardPage'));

@@ -12,8 +12,8 @@ function mockItem(overrides: Partial<Pick<InspirationItem, 'sortStatus'>> = {}):
   return {
     id: 'test-id',
     content: 'test',
-    content_nature: 'concept',
-    cognitive_depth: 'shallow',
+    tags: { content_nature: 'concept', cognitive_depth: 'shallow', subject: 'test' },
+    tagsManuallyEdited: false,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     ...overrides,

@@ -3,7 +3,7 @@
 
 通过 OpenAI 兼容 SDK 调用智谱 GLM API。
 - base_url: https://open.bigmodel.cn/api/paas/v4
-- 模型: glm-4-flash（永久免费）
+- 模型: glm-4.6v-flash（免费）
 - API 格式与 OpenAI Chat Completions 兼容
 - 所有 prompt 使用中文
 """
@@ -37,7 +37,7 @@ def _handle_provider_error(error: Exception, model: str) -> None:
 
 
 class GLMProvider(AIProvider):
-    """智谱 GLM Provider — glm-4-flash 免费模型"""
+    """智谱 GLM Provider — glm-4.6v-flash 免费模型"""
 
     def __init__(self, base_url: str, api_key: str):
         super().__init__(base_url, api_key, provider_name="glm")
@@ -52,7 +52,7 @@ class GLMProvider(AIProvider):
         self,
         prompt: str,
         system_prompt: str = "",
-        model: str = "glm-4-flash",
+        model: str = "glm-4.6v-flash",
         temperature: float = 0.7,
         max_tokens: int = 2048,
         response_format: dict[str, Any] | None = None,
@@ -60,7 +60,7 @@ class GLMProvider(AIProvider):
         """
         调用智谱 GLM 生成内容
 
-        使用 openai 兼容 SDK 发起请求，glm-4-flash 模型永久免费。
+        使用 openai 兼容 SDK 发起请求，glm-4.6v-flash 模型免费。
         """
         start_time = time.monotonic()
 
@@ -174,7 +174,7 @@ class GLMProvider(AIProvider):
         image_base64: str,
         prompt: str,
         system_prompt: str = "",
-        model: str = "glm-4v-flash",
+        model: str = "glm-4.6v-flash",
         temperature: float = 0.3,
         max_tokens: int = 2048,
         response_format: dict[str, Any] | None = None,
@@ -243,7 +243,7 @@ class GLMProvider(AIProvider):
         images_base64: list[str],
         prompt: str,
         system_prompt: str = "",
-        model: str = "glm-4v-flash",
+        model: str = "glm-4.6v-flash",
         temperature: float = 0.3,
         max_tokens: int = 4096,
         response_format: dict[str, Any] | None = None,

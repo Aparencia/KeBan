@@ -134,7 +134,7 @@ export default function GenerativeReviewPage() {
 
   return (
     <motion.div
-      className="flex flex-col h-[calc(100vh-4rem)] overflow-y-auto"
+      className="flex flex-col h-full overflow-y-auto"
       initial="hidden"
       animate="visible"
       variants={{

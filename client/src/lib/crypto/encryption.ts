@@ -6,30 +6,12 @@
  * - IV：12 字节随机数（每次加密重新生成）
  */
 
+import { toBase64, fromBase64 } from './utils';
+
 const PBKDF2_ITERATIONS = 100_000;
 const AES_KEY_LENGTH = 256;
 const IV_LENGTH = 12;
 const SALT_LENGTH = 16;
-
-/**
- * 将 Uint8Array 编码为 base64 字符串
- */
-function toBase64(bytes: Uint8Array): string {
-  const binary = String.fromCharCode(...bytes);
-  return btoa(binary);
-}
-
-/**
- * 将 base64 字符串解码为 Uint8Array
- */
-function fromBase64(base64: string): Uint8Array {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes;
-}
 
 /**
  * 生成随机 salt（16 字节）

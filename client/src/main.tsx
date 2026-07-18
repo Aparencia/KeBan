@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
+import './styles/performance.css'
 import App from './App.tsx'
 
 // 全局拦截原生右键菜单（白名单区域除外）

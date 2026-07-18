@@ -447,17 +447,27 @@ export default function DeckDetailPage() {
             className="flex flex-col gap-kb-sm"
             initial="hidden"
             animate="visible"
-            variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.03, delayChildren: 0.05 } } }}
+            variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.04, delayChildren: 0.08 } } }}
           >
-            {cards.map((card) => (
+            {cards.map((card) => {
+              // 进化阶段视觉标记
+              const isNew = card.repetitions === 0;
+              const isMastered = card.interval >= 21 && card.repetitions >= 5;
+              const evolutionClass = isNew
+                ? 'border-l-2 border-l-brand-300/50'
+                : isMastered
+                  ? 'border-l-2 border-l-emerald-400/70 shadow-[0_0_8px_rgba(16,185,129,0.12)]'
+                  : 'border-l-2 border-l-amber-400/50';
+
+              return (
               <motion.div key={card.id}
-                variants={{ hidden: { opacity: 0, x: -12, scale: 0.97 }, visible: { opacity: 1, x: 0, transition: { duration: 0.25 } } }}
+                variants={{ hidden: { opacity: 0, x: -16, scale: 0.96 }, visible: { opacity: 1, x: 0, scale: 1, transition: { type: 'spring', stiffness: 350, damping: 28 } } }}
                 whileHover={prefersReduced ? undefined : { y: -3, transition: { type: 'spring', stiffness: 400, damping: 20 } }}
                 whileTap={prefersReduced ? undefined : { scale: 0.98, transition: { type: 'spring', stiffness: 500, damping: 30 } }}
               >
               <Card
                 padding="sm"
-                className="flex items-center gap-3"
+                className={cn('flex items-center gap-3', evolutionClass)}
                 onContextMenu={(e) => ctxHandleMenu(e, card)}
               >
                 <div className="flex-1 min-w-0">
@@ -466,8 +476,11 @@ export default function DeckDetailPage() {
                     <span>EF: {card.easeFactor.toFixed(2)}</span>
                     <span>间隔: {card.interval}d</span>
                     <span>连续: {card.repetitions}</span>
-                    {card.repetitions === 0 && (
+                    {isNew && (
                       <Tag color="brand" className="text-[10px] px-1.5 py-0">新卡</Tag>
+                    )}
+                    {isMastered && (
+                      <Tag color="flashcard" className="text-[10px] px-1.5 py-0">已掌握</Tag>
                     )}
                   </div>
                 </div>
@@ -500,7 +513,8 @@ export default function DeckDetailPage() {
                 </div>
               </Card>
               </motion.div>
-            ))}
+              );
+            })}
             </motion.div>
           </>
         )}

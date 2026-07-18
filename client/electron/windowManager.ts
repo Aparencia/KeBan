@@ -84,6 +84,7 @@ export function createMainWindow(
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      backgroundThrottling: false, // 保证后台计时器精度
       preload: path.join(__dirname, 'preload.js'),
     },
   });
