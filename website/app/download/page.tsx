@@ -8,7 +8,7 @@ import { SectionReveal } from "@/components/SectionReveal";
 
 const CHANGELOG = [
   {
-    version: "v1.0.0",
+    version: "v0.15.0",
     tag: "正式版",
     date: "2026-07",
     highlights: [
@@ -199,7 +199,7 @@ export default function DownloadPage() {
               </span>
               <div className="text-left">
                 <h2 className="font-serif text-xl font-bold text-kb-text">课伴 KeBan</h2>
-                <p className="text-xs text-kb-text3">v1.0.0 正式版 · 2026-07</p>
+                <p className="text-xs text-kb-text3">v0.15.0 正式版 · 2026-07</p>
               </div>
             </div>
 
