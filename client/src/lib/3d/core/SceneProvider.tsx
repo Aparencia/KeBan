@@ -13,11 +13,13 @@ import * as THREE from 'three';
 
 interface SceneProviderProps {
   children: React.ReactNode;
+  /** 是否允许 3D 场景接收指针事件（非模块内时为 true） */
+  interactive?: boolean;
 }
 
-export function SceneProvider({ children }: SceneProviderProps) {
+export function SceneProvider({ children, interactive = false }: SceneProviderProps) {
   return (
-    <div className="fixed inset-0 -z-10" style={{ pointerEvents: 'none' }}>
+    <div className="fixed inset-0 -z-10" style={{ pointerEvents: interactive ? 'auto' : 'none' }}>
       <Canvas
         gl={{
           antialias: true,

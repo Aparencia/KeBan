@@ -18,6 +18,7 @@ interface ModuleEntityProps {
   emissiveColor: string;
   isHovered: boolean;
   isActive: boolean;
+  showLabel?: boolean;
   onClick: () => void;
   onPointerOver: () => void;
   onPointerOut: () => void;
@@ -70,6 +71,7 @@ export function ModuleEntity({
   emissiveColor,
   isHovered,
   isActive,
+  showLabel = false,
   onClick,
   onPointerOver,
   onPointerOut,
@@ -141,8 +143,8 @@ export function ModuleEntity({
           </mesh>
         )}
 
-        {/* Hover label */}
-        {isHovered && (
+        {/* Hover label or forced show label */}
+        {(showLabel || isHovered) && (
           <Html
             center
             distanceFactor={8}

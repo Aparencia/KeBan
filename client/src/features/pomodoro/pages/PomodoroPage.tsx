@@ -127,23 +127,30 @@ export default function PomodoroPage() {
   }, [completedCount, settings.longBreakInterval]);
 
   return (
-    <AnimatePresence mode="popLayout">
-      {isImmersive ? (
-        createPortal(
-          <motion.div
-            key="immersive"
-            className="fixed inset-0 z-40 flex flex-col overflow-hidden"
-            initial={immersiveEnter}
-            animate={immersiveAnimate}
-            exit={immersiveExit}
-            transition={immersiveTransition}
-          >
-            <div className="absolute top-6 left-0 right-0 z-10"><SlideToExit onExit={exitImmersive} /></div>
-            <ImmersiveTimer />
-          </motion.div>,
-          document.body,
-        )
-      ) : (
+    <>
+      {/* 沉浸模式 — portal 到 body，AnimatePresence 在 portal 内部管理动效 */}
+      {createPortal(
+        <AnimatePresence>
+          {isImmersive && (
+            <motion.div
+              key="immersive"
+              className="fixed inset-0 z-40 flex flex-col overflow-hidden"
+              initial={immersiveEnter}
+              animate={immersiveAnimate}
+              exit={immersiveExit}
+              transition={immersiveTransition}
+            >
+              <div className="absolute top-6 left-0 right-0 z-10"><SlideToExit onExit={exitImmersive} /></div>
+              <ImmersiveTimer />
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body,
+      )}
+
+      {/* 普通模式 */}
+      <AnimatePresence mode="popLayout">
+      {!isImmersive && (
         <motion.div
           key="normal"
           className="flex flex-col items-center justify-center min-h-0 flex-1 px-4 py-12 relative"
@@ -349,6 +356,7 @@ export default function PomodoroPage() {
           />
         </motion.div>
       )}
-    </AnimatePresence>
+      </AnimatePresence>
+    </>
   );
 }

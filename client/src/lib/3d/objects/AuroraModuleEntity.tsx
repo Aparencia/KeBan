@@ -5,7 +5,7 @@
 import { useRef, useState, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { Float } from '@react-three/drei';
+import { Float, Html } from '@react-three/drei';
 import type { ModuleId } from '../navigation/OrbitalStore';
 
 export interface AuroraModuleEntityProps {
@@ -13,6 +13,7 @@ export interface AuroraModuleEntityProps {
   orbitRadius: number;
   orbitSpeed: number;
   initialAngle?: number;
+  showLabel?: boolean;
   onClick?: (id: ModuleId) => void;
   onHover?: (id: ModuleId | null) => void;
   isActive?: boolean;
@@ -32,6 +33,7 @@ const PLANET_CONFIGS: Record<ModuleId, PlanetConfig> = {
   flashcards: { radius: 0.5, color: '#34D399', emissive: '#059669', label: '闪卡' },
   feynman: { radius: 0.6, color: '#A78BFA', emissive: '#7C3AED', label: '反衰减呼吸' },
   inspiration: { radius: 0.4, color: '#F472B6', emissive: '#EC4899', label: '萤火海沟' },
+  classroom: { radius: 0.55, color: '#14B8A6', emissive: '#0D9488', label: '回声定位' },
 };
 
 export function AuroraModuleEntity({
@@ -39,6 +41,7 @@ export function AuroraModuleEntity({
   orbitRadius,
   orbitSpeed,
   initialAngle = 0,
+  showLabel = false,
   onClick,
   onHover,
   isActive = false,
@@ -152,6 +155,20 @@ export function AuroraModuleEntity({
               side={THREE.DoubleSide}
             />
           </mesh>
+
+          {/* 标签 — showLabel 或悬浮时显示 */}
+          {(showLabel || hovered) && (
+            <Html
+              center
+              distanceFactor={8}
+              position={[0, config.radius + 0.6, 0]}
+              style={{ pointerEvents: 'none' }}
+            >
+              <div className="rounded-lg bg-slate-900/80 px-3 py-1.5 text-sm font-medium text-white backdrop-blur-sm whitespace-nowrap border border-indigo-500/30">
+                {config.label}
+              </div>
+            </Html>
+          )}
         </Float>
       </group>
     </>

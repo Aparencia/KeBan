@@ -28,7 +28,8 @@ const navSection2 = [
 
 const navSection3 = [
   { to: '/analytics', label: '数据分析', icon: BarChart3, shortcut: '⌘ 6' },
-  { to: '/inspiration', label: '萤火海沟', icon: Sparkles, shortcut: '⌘ 7' },
+  { to: '/inspiration', label: '萤火海沟', icon: Sparkles, shortcut: '⌘ 6' },
+  { to: '/classroom', label: '回声定位', icon: Clapperboard, shortcut: '⌘ 7', dotColor: 'bg-classroom' },
 ];
 
 /* ── 蔡格尼克效应：待继续任务提示池 ── */
@@ -83,11 +84,6 @@ export default function Sidebar() {
   }, []);
 
   const isOnNotes = location.pathname.startsWith('/notes');
-
-  const handleCaptureClick = () => {
-    if (!isOnNotes) navigate('/notes');
-    setCaptureOpen(true);
-  };
 
   const meta = user?.user_metadata as Record<string, unknown> | undefined;
   const displayName = (meta?.['display_name'] as string) || (meta?.['full_name'] as string) || user?.email?.split('@')[0] || '未登录';
@@ -202,28 +198,6 @@ export default function Sidebar() {
             />
           ))}
 
-          {/* 回声定位 */}
-          <motion.button
-            custom={5}
-            variants={sidebarItemVariants}
-            initial="hidden"
-            animate="visible"
-            whileTap={{ scale: 0.98 }}
-            onClick={handleCaptureClick}
-            title={collapsed ? '回声定位' : undefined}
-            className={cn(
-              'flex items-center gap-2 w-full rounded-[var(--kb-radius-sm)] transition-all duration-200',
-              collapsed ? 'justify-center px-0 py-1.5 mx-0' : 'px-2.5 py-[7px]',
-              captureOpen && isOnNotes
-                ? 'bg-brand-50 text-brand-600 dark:bg-brand-900/20 dark:text-brand-400'
-                : 'text-text-secondary/60 hover:text-text-primary hover:bg-brand-500/5 hover:scale-[1.02]',
-            )}
-            style={{ transition: `all ${BEAT.xs}ms ease` }}
-          >
-            <Clapperboard className="w-[18px] h-[18px] flex-shrink-0" strokeWidth={1.5} />
-            {!collapsed && <span className="text-[13px] flex-1 text-left">回声定位</span>}
-          </motion.button>
-
           {/* Section: 更多 */}
           {!collapsed && (
             <div className="text-[10px] text-text-tertiary font-medium tracking-[0.08em] uppercase px-2.5 pt-4 pb-1 opacity-50">
@@ -231,11 +205,11 @@ export default function Sidebar() {
             </div>
           )}
           {collapsed && <div className="my-1 mx-1.5 border-t border-border/20" />}
-          {navSection3.map(({ to, label, icon: Icon, shortcut }, i) => (
+          {navSection3.map(({ to, label, icon: Icon, shortcut, dotColor }, i) => (
             <SidebarItem
               key={to} to={to} label={label} icon={Icon}
               shortcut={collapsed ? undefined : shortcut}
-              collapsed={collapsed} index={i + 6}
+              dotColor={dotColor} collapsed={collapsed} index={i + 6}
             />
           ))}
 

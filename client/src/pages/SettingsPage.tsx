@@ -5,6 +5,7 @@ import ProfileSettings from './settings/ProfileSettings';
 import AppearanceSettings from './settings/AppearanceSettings';
 import SoundSettings from './settings/SoundSettings';
 import ModeSettings from './settings/ModeSettings';
+import ShortcutSettings from './settings/ShortcutSettings';
 
 // 延迟组：有网络/IPC/DB 操作的重组件
 const AIProviderSettings = lazy(() => import('./settings/AIProviderSettings'));
@@ -115,14 +116,17 @@ export default function SettingsPage() {
         <SettingsSection index={3}>
           <ModeSettings />
         </SettingsSection>
+        <SettingsSection index={4}>
+          <ShortcutSettings />
+        </SettingsSection>
         <Suspense fallback={<SettingsSectionSkeleton />}>
-          <SettingsSection index={4}>
+          <SettingsSection index={5}>
             <AIProviderSettings />
           </SettingsSection>
-          <SettingsSection index={5}>
+          <SettingsSection index={6}>
             <DataSettings />
           </SettingsSection>
-          <SettingsSection index={6}>
+          <SettingsSection index={7}>
             <AboutSettings />
           </SettingsSection>
         </Suspense>

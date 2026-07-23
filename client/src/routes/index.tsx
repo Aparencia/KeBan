@@ -33,6 +33,7 @@ const SocraticSessionPage = lazy(() => import('@/features/feynman/pages/Socratic
 const SettingsPage = lazy(() => import('@/pages/SettingsPage'));
 const AnalyticsPage = lazy(() => import('@/features/dashboard/pages/AnalyticsPage'));
 const InspirationPage = lazy(() => import('@/features/inspiration/pages/InspirationPage'));
+const ClassroomPage = lazy(() => import('@/features/classroom/pages/ClassroomPage'));
 const OnboardingPage = lazy(() => import('@/pages/OnboardingPage'));
 const LoginPage = lazy(() => import('@/pages/LoginPage'));
 const RegisterPage = lazy(() => import('@/pages/RegisterPage'));
@@ -81,6 +82,7 @@ const routes: RouteObject[] = [
       { path: '/settings', element: <SuspenseWrapper><SettingsPage /></SuspenseWrapper> },
       { path: '/analytics', element: <SuspenseWrapper><AnalyticsPage /></SuspenseWrapper> },
       { path: '/inspiration', element: <SuspenseWrapper><InspirationPage /></SuspenseWrapper> },
+      { path: '/classroom', element: <SuspenseWrapper><ClassroomPage /></SuspenseWrapper> },
     ],
   },
   {

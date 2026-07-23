@@ -20,6 +20,7 @@ import { initAutoUpdater, checkForUpdate, downloadUpdate, installUpdate, destroy
 import { createMainWindow, saveCloseChoice, completeSyncBeforeQuit } from './windowManager.js';
 import { destroyTray } from './trayManager.js';
 import { registerCaptureHandlers, disposeCaptureHandlers } from './captureHandlers.js';
+import { mcpManager } from './mcpManager.js';
 import { initialize, getConnection, close as closeDb, checkpointAndClose, reinitialize, getDbPath } from './db/sqliteService.js';
 import { initializeSchema } from './db/schema.js';
 import { saveCustomStoragePath, resolveDbPath } from './db/storageConfig.js';
@@ -700,6 +701,12 @@ if (!gotTheLock) {
     destroyTray();
     closeDb();
     mainWindow = null;
-    app.quit();
+
+    // 关闭 MCP Bridge 子进程（防止孤儿进程阻塞退出）
+    mcpManager.shutdown().catch((err) => {
+      logger.error('[MCP] Shutdown error during quit', err);
+    }).finally(() => {
+      app.quit();
+    });
   });
 }

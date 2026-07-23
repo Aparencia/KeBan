@@ -26,6 +26,7 @@ const DEEP_SEA_CONFIG: Record<ModuleId, {
   flashcards: { geometry: 'icosahedron', color: '#10B981', emissiveColor: '#34D399' },
   feynman: { geometry: 'torus', color: '#8B5CF6', emissiveColor: '#A78BFA' },
   inspiration: { geometry: 'sphere', color: '#EC4899', emissiveColor: '#F472B6' },
+  classroom: { geometry: 'torus', color: '#14B8A6', emissiveColor: '#2DD4BF' },
 };
 
 /** 穹顶模式下每个模块的轨道配置 */
@@ -40,6 +41,7 @@ const AURORA_ORBIT_CONFIG: Record<ModuleId, {
   flashcards: { orbitRadius: 6, orbitSpeed: 0.15, initialAngle: Math.PI * 0.8 },
   feynman: { orbitRadius: 7.5, orbitSpeed: 0.12, initialAngle: Math.PI * 1.2 },
   inspiration: { orbitRadius: 9, orbitSpeed: 0.1, initialAngle: Math.PI * 1.6 },
+  classroom: { orbitRadius: 5.5, orbitSpeed: 0.18, initialAngle: Math.PI * 0.6 },
 };
 
 /** 相机飞入模块时的偏移（从模块位置向相机方向偏移） */
@@ -52,7 +54,7 @@ function addVectors(a: [number, number, number], b: [number, number, number]): [
 export function SpatialNav() {
   const navigate = useNavigate();
   const theme = useSceneTheme();
-  const { isInModule, currentModule, hoveredModule, enterModule, setHovered } = useOrbitalStore();
+  const { isInModule, currentModule, hoveredModule, highlightAll, enterModule, setHovered } = useOrbitalStore();
   const { flyTo, update } = useCameraFlight();
 
   // 每帧更新相机飞行
@@ -99,8 +101,9 @@ export function SpatialNav() {
               geometry={config.geometry}
               color={config.color}
               emissiveColor={config.emissiveColor}
-              isHovered={hoveredModule === module.id}
+              isHovered={hoveredModule === module.id || highlightAll}
               isActive={currentModule === module.id}
+              showLabel={highlightAll}
               onClick={() => handleModuleClick(module.id)}
               onPointerOver={() => setHovered(module.id)}
               onPointerOut={() => setHovered(null)}
@@ -128,6 +131,7 @@ export function SpatialNav() {
             orbitSpeed={config.orbitSpeed}
             initialAngle={config.initialAngle}
             isActive={currentModule === module.id}
+            showLabel={highlightAll}
             onClick={handleModuleClick}
             onHover={setHovered}
           />

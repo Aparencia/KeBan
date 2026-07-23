@@ -26,7 +26,7 @@ const PHASE_LABELS: Record<string, string> = {
 };
 
 /**
- * 根据进度计算背景渐变色场（半透明，让3D场景透出）
+ * 根据进度计算背景渐变色场（完全不透明，确保计时器清晰可读）
  * 0-20%: 深蓝宁静 (brand-700 基调)
  * 20-80%: 最深处 (brand-900 基调) — 最沉浸
  * 80-100%: 逐渐变暖 (加入 accent 色调) — 暗示即将结束
@@ -34,25 +34,27 @@ const PHASE_LABELS: Record<string, string> = {
 function getBackgroundGradient(progressPercent: number): string {
   if (progressPercent <= 20) {
     const t = progressPercent / 20;
-    const opacity = 0.55 + t * 0.1;
+    const r = Math.round(15 - t * 7);
+    const g = Math.round(40 - t * 18);
+    const b = Math.round(55 - t * 15);
     return `radial-gradient(ellipse 120% 100% at 50% 40%, 
-      rgba(15, 40, 55, ${opacity}) 0%, 
-      rgba(8, 22, 35, 0.65) 50%, 
-      rgba(5, 12, 22, 0.7) 100%)`;
+      rgb(${r}, ${g}, ${b}) 0%, 
+      rgb(8, 22, 35) 50%, 
+      rgb(5, 12, 22) 100%)`;
   }
   if (progressPercent <= 80) {
     return `radial-gradient(ellipse 120% 100% at 50% 40%, 
-      rgba(8, 22, 40, 0.65) 0%, 
-      rgba(4, 10, 20, 0.7) 50%, 
-      rgba(2, 6, 14, 0.75) 100%)`;
+      rgb(8, 22, 40) 0%, 
+      rgb(4, 10, 20) 50%, 
+      rgb(2, 6, 14) 100%)`;
   }
   const t = (progressPercent - 80) / 20;
   const warmR = Math.round(20 + t * 35);
   const warmG = Math.round(12 + t * 15);
   return `radial-gradient(ellipse 120% 100% at 50% 40%, 
-    rgba(${warmR}, ${warmG}, 30, 0.65) 0%, 
-    rgba(10, 8, 15, 0.7) 50%, 
-    rgba(5, 4, 10, 0.75) 100%)`;
+    rgb(${warmR}, ${warmG}, 30) 0%, 
+    rgb(10, 8, 15) 50%, 
+    rgb(5, 4, 10) 100%)`;
 }
 
 export default function ImmersiveTimer() {

@@ -825,7 +825,7 @@ export default function NoteEditPage() {
             aria-hidden
           />
           <div className={cn(
-            'relative w-full max-w-lg bg-bg-elevated/90 backdrop-blur-xl rounded-[20px_12px_18px_14px] shadow-[0_24px_80px_-12px_rgba(0,0,0,0.25)]',
+            'relative w-full max-w-lg bg-bg-elevated/95 dark:bg-bg-elevated/95 backdrop-blur-xl rounded-[20px_12px_18px_14px] shadow-[0_24px_80px_-12px_rgba(0,0,0,0.4)]',
             'border border-brand-200/20 dark:border-brand-800/30 p-kb-lg',
             'animate-in fade-in slide-in-from-bottom-4 duration-300',
           )}>
@@ -841,7 +841,7 @@ export default function NoteEditPage() {
             </h2>
 
             {aiLoading && (
-              <div className="mt-kb-md flex items-center gap-2 text-b2 text-text-secondary">
+              <div className="mt-kb-md flex items-center gap-2 text-b2 text-text-primary">
                 <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
@@ -868,8 +868,8 @@ export default function NoteEditPage() {
               <div className="mt-kb-md flex flex-col gap-kb-md kb-ai-result-enter">
                 {/* 摘要文本 + 复制按钮 */}
                 <div className="group relative">
-                  <p className="text-b3 font-medium text-text-tertiary uppercase tracking-wide mb-1">摘要</p>
-                  <p className="text-b2 text-text-secondary leading-relaxed pr-8">{aiData.summary}</p>
+                  <p className="text-b3 font-medium text-text-secondary uppercase tracking-wide mb-1">摘要</p>
+                  <p className="text-b2 text-text-primary leading-relaxed pr-8">{aiData.summary}</p>
                   <button
                     onClick={handleCopySummary}
                     title="复制摘要"
@@ -882,10 +882,10 @@ export default function NoteEditPage() {
                 {/* 关键要点 + 逐项闪卡按钮 */}
                 {(aiData.keyPoints?.length ?? 0) > 0 && (
                   <div>
-                    <p className="text-b3 font-medium text-text-tertiary uppercase tracking-wide mb-1">关键要点</p>
+                    <p className="text-b3 font-medium text-text-secondary uppercase tracking-wide mb-1">关键要点</p>
                     <ul className="flex flex-col gap-1.5">
                       {aiData.keyPoints?.map((kp, i) => (
-                        <li key={i} className="group flex items-start gap-2 text-b2 text-text-secondary rounded-kb-sm px-2 py-1 -mx-2 hover:bg-bg-tertiary/50 transition-colors">
+                        <li key={i} className="group flex items-start gap-2 text-b2 text-text-primary rounded-kb-sm px-2 py-1 -mx-2 hover:bg-bg-tertiary/50 transition-colors">
                           <span className="mt-1.5 w-1.5 h-1.5 rounded-kb-full bg-brand-500 flex-shrink-0" />
                           <span className="flex-1">{kp}</span>
                           <button

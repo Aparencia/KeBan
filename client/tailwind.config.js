@@ -35,6 +35,7 @@ module.exports = {
         note: { DEFAULT: '#6B9BD2', light: '#ADD6FF' },
         flashcard: { DEFAULT: '#7BC4B8', light: '#B8E0D8' },
         feynman: { DEFAULT: '#C4956A', light: '#DEBB92' },
+        classroom: { DEFAULT: '#14B8A6', light: '#5EEAD4' },
         /* 深海静谧功能色 */
         focus: { DEFAULT: 'var(--kb-focus-blue)' },
         amber: { DEFAULT: 'var(--kb-amber)' },

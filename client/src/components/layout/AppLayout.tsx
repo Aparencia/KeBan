@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
+import { Home } from 'lucide-react';
 import CommandPalette from '../ui/CommandPalette';
 import { CloseConfirmDialog } from '../ui/CloseConfirmDialog';
 import { CustomTitlebar } from './CustomTitlebar';
@@ -12,11 +13,16 @@ import { SceneTransition } from '@/lib/3d/scenes/SceneTransition';
 import { SpatialNav } from '@/lib/3d/navigation/SpatialNav';
 import { FunctionalOverlay } from '@/components/overlay/FunctionalOverlay';
 import { useOrbitalStore } from '@/lib/3d/navigation/OrbitalStore';
+import { OnboardingOverlay } from '@/components/onboarding/OnboardingOverlay';
+import { ModuleTourToast } from '@/components/onboarding/ModuleTourToast';
+import { HelpCenter } from '@/components/onboarding/HelpCenter';
+import { useOnboardingStore } from '@/components/onboarding/useOnboardingStore';
 
 export default function AppLayout() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
-  const { isInModule, currentModule, exitModule, syncWithRoute } = useOrbitalStore();
+  const { isInModule, currentModule, enterModule, exitModule, syncWithRoute } = useOrbitalStore();
+  const openHelp = useOnboardingStore((s) => s.openHelp);
   const [showCloseDialog, setShowCloseDialog] = useState(false);
   const { sync } = useSync();
 
@@ -62,9 +68,14 @@ export default function AppLayout() {
         return;
       }
 
-      if (e.key === 'Escape' && isInModule) {
-        exitModule();
-        navigate('/');
+      if (e.key === 'Escape') {
+        if (isInModule) {
+          exitModule();
+        } else {
+          // 在 3D 场景模式下按 Esc 返回仪表盘
+          enterModule('dashboard');
+          navigate('/');
+        }
       }
 
       // 数字键 1-6 快捷导航（需无修饰键）
@@ -72,15 +83,22 @@ export default function AppLayout() {
         const moduleKeys: Record<string, string> = {
           '1': '/', '2': '/pomodoro', '3': '/notes',
           '4': '/flashcards', '5': '/feynman', '6': '/inspiration',
+          '7': '/classroom',
         };
         if (moduleKeys[e.key]) {
           navigate(moduleKeys[e.key]);
         }
       }
+
+      // Ctrl+/ 或 Cmd+/ 打开帮助中心
+      if ((e.ctrlKey || e.metaKey) && e.key === '/') {
+        e.preventDefault();
+        openHelp();
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isInModule, exitModule, navigate]);
+  }, [isInModule, enterModule, exitModule, navigate, openHelp]);
 
   return (
     <div className="flex flex-col h-screen overflow-hidden">
@@ -88,7 +106,7 @@ export default function AppLayout() {
       <CustomTitlebar />
 
       {/* Layer 0: 3D场景全屏背景 */}
-      <SceneProvider>
+      <SceneProvider interactive={!isInModule}>
         <SceneTransition />
         <SpatialNav />
       </SceneProvider>
@@ -102,23 +120,41 @@ export default function AppLayout() {
         )}
       </AnimatePresence>
 
-      {/* 非模块内时显示简洁的状态提示 */}
+      {/* 非模块内时显示简洁的状态提示 + 返回按钮 */}
       {!isInModule && (
-        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-20">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="px-6 py-3 rounded-full bg-black/30 backdrop-blur-xl border border-white/10 text-white/70 text-sm"
+        <>
+          <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-20">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="px-6 py-3 rounded-full bg-black/30 backdrop-blur-xl border border-white/10 text-white/70 text-sm"
+            >
+              点击3D物体进入模块 · 按 Esc 返回仪表盘 · 数字键 1-6 快捷跳转
+            </motion.div>
+          </div>
+          {/* 浮动返回仪表盘按钮 */}
+          <motion.button
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.2 }}
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+            onClick={() => { enterModule('dashboard'); navigate('/'); }}
+            className="fixed bottom-8 right-8 z-20 w-12 h-12 rounded-full bg-black/30 backdrop-blur-xl border border-white/15 flex items-center justify-center text-white/70 hover:text-white hover:bg-black/50 transition-colors"
+            aria-label="返回仪表盘"
           >
-            点击3D物体进入模块 · 按 Ctrl+K 命令面板 · 数字键 1-6 快捷跳转
-          </motion.div>
-        </div>
+            <Home className="w-5 h-5" strokeWidth={1.5} />
+          </motion.button>
+        </>
       )}
 
       {/* 移动端底部标签栏 — 置于功能覆盖层之上，避免被 3D 场景或模块遮罩覆盖 */}
       <BottomNav />
 
       {/* 全局组件 */}
+      <OnboardingOverlay />
+      <ModuleTourToast moduleId={currentModule} />
+      <HelpCenter />
       <CommandPalette />
       <CloseConfirmDialog open={showCloseDialog} onClose={() => setShowCloseDialog(false)} />
     </div>

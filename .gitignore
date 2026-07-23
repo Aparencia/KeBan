@@ -18,6 +18,7 @@ client/release/
 # IDE
 .vscode/
 .idea/
+.cursor/
 *.swp
 *.swo
 .qoder/

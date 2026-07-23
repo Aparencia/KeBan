@@ -1,5 +1,6 @@
 import { commandRegistry } from './registry';
 import type { Command } from './registry';
+import { useOnboardingStore } from '@/components/onboarding/useOnboardingStore';
 
 type NavigateFn = (path: string) => void;
 type ToastFn = (options: { type: 'success' | 'error' | 'warning' | 'info'; message: string }) => void;
@@ -65,6 +66,15 @@ export function registerDefaultCommands(navigate: NavigateFn, toast: ToastFn): v
       execute: () => navigate('/analytics'),
     },
     {
+      id: 'nav-classroom',
+      label: '打开回声定位（课堂助手）',
+      description: '屏幕采集与AI课堂笔记提取',
+      icon: 'Clapperboard',
+      category: 'navigation',
+      shortcut: '7',
+      execute: () => navigate('/classroom'),
+    },
+    {
       id: 'nav-settings',
       label: '打开设置',
       description: '应用设置与偏好配置',
@@ -123,6 +133,15 @@ export function registerDefaultCommands(navigate: NavigateFn, toast: ToastFn): v
       icon: 'CheckCircle',
       category: 'action',
       execute: () => comingSoon('今日打卡'),
+    },
+    {
+      id: 'action-help',
+      label: '打开帮助中心',
+      description: '查看操作指南、快捷键与常见问题',
+      icon: 'HelpCircle',
+      category: 'action',
+      shortcut: 'Ctrl+/',
+      execute: () => useOnboardingStore.getState().openHelp(),
     },
 
     // ─── 设置命令 ───────────────────────────────────────────────────────────────

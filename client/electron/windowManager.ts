@@ -30,6 +30,12 @@ let cachedCloseChoice: string | null = null;
 let syncBeforeQuitRequested = false;
 let syncBeforeQuitCompleted = false;
 
+/** 同步超时保护定时器（防止渲染进程无响应导致退出卡死） */
+let syncTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** 同步超时时间（毫秒）：渲染进程未响应则强制继续退出 */
+const SYNC_BEFORE_QUIT_TIMEOUT_MS = 3000;
+
 /** 读取保存的关闭选择 */
 export async function getCloseChoice(): Promise<string | null> {
   try {
@@ -175,6 +181,7 @@ export function createMainWindow(
 /**
  * 退出前同步流程入口
  * 不立即设置退出标志，而是先触发渲染进程同步
+ * 附带超时保护：若渲染进程在 SYNC_BEFORE_QUIT_TIMEOUT_MS 内未响应，强制继续退出
  */
 function syncAndQuit(
   win: BrowserWindow,
@@ -182,7 +189,7 @@ function syncAndQuit(
   onQuit: () => void,
 ): void {
   if (syncBeforeQuitRequested && !syncBeforeQuitCompleted) {
-    // 同步已在进行中，等待完成
+    // 同步已在进行中，等待完成（超时保护已启动）
     return;
   }
   if (syncBeforeQuitCompleted) {
@@ -195,13 +202,31 @@ function syncAndQuit(
   syncBeforeQuitRequested = true;
   logger.info('[Window] Sync before quit: requesting renderer sync');
   win.webContents.send('sync:before-quit');
+
+  // 超时保护：渲染进程未响应时强制完成同步流程
+  syncTimeoutTimer = setTimeout(() => {
+    syncTimeoutTimer = null;
+    if (!syncBeforeQuitCompleted) {
+      logger.warn('[Window] Sync before quit: timeout reached, forcing quit');
+      completeSyncBeforeQuit();
+    }
+  }, SYNC_BEFORE_QUIT_TIMEOUT_MS);
 }
 
 /**
  * 渲染进程同步完成后调用，允许窗口关闭
+ * 也可由超时保护触发（渲染进程无响应时强制继续）
  */
 export function completeSyncBeforeQuit(): void {
+  if (syncBeforeQuitCompleted) return; // 幂等保护
   syncBeforeQuitCompleted = true;
+
+  // 清除超时定时器（若由渲染进程正常完成）
+  if (syncTimeoutTimer) {
+    clearTimeout(syncTimeoutTimer);
+    syncTimeoutTimer = null;
+  }
+
   logger.info('[Window] Sync before quit: completed, proceeding with quit');
   const win = BrowserWindow.getAllWindows()[0];
   if (win) {
